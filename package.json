@@ -1,0 +1,38 @@
+{
+	"name": "goto",
+	"private": true,
+	"type": "module",
+	"packageManager": "pnpm@11.9.0",
+	"engines": {
+		"node": ">=26.5.0 <27",
+		"pnpm": "11.9.0"
+	},
+	"scripts": {
+		"dev": "pnpm --filter @goto/web dev",
+		"build": "pnpm -r build",
+		"check": "pnpm -r check",
+		"lint": "prettier --check . && eslint .",
+		"format": "prettier --write .",
+		"test": "pnpm -r test",
+		"test:coverage": "pnpm -r test:coverage",
+		"test:e2e": "pnpm --filter @goto/web test:e2e",
+		"verify": "pnpm build && pnpm check && pnpm lint && pnpm test:coverage && pnpm test:e2e",
+		"changeset": "changeset",
+		"version:apps": "changeset version",
+		"tag:apps": "changeset git-tag"
+	},
+	"devDependencies": {
+		"@changesets/cli": "catalog:",
+		"@eslint/js": "catalog:",
+		"@sveltejs/load-config": "catalog:",
+		"eslint": "catalog:",
+		"eslint-config-prettier": "catalog:",
+		"eslint-plugin-svelte": "catalog:",
+		"globals": "catalog:",
+		"prettier": "catalog:",
+		"prettier-plugin-svelte": "catalog:",
+		"svelte": "catalog:",
+		"typescript": "catalog:",
+		"typescript-eslint": "catalog:"
+	}
+}
