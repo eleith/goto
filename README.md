@@ -1,1 +1,72 @@
 Goto is a small, YAML-first, self-hosted URL shortener.
+
+The current runtime provides `GET /healthz` and `HEAD /healthz`. Other paths return 404. Redirect configuration and administration are not available yet.
+
+## Development
+
+Use Node 26.5.0 and pnpm 11.9.0, pinned in `mise.toml`:
+
+```sh
+mise install
+pnpm install --frozen-lockfile
+pnpm dev
+```
+
+Web listens on <http://localhost:5173>. Run the full local checks with:
+
+```sh
+pnpm verify
+```
+
+The current production smoke test uses HTTP requests and does not need an
+installed browser.
+
+## Docker
+
+From the repository root:
+
+```sh
+docker compose -f apps/web/docker-compose.dev.yml up --build
+```
+
+Development uses source bind mounts and Vite hot reload on localhost:5173. Set
+`LOCAL_UID` and `LOCAL_GID` when the host user is not 1000:1000.
+
+For a local production build on localhost:3000:
+
+```sh
+docker compose -f apps/web/docker-compose.yml up --build
+```
+
+The production container runs as a non-root user with a read-only filesystem.
+
+The optional `mise docker` task in `apps/web` follows the When development flow:
+install fnox and create an ignored `docker-compose.dev.local.yml` for local values,
+then run `mise docker up --build`. Direct Compose does not require that override.
+
+## Changes and checks
+
+Prefer unit tests. Use E2E only for critical boundaries unit tests cannot prove,
+without repeating unit assertions or testing third-party internals. Tests should
+encourage readable, testable code and catch regressions; coverage reports are a
+diagnostic, not a percentage target.
+
+`pnpm lint`, `pnpm check`, `pnpm test:coverage`, and `pnpm test:e2e` run the individual
+checks. GitHub Actions and Woodpecker run them for pull requests, matching changes
+on main, and web release tags.
+
+After the checks pass, pushes to main build the production image as `latest`.
+Stable tags such as `@goto/web@1.2.3` must match `apps/web/package.json` and publish
+image tags `1.2.3`, `1.2`, and `1`. Release tags do not update `latest`. Pull requests
+do not build or publish Docker images, following When's pipeline.
+
+GitHub publishes to `ghcr.io/eleith/goto` using its scoped `GITHUB_TOKEN`.
+Woodpecker publishes to `git.eleith.com/eleith.private/goto` using the configured
+`gitea_docker_registry` secret. Its main/tag success and failure notifications use
+`woodpecker_email_dsn`, `woodpecker_email_from_address`,
+`woodpecker_email_from_name`, and `woodpecker_email_recipient`. These secrets and
+registry permissions must be provisioned by the operator.
+
+Use `pnpm changeset` to record an application change. `pnpm version:apps` updates
+versions/changelogs and `pnpm tag:apps` creates release tags; those commands are
+release operations, not part of everyday development.
