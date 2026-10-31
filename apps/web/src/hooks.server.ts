@@ -1,6 +1,6 @@
 import { loadConfigFile } from '@goto/config';
 import { building } from '$app/env';
-import type { Handle, ServerInit } from '@sveltejs/kit/hooks';
+import { sequence, type Handle, type ServerInit } from '@sveltejs/kit/hooks';
 
 let adminOrigin: string | undefined;
 
@@ -10,13 +10,8 @@ export const init: ServerInit = async () => {
 	adminOrigin = configuration.site.url;
 };
 
-export const handle: Handle = async ({ event, resolve }) => {
-	let response: Response;
-	if (event.route.id === '/schema.json' && event.url.origin !== adminOrigin) {
-		response = new Response('Not found', { status: 404, headers: { 'cache-control': 'no-store' } });
-	} else {
-		response = await resolve(event);
-	}
+export const securityHeaders: Handle = async ({ event, resolve }) => {
+	const response = await resolve(event);
 	const headers = new Headers(response.headers);
 	headers.set('x-content-type-options', 'nosniff');
 	headers.set('referrer-policy', 'strict-origin-when-cross-origin');
@@ -27,3 +22,12 @@ export const handle: Handle = async ({ event, resolve }) => {
 		headers
 	});
 };
+
+export const adminOriginGate: Handle = ({ event, resolve }) => {
+	if (event.route.id?.startsWith('/(admin)') && event.url.origin !== adminOrigin) {
+		return new Response('Not found', { status: 404, headers: { 'cache-control': 'no-store' } });
+	}
+	return resolve(event);
+};
+
+export const handle = sequence(securityHeaders, adminOriginGate);
