@@ -1,0 +1,56 @@
+version: 1
+
+site:
+  url: https://goto.example.net
+  title: Goto
+
+appearance:
+  primary_light_color: '#0f766e'
+  primary_dark_color: '#5eead4'
+
+auth:
+  secret: '${GOTO_AUTH_SECRET}'
+  oidc:
+    issuer: https://identity.example.net
+    client_id: goto
+    client_secret: '${GOTO_OIDC_CLIENT_SECRET}'
+
+database:
+  path: ./data/goto.sqlite
+
+analytics:
+  enabled: true
+  retention_days: 90
+
+defaults:
+  status_code: 302
+  forward_query: false
+  fallback: 404
+
+domains:
+  go.example.org:
+    defaults:
+      status_code: 307
+      forward_query: true
+      fallback: https://example.org
+    links:
+      /:
+        url: https://example.org
+      /docs:
+        url: https://example.org/documentation
+        title: Documentation
+        tags: [work]
+        forward_query: false
+      /café:
+        url: https://example.org/cafe
+      /paused:
+        url: https://example.org/maintenance
+        enabled: false
+      /launch:
+        url: https://example.org/launch
+        valid_from: '2027-01-01T00:00:00Z'
+        valid_until: '2027-02-01T00:00:00Z'
+  tiny.example.com:
+    links:
+      /docs:
+        url: https://another.example.com/docs

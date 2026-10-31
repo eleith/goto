@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { configurationInput } from '../test/configuration.js';
 import { ConfigError } from './errors.js';
@@ -219,6 +220,21 @@ describe('configuration loading', () => {
 		]) {
 			expect(() => validateConfig(input, options)).toThrow(ConfigError);
 		}
+	});
+
+	it('validates the shipped example with explicit environment values', async () => {
+		const path = fileURLToPath(new URL('../../../examples/goto.yaml', import.meta.url));
+		const prepared = await loadConfigFile(path, {
+			env: {
+				GOTO_AUTH_SECRET: 'example-session-secret-with-at-least-thirty-two-characters',
+				GOTO_OIDC_CLIENT_SECRET: 'example-client-secret'
+			}
+		});
+		expect(prepared.configuration.analytics.retention_days).toBe(90);
+		expect(prepared.domains['go.example.org']?.links['/docs']).toMatchObject({
+			forward_query: false,
+			provenance: { forward_query: 'link' }
+		});
 	});
 
 	it('loads CONFIG_PATH relative to cwd and roots the database at the config directory parent', async () => {
