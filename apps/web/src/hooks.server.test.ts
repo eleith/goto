@@ -1,10 +1,19 @@
+import { ConfigError, loadConfigFile, validateConfig } from '@goto/config';
 import type { Handle } from '@sveltejs/kit/hooks';
-import { expect, test } from 'vitest';
-import { handle } from './hooks.server.js';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { handle, init } from './hooks.server.js';
+
+const framework = vi.hoisted(() => ({ building: false }));
+vi.mock('$app/env', () => framework);
+vi.mock('@goto/config', async (importOriginal) => ({
+	...(await importOriginal<typeof import('@goto/config')>()),
+	loadConfigFile: vi.fn()
+}));
 
 const event = {
 	request: new Request('http://localhost/healthz'),
-	url: new URL('http://localhost/healthz')
+	url: new URL('http://localhost/healthz'),
+	route: { id: '/healthz' }
 } as Parameters<Handle>[0]['event'];
 
 test('adds security headers without changing the application response', async () => {
@@ -48,4 +57,68 @@ test('preserves separate cookie headers', async () => {
 	const response = await handle({ event, resolve: async () => original });
 
 	expect(response.headers.getSetCookie()).toEqual(original.headers.getSetCookie());
+});
+
+describe('schema origin', () => {
+	const schemaEvent = (url: string) => ({
+		...event,
+		request: new Request(url),
+		url: new URL(url),
+		route: { id: '/schema.json' as const }
+	});
+
+	beforeEach(async () => {
+		framework.building = false;
+		vi.mocked(loadConfigFile).mockResolvedValue(
+			validateConfig(
+				{
+					site: { url: 'https://admin.example.org' },
+					auth: { credentials: { username: 'example', password: 'test-password' } },
+					domains: { 'go.example.org': { links: {} } }
+				},
+				{ env: {} }
+			)
+		);
+		await init();
+	});
+
+	test('allows the schema on the configured admin origin', async () => {
+		const resolve = vi.fn(async () => new Response('schema'));
+		const response = await handle({
+			event: schemaEvent('https://admin.example.org/schema.json'),
+			resolve
+		});
+
+		expect(resolve).toHaveBeenCalledOnce();
+		expect(await response.text()).toBe('schema');
+	});
+
+	test.each(['https://go.example.org/%73chema.json', 'http://admin.example.org/schema.json'])(
+		'blocks the resolved schema route on another origin: %s',
+		async (url) => {
+			const resolve = vi.fn(async () => new Response('schema'));
+			const response = await handle({
+				event: schemaEvent(url),
+				resolve
+			});
+
+			expect(response.status).toBe(404);
+			expect(resolve).not.toHaveBeenCalled();
+		}
+	);
+
+	test('does not load deployment configuration while building', async () => {
+		vi.mocked(loadConfigFile).mockClear();
+		framework.building = true;
+
+		await init();
+
+		expect(loadConfigFile).not.toHaveBeenCalled();
+	});
+
+	test('does not suppress startup validation failures', async () => {
+		vi.mocked(loadConfigFile).mockRejectedValue(new ConfigError());
+
+		await expect(init()).rejects.toThrow('Invalid configuration');
+	});
 });

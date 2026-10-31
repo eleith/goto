@@ -38,6 +38,7 @@ steps:
       - corepack install --global pnpm@11.9.0
       - pnpm config set store-dir .pnpm-store
       - pnpm install --frozen-lockfile
+      - pnpm schema:check
       - pnpm build:packages
 
   lint:

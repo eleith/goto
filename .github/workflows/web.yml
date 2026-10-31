@@ -45,6 +45,8 @@ jobs:
           cache-dependency-path: pnpm-lock.yaml
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Check editor schema
+        run: pnpm schema:check
       - name: Build shared packages
         run: pnpm build:packages
       - name: Check types
