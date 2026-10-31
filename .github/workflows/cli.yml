@@ -1,0 +1,117 @@
+name: CI/CD (CLI App)
+
+on:
+  push:
+    branches: [main]
+    tags: ['@goto/cli@*']
+    paths:
+      - '*'
+      - .changeset/**
+      - docs/**
+      - .github/workflows/**
+      - .woodpecker/**
+      - apps/cli/**
+      - packages/**
+  pull_request:
+    branches: [main]
+    paths:
+      - '*'
+      - .changeset/**
+      - docs/**
+      - .github/workflows/**
+      - .woodpecker/**
+      - apps/cli/**
+      - packages/**
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: CLI checks
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.9.0
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 26.5.0
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Check editor schema
+        run: pnpm schema:check
+      - name: Build shared packages
+        run: pnpm build:packages
+      - name: Build CLI
+        run: pnpm --filter @goto/cli build
+      - name: Check types
+        run: pnpm --filter @goto/cli check
+      - name: Lint repository
+        run: pnpm lint
+      - name: Unit tests
+        run: pnpm --filter @goto/cli test:coverage
+
+  build-push:
+    name: Publish CLI image
+    if: >-
+      github.event_name == 'push' &&
+      (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/@goto/cli@'))
+    needs: check
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 26.5.0
+      - name: Check release version
+        if: github.ref_type == 'tag'
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs';
+
+          const tag = process.env.GITHUB_REF_NAME ?? '';
+          const version = JSON.parse(readFileSync('apps/cli/package.json', 'utf8')).version;
+          const stableVersion = /^(0|[1-9][0-9]*)[.](0|[1-9][0-9]*)[.](0|[1-9][0-9]*)$/;
+          if (!stableVersion.test(version) || tag !== '@goto/cli@' + version) {
+            throw new Error('Expected a stable @goto/cli@<version> tag matching apps/cli/package.json');
+          }
+          NODE
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/eleith/goto-cli
+          flavor: latest=false
+          tags: |
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=match,pattern=^@goto/cli@(\d+\.\d+\.\d+)$,group=1
+            type=match,pattern=^@goto/cli@(\d+\.\d+)\.\d+$,group=1
+            type=match,pattern=^@goto/cli@(\d+)\.\d+\.\d+$,group=1
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push CLI image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: apps/cli/Dockerfile
+          target: prod
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}

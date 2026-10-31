@@ -1,0 +1,142 @@
+workspace:
+  base: /workspace
+  path: src
+
+when:
+  - event: push
+    branch: main
+    path:
+      include:
+        - '*'
+        - .changeset/**
+        - docs/**
+        - .github/workflows/**
+        - .woodpecker/**
+        - apps/cli/**
+        - packages/**
+  - event: pull_request
+    path:
+      include:
+        - '*'
+        - .changeset/**
+        - docs/**
+        - .github/workflows/**
+        - .woodpecker/**
+        - apps/cli/**
+        - packages/**
+  - event: tag
+    ref: 'refs/tags/@goto/cli@*'
+
+steps:
+  prepare:
+    image: node:26.5.0-bookworm
+    environment:
+      COREPACK_HOME: /workspace/src/.pnpm-store/corepack
+    commands:
+      - npm install --global corepack@0.36.0
+      - corepack enable
+      - corepack install --global pnpm@11.9.0
+      - pnpm config set store-dir .pnpm-store
+      - pnpm install --frozen-lockfile
+      - pnpm schema:check
+      - pnpm build:packages
+
+  build:
+    image: node:26.5.0-bookworm
+    environment:
+      COREPACK_HOME: /workspace/src/.pnpm-store/corepack
+    commands:
+      - npm install --global corepack@0.36.0
+      - corepack enable
+      - pnpm --filter @goto/cli build
+
+  lint:
+    image: node:26.5.0-bookworm
+    environment:
+      COREPACK_HOME: /workspace/src/.pnpm-store/corepack
+    commands:
+      - npm install --global corepack@0.36.0
+      - corepack enable
+      - pnpm --filter @goto/cli check
+      - pnpm lint
+
+  test:
+    image: node:26.5.0-bookworm
+    environment:
+      COREPACK_HOME: /workspace/src/.pnpm-store/corepack
+    commands:
+      - npm install --global corepack@0.36.0
+      - corepack enable
+      - pnpm --filter @goto/cli test:coverage
+
+  check-version-and-extract-tags:
+    image: node:26.5.0-bookworm
+    commands:
+      - |
+        node --input-type=module <<'NODE'
+        import { readFileSync, writeFileSync } from 'node:fs';
+
+        const tag = process.env.CI_COMMIT_TAG ?? '';
+        const version = JSON.parse(readFileSync('apps/cli/package.json', 'utf8')).version;
+        const stableVersion = /^(0|[1-9][0-9]*)[.](0|[1-9][0-9]*)[.](0|[1-9][0-9]*)$/;
+        if (!stableVersion.test(version) || tag !== '@goto/cli@' + version) {
+          throw new Error('Expected a stable @goto/cli@<version> tag matching apps/cli/package.json');
+        }
+        const [major, minor] = version.split('.');
+        writeFileSync('.tags', [version, major + '.' + minor, major].join('\n') + '\n');
+        NODE
+    when:
+      - event: tag
+        ref: 'refs/tags/@goto/cli@*'
+
+  build-docker-main:
+    image: woodpeckerci/plugin-docker-buildx:6.0.3
+    settings:
+      repo: git.eleith.com/eleith.private/goto-cli
+      username: eleith
+      registry: https://git.eleith.com
+      context: .
+      dockerfile: apps/cli/Dockerfile
+      target: prod
+      platforms: linux/amd64
+      tags:
+        - latest
+      password:
+        from_secret: gitea_docker_registry
+    when:
+      - event: push
+        branch: main
+
+  build-docker-tag:
+    image: woodpeckerci/plugin-docker-buildx:6.0.3
+    settings:
+      repo: git.eleith.com/eleith.private/goto-cli
+      username: eleith
+      registry: https://git.eleith.com
+      context: .
+      dockerfile: apps/cli/Dockerfile
+      target: prod
+      platforms: linux/amd64
+      tags_file: .tags
+      password:
+        from_secret: gitea_docker_registry
+    when:
+      - event: tag
+        ref: 'refs/tags/@goto/cli@*'
+
+  notify:
+    image: deblan/woodpecker-email:3.3.0
+    settings:
+      dsn:
+        from_secret: woodpecker_email_dsn
+      from:
+        address:
+          from_secret: woodpecker_email_from_address
+        name:
+          from_secret: woodpecker_email_from_name
+      recipients:
+        from_secret: woodpecker_email_recipient
+      recipients_only: true
+    when:
+      - event: [push, tag]
+        status: [failure, success]

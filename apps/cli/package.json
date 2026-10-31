@@ -1,0 +1,31 @@
+{
+	"name": "@goto/cli",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"bin": {
+		"goto-cli": "./dist/index.js"
+	},
+	"files": [
+		"dist"
+	],
+	"scripts": {
+		"build": "rm -rf dist && esbuild src/index.ts --bundle --platform=neutral --format=esm --target=node26 --outdir=dist --main-fields=module,main --conditions=import --external:node:*",
+		"check": "tsc --noEmit -p tsconfig.json",
+		"lint": "prettier --ignore-path ../../.prettierignore --check . && eslint .",
+		"format": "prettier --ignore-path ../../.prettierignore --write .",
+		"test": "vitest run",
+		"test:coverage": "vitest run --coverage"
+	},
+	"dependencies": {
+		"@goto/config": "workspace:*",
+		"gunshi": "catalog:"
+	},
+	"devDependencies": {
+		"@types/node": "catalog:",
+		"@vitest/coverage-v8": "catalog:",
+		"esbuild": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
+	}
+}

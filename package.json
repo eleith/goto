@@ -9,6 +9,7 @@
 	},
 	"scripts": {
 		"dev": "pnpm build:packages && pnpm --filter @goto/web dev",
+		"cli": "pnpm build:packages && pnpm --filter @goto/cli build && node apps/cli/dist/index.js",
 		"schema:generate": "pnpm --filter @goto/config schema:generate",
 		"schema:check": "pnpm --filter @goto/config schema:check",
 		"build:packages": "pnpm --filter './packages/*' -r build",

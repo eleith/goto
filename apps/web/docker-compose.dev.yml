@@ -36,3 +36,30 @@ services:
       timeout: 3s
       start_period: 60s
       retries: 3
+
+  goto-cli:
+    image: goto-cli:dev
+    platform: linux/amd64
+    build:
+      context: ../..
+      dockerfile: apps/cli/Dockerfile
+      target: prod
+    profiles:
+      - tools
+    user: '${LOCAL_UID:-1000}:${LOCAL_GID:-1000}'
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      NODE_ENV: development
+      PORT: 5173
+    volumes:
+      - ./config:/app/config:ro
+    read_only: true
+    network_mode: none
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
