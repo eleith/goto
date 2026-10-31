@@ -6,6 +6,7 @@ catalog:
   '@changesets/cli': 3.0.1
   '@eslint/js': 10.0.1
   '@playwright/test': 1.61.1
+  '@sinclair/typebox': 0.34.49
   '@sveltejs/adapter-node': 6.0.1
   '@sveltejs/kit': 3.1.1
   '@sveltejs/load-config': 0.2.2
@@ -24,6 +25,7 @@ catalog:
   typescript-eslint: 8.60.0
   vite: 8.0.16
   vitest: 4.1.7
+  yaml: 2.9.1
 
 overrides:
   vite: 8.0.16

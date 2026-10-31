@@ -15,6 +15,9 @@ catalogs:
     '@playwright/test':
       specifier: 1.61.1
       version: 1.61.1
+    '@sinclair/typebox':
+      specifier: 0.34.49
+      version: 0.34.49
     '@sveltejs/adapter-node':
       specifier: 6.0.1
       version: 6.0.1
@@ -66,6 +69,9 @@ catalogs:
     vitest:
       specifier: 4.1.7
       version: 4.1.7
+    yaml:
+      specifier: 2.9.1
+      version: 2.9.1
 
 overrides:
   vite: 8.0.16
@@ -144,6 +150,31 @@ importers:
       vite:
         specifier: 8.0.16
         version: 8.0.16(@types/node@24.12.4)(yaml@2.9.1)
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.7(@types/node@24.12.4)(@vitest/coverage-v8@4.1.7)(vite@8.0.16(@types/node@24.12.4)(yaml@2.9.1))
+
+  packages/config:
+    dependencies:
+      '@sinclair/typebox':
+        specifier: 'catalog:'
+        version: 0.34.49
+      yaml:
+        specifier: 'catalog:'
+        version: 2.9.1
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.12.4
+      '@vitest/coverage-v8':
+        specifier: 'catalog:'
+        version: 4.1.7(vitest@4.1.7)
+      prettier:
+        specifier: 'catalog:'
+        version: 3.8.3
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
       vitest:
         specifier: 'catalog:'
         version: 4.1.7(@types/node@24.12.4)(@vitest/coverage-v8@4.1.7)(vite@8.0.16(@types/node@24.12.4)(yaml@2.9.1))
@@ -455,6 +486,9 @@ packages:
 
   '@rolldown/pluginutils@1.0.1':
     resolution: {integrity: sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw==}
+
+  '@sinclair/typebox@0.34.49':
+    resolution: {integrity: sha512-brySQQs7Jtn0joV8Xh9ZV/hZb9Ozb0pmazDIASBkYKCjXrXU3mpcFahmK/z4YDhGkQvP9mWJbVyahdtU5wQA+A==}
 
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
@@ -1720,6 +1754,8 @@ snapshots:
     optional: true
 
   '@rolldown/pluginutils@1.0.1': {}
+
+  '@sinclair/typebox@0.34.49': {}
 
   '@standard-schema/spec@1.1.0': {}
 
