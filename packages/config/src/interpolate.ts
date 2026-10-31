@@ -2,6 +2,7 @@ import { ConfigError } from './errors.js';
 import type { ConfigEnvironment } from './types.js';
 
 const environmentPattern = /\$\$|\$\{([A-Z_][A-Z0-9_]*)(?::-([^}]*))?\}/g;
+export const environmentTokenPattern = '(?:^|[^$])(?:\\$\\$)*\\$\\{[A-Z_][A-Z0-9_]*(?::-[^}]*)?\\}';
 
 export function interpolate(node: unknown, env: ConfigEnvironment): unknown {
 	if (typeof node === 'string') {

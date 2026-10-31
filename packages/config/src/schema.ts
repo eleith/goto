@@ -206,7 +206,11 @@ const DomainDefaultsSchema = Type.Object(
 		forward_query: Type.Optional(Type.Boolean()),
 		fallback: Type.Optional(ref(FallbackSchema))
 	},
-	{ $id: 'DomainDefaults', additionalProperties: false }
+	{
+		$id: 'DomainDefaults',
+		additionalProperties: false,
+		description: 'Omitted settings inherit global defaults. Explicit false overrides true.'
+	}
 );
 
 const LinkConfigurationSchema = Type.Object(
@@ -221,14 +225,21 @@ const LinkConfigurationSchema = Type.Object(
 		valid_from: Type.Optional(ref(InstantSchema)),
 		valid_until: Type.Optional(ref(InstantSchema))
 	},
-	{ $id: 'LinkConfiguration', additionalProperties: false }
+	{
+		$id: 'LinkConfiguration',
+		additionalProperties: false,
+		description:
+			'Omitted status_code and forward_query inherit domain defaults, then global defaults.'
+	}
 );
 
 const DomainConfigurationSchema = Type.Object(
 	{
 		defaults: ref(DomainDefaultsSchema, { default: {} }),
 		links: Type.Record(Type.String(), ref(LinkConfigurationSchema, { default: {} }), {
-			additionalProperties: false
+			additionalProperties: false,
+			description:
+				'Logical, case-sensitive paths. Keys are never interpolated or percent-decoded. Use readable canonical paths without spaces, trailing slashes, controls, backslashes, dot segments or :?#[]@. The root path / is allowed.'
 		})
 	},
 	{ $id: 'DomainConfiguration', additionalProperties: false }

@@ -1,0 +1,344 @@
+{
+	"additionalProperties": false,
+	"title": "Goto configuration",
+	"type": "object",
+	"required": ["auth", "domains"],
+	"properties": {
+		"version": { "default": 1, "const": 1, "type": "number" },
+		"site": { "default": {}, "$ref": "#/$defs/Site" },
+		"appearance": { "default": {}, "$ref": "#/$defs/Appearance" },
+		"auth": { "$ref": "#/$defs/Auth" },
+		"database": { "default": {}, "$ref": "#/$defs/Database" },
+		"analytics": { "default": {}, "$ref": "#/$defs/Analytics" },
+		"defaults": { "default": {}, "$ref": "#/$defs/Defaults" },
+		"domains": {
+			"additionalProperties": false,
+			"type": "object",
+			"patternProperties": { "^(.*)$": { "default": {}, "$ref": "#/$defs/DomainConfiguration" } }
+		}
+	},
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$defs": {
+		"HttpUrl": {
+			"description": "An absolute HTTP or HTTPS URL.",
+			"type": "string",
+			"anyOf": [
+				{
+					"type": "string",
+					"format": "uri",
+					"pattern": "^[Hh][Tt][Tt][Pp][Ss]?://[^\\s]+(?![\\s\\S])"
+				},
+				{
+					"type": "string",
+					"pattern": "(?:^|[^$])(?:\\$\\$)*\\$\\{[A-Z_][A-Z0-9_]*(?::-[^}]*)?\\}"
+				}
+			]
+		},
+		"LinkUrl": {
+			"description": "An absolute HTTP or HTTPS destination without embedded credentials.",
+			"type": "string",
+			"anyOf": [
+				{
+					"type": "string",
+					"format": "uri",
+					"pattern": "^[Hh][Tt][Tt][Pp][Ss]?://[^\\s]+(?![\\s\\S])"
+				},
+				{
+					"type": "string",
+					"pattern": "(?:^|[^$])(?:\\$\\$)*\\$\\{[A-Z_][A-Z0-9_]*(?::-[^}]*)?\\}"
+				}
+			]
+		},
+		"SiteUrl": {
+			"description": "The canonical admin HTTP(S) origin, without credentials, path, trailing slash, query or fragment.",
+			"type": "string",
+			"anyOf": [
+				{
+					"type": "string",
+					"format": "uri",
+					"pattern": "^(?:https://(?:[^\\s/\\\\?#@:\\[\\]A-Z%]+|\\[[0-9a-f:.]+\\])(?::(?!443(?![\\s\\S]))[1-9][0-9]*)?|http://(?:[^\\s/\\\\?#@:\\[\\]A-Z%]+|\\[[0-9a-f:.]+\\])(?::(?!80(?![\\s\\S]))[1-9][0-9]*)?)(?![\\s\\S])"
+				},
+				{
+					"type": "string",
+					"pattern": "(?:^|[^$])(?:\\$\\$)*\\$\\{[A-Z_][A-Z0-9_]*(?::-[^}]*)?\\}"
+				}
+			]
+		},
+		"Instant": {
+			"description": "An absolute ISO timestamp with seconds and an explicit Z or numeric timezone offset.",
+			"type": "string",
+			"anyOf": [
+				{
+					"type": "string",
+					"format": "date-time",
+					"pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})(?![\\s\\S])"
+				},
+				{
+					"type": "string",
+					"pattern": "(?:^|[^$])(?:\\$\\$)*\\$\\{[A-Z_][A-Z0-9_]*(?::-[^}]*)?\\}"
+				}
+			]
+		},
+		"AuthSecret": {
+			"type": "string",
+			"anyOf": [
+				{ "type": "string", "pattern": "\\S", "minLength": 32 },
+				{
+					"type": "string",
+					"pattern": "(?:^|[^$])(?:\\$\\$)*\\$\\{[A-Z_][A-Z0-9_]*(?::-[^}]*)?\\}"
+				}
+			]
+		},
+		"LocalImagePath": {
+			"description": "A decoded /public/ SVG, PNG, JPEG, GIF or WebP image path without dot segments, percent escapes, backslashes, queries or fragments.",
+			"type": "string",
+			"anyOf": [
+				{
+					"type": "string",
+					"pattern": "^/public/(?:(?!\\.{1,2}(?:/|$))[^/%\\\\?#\\x00-\\x1f\\x7f]+/)*(?!\\.{1,2}(?:/|$))[^/%\\\\?#\\x00-\\x1f\\x7f]+\\.(?:[sS][vV][gG]|[pP][nN][gG]|[jJ][pP][eE]?[gG]|[gG][iI][fF]|[wW][eE][bB][pP])(?![\\s\\S])"
+				},
+				{
+					"type": "string",
+					"pattern": "(?:^|[^$])(?:\\$\\$)*\\$\\{[A-Z_][A-Z0-9_]*(?::-[^}]*)?\\}"
+				}
+			]
+		},
+		"HexColor": {
+			"type": "string",
+			"anyOf": [
+				{ "type": "string", "pattern": "^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})(?![\\s\\S])" },
+				{
+					"type": "string",
+					"pattern": "(?:^|[^$])(?:\\$\\$)*\\$\\{[A-Z_][A-Z0-9_]*(?::-[^}]*)?\\}"
+				}
+			]
+		},
+		"Tags": {
+			"type": "array",
+			"items": {
+				"type": "string",
+				"anyOf": [
+					{ "type": "string", "pattern": "^[^\\x00-\\x1f\\x7f]*(?![\\s\\S])" },
+					{
+						"type": "string",
+						"pattern": "(?:^|[^$])(?:\\$\\$)*\\$\\{[A-Z_][A-Z0-9_]*(?::-[^}]*)?\\}"
+					}
+				]
+			}
+		},
+		"RedirectStatus": {
+			"anyOf": [
+				{ "const": 301, "type": "number" },
+				{ "const": 302, "type": "number" },
+				{ "const": 307, "type": "number" },
+				{ "const": 308, "type": "number" }
+			]
+		},
+		"Fallback": { "anyOf": [{ "const": 404, "type": "number" }, { "$ref": "#/$defs/LinkUrl" }] },
+		"Site": {
+			"additionalProperties": false,
+			"type": "object",
+			"properties": {
+				"url": { "default": "http://localhost:3000", "$ref": "#/$defs/SiteUrl" },
+				"title": {
+					"default": "Goto",
+					"type": "string",
+					"anyOf": [
+						{ "type": "string", "pattern": "\\S", "minLength": 1 },
+						{
+							"type": "string",
+							"pattern": "(?:^|[^$])(?:\\$\\$)*\\$\\{[A-Z_][A-Z0-9_]*(?::-[^}]*)?\\}"
+						}
+					]
+				},
+				"logo_path": { "$ref": "#/$defs/LocalImagePath" },
+				"favicon_path": { "$ref": "#/$defs/LocalImagePath" }
+			}
+		},
+		"Appearance": {
+			"additionalProperties": false,
+			"type": "object",
+			"properties": {
+				"primary_light_color": { "default": "#0f766e", "$ref": "#/$defs/HexColor" },
+				"primary_dark_color": { "default": "#5eead4", "$ref": "#/$defs/HexColor" }
+			}
+		},
+		"OidcAuth": {
+			"additionalProperties": false,
+			"type": "object",
+			"required": ["issuer", "client_id", "client_secret"],
+			"properties": {
+				"issuer": { "$ref": "#/$defs/HttpUrl" },
+				"client_id": {
+					"type": "string",
+					"anyOf": [
+						{ "type": "string", "pattern": "\\S", "minLength": 1 },
+						{
+							"type": "string",
+							"pattern": "(?:^|[^$])(?:\\$\\$)*\\$\\{[A-Z_][A-Z0-9_]*(?::-[^}]*)?\\}"
+						}
+					]
+				},
+				"client_secret": {
+					"type": "string",
+					"anyOf": [
+						{ "type": "string", "pattern": "\\S", "minLength": 1 },
+						{
+							"type": "string",
+							"pattern": "(?:^|[^$])(?:\\$\\$)*\\$\\{[A-Z_][A-Z0-9_]*(?::-[^}]*)?\\}"
+						}
+					]
+				},
+				"name": {
+					"default": "Single Sign-On",
+					"type": "string",
+					"anyOf": [
+						{ "type": "string", "pattern": "\\S", "minLength": 1 },
+						{
+							"type": "string",
+							"pattern": "(?:^|[^$])(?:\\$\\$)*\\$\\{[A-Z_][A-Z0-9_]*(?::-[^}]*)?\\}"
+						}
+					]
+				}
+			}
+		},
+		"CredentialsAuth": {
+			"additionalProperties": false,
+			"type": "object",
+			"required": ["username", "password"],
+			"properties": {
+				"username": {
+					"type": "string",
+					"anyOf": [
+						{ "type": "string", "pattern": "\\S", "minLength": 1 },
+						{
+							"type": "string",
+							"pattern": "(?:^|[^$])(?:\\$\\$)*\\$\\{[A-Z_][A-Z0-9_]*(?::-[^}]*)?\\}"
+						}
+					]
+				},
+				"password": {
+					"type": "string",
+					"anyOf": [
+						{ "type": "string", "pattern": "\\S", "minLength": 1 },
+						{
+							"type": "string",
+							"pattern": "(?:^|[^$])(?:\\$\\$)*\\$\\{[A-Z_][A-Z0-9_]*(?::-[^}]*)?\\}"
+						}
+					]
+				}
+			}
+		},
+		"Auth": {
+			"description": "Declare exactly one authentication strategy.",
+			"anyOf": [
+				{
+					"additionalProperties": false,
+					"title": "OIDC",
+					"type": "object",
+					"required": ["oidc"],
+					"properties": {
+						"secret": { "$ref": "#/$defs/AuthSecret" },
+						"oidc": { "$ref": "#/$defs/OidcAuth" },
+						"credentials": { "not": {} }
+					}
+				},
+				{
+					"additionalProperties": false,
+					"title": "Shared username and password",
+					"type": "object",
+					"required": ["credentials"],
+					"properties": {
+						"secret": { "$ref": "#/$defs/AuthSecret" },
+						"credentials": { "$ref": "#/$defs/CredentialsAuth" },
+						"oidc": { "not": {} }
+					}
+				}
+			]
+		},
+		"Database": {
+			"additionalProperties": false,
+			"type": "object",
+			"properties": {
+				"path": {
+					"default": "./data/goto.sqlite",
+					"type": "string",
+					"anyOf": [
+						{ "type": "string", "pattern": "\\S", "minLength": 1 },
+						{
+							"type": "string",
+							"pattern": "(?:^|[^$])(?:\\$\\$)*\\$\\{[A-Z_][A-Z0-9_]*(?::-[^}]*)?\\}"
+						}
+					]
+				}
+			}
+		},
+		"Analytics": {
+			"additionalProperties": false,
+			"type": "object",
+			"properties": {
+				"enabled": { "default": true, "type": "boolean" },
+				"retention_days": { "minimum": 1, "default": 90, "type": "integer" }
+			}
+		},
+		"Defaults": {
+			"additionalProperties": false,
+			"type": "object",
+			"properties": {
+				"status_code": { "default": 302, "$ref": "#/$defs/RedirectStatus" },
+				"forward_query": { "default": false, "type": "boolean" },
+				"fallback": { "default": 404, "$ref": "#/$defs/Fallback" }
+			}
+		},
+		"DomainDefaults": {
+			"additionalProperties": false,
+			"description": "Omitted settings inherit global defaults. Explicit false overrides true.",
+			"type": "object",
+			"properties": {
+				"status_code": { "$ref": "#/$defs/RedirectStatus" },
+				"forward_query": { "type": "boolean" },
+				"fallback": { "$ref": "#/$defs/Fallback" }
+			}
+		},
+		"LinkConfiguration": {
+			"additionalProperties": false,
+			"description": "Omitted status_code and forward_query inherit domain defaults, then global defaults.",
+			"type": "object",
+			"required": ["url"],
+			"properties": {
+				"url": { "$ref": "#/$defs/LinkUrl" },
+				"title": {
+					"type": "string",
+					"anyOf": [
+						{ "type": "string", "pattern": "\\S", "minLength": 1 },
+						{
+							"type": "string",
+							"pattern": "(?:^|[^$])(?:\\$\\$)*\\$\\{[A-Z_][A-Z0-9_]*(?::-[^}]*)?\\}"
+						}
+					]
+				},
+				"description": { "type": "string" },
+				"tags": { "default": [], "$ref": "#/$defs/Tags" },
+				"enabled": { "default": true, "type": "boolean" },
+				"status_code": { "$ref": "#/$defs/RedirectStatus" },
+				"forward_query": { "type": "boolean" },
+				"valid_from": { "$ref": "#/$defs/Instant" },
+				"valid_until": { "$ref": "#/$defs/Instant" }
+			}
+		},
+		"DomainConfiguration": {
+			"additionalProperties": false,
+			"type": "object",
+			"required": ["links"],
+			"properties": {
+				"defaults": { "default": {}, "$ref": "#/$defs/DomainDefaults" },
+				"links": {
+					"additionalProperties": false,
+					"description": "Logical, case-sensitive paths. Keys are never interpolated or percent-decoded. Use readable canonical paths without spaces, trailing slashes, controls, backslashes, dot segments or :?#[]@. The root path / is allowed.",
+					"type": "object",
+					"patternProperties": { "^(.*)$": { "default": {}, "$ref": "#/$defs/LinkConfiguration" } }
+				}
+			}
+		}
+	}
+}
