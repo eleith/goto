@@ -45,12 +45,14 @@ jobs:
           cache-dependency-path: pnpm-lock.yaml
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Build shared packages
+        run: pnpm build:packages
       - name: Check types
-        run: pnpm check
+        run: pnpm --filter @goto/web check
       - name: Lint repository
         run: pnpm lint
       - name: Unit tests
-        run: pnpm test:coverage
+        run: pnpm --filter @goto/web test:coverage
 
   e2e:
     name: Web E2E
@@ -69,6 +71,8 @@ jobs:
           test "$(pnpm --version)" = "11.9.0"
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Build shared packages
+        run: pnpm build:packages
       - name: Production artifact smoke test
         run: pnpm test:e2e
 

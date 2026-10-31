@@ -38,6 +38,7 @@ steps:
       - corepack install --global pnpm@11.9.0
       - pnpm config set store-dir .pnpm-store
       - pnpm install --frozen-lockfile
+      - pnpm build:packages
 
   lint:
     image: node:26.5.0-bookworm
@@ -46,7 +47,7 @@ steps:
     commands:
       - npm install --global corepack@0.36.0
       - corepack enable
-      - pnpm check
+      - pnpm --filter @goto/web check
       - pnpm lint
 
   test:
@@ -56,7 +57,7 @@ steps:
     commands:
       - npm install --global corepack@0.36.0
       - corepack enable
-      - pnpm test:coverage
+      - pnpm --filter @goto/web test:coverage
 
   e2e:
     image: git.eleith.com/eleith.private/playwright:1.61.1-node26
