@@ -116,6 +116,14 @@ describe('goto-cli config validate', () => {
 			environment: { ...env, DUMMY_DESTINATION: `not-a-url-${env.DUMMY_PASSWORD}` }
 		},
 		{
+			name: 'direct self-loop in resolved YAML',
+			source: validYaml,
+			environment: {
+				...env,
+				DUMMY_DESTINATION: `http://go.example.test:80/docs?private=${env.DUMMY_PASSWORD}`
+			}
+		},
+		{
 			name: 'invalid resolved session secret',
 			source: validYaml,
 			environment: { ...env, DUMMY_SECRET: 'too-short' }

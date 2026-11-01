@@ -4,6 +4,76 @@ import { ConfigError } from './errors.js';
 import { validateConfig } from './load.js';
 
 const options = { env: {} };
+const redirectHost = 'go.example.test';
+
+describe('direct self-loop validation', () => {
+	it.each([
+		{
+			host: redirectHost,
+			path: '/docs',
+			url: 'https://GO.EXAMPLE.TEST:443/docs?changed=one#fragment'
+		},
+		{ host: redirectHost, path: '/docs', url: 'http://go.example.test/%64ocs' },
+		{ host: redirectHost, path: '/a/b', url: 'https://go.example.test/a%2Fb' },
+		{ host: redirectHost, path: '/a%2Fb', url: 'https://go.example.test/a%252Fb' },
+		{ host: 'GO.EXAMPLE.TEST:8443', path: '/', url: 'https://go.example.test:8443/' },
+		{ host: 'go.example.test:80', path: '/docs', url: 'http://go.example.test:80/docs' },
+		{ host: 'GO.EXAMPLE.TEST', path: '/docs', url: 'http://go.example.test:80/docs' },
+		{ host: redirectHost, path: '/docs', url: 'https:///go.example.test/docs' }
+	])('rejects $host $path -> $url with ConfigError', ({ host, path, url }) => {
+		const input = configurationInput();
+
+		expect(() =>
+			validateConfig({ ...input, domains: { [host]: { links: { [path]: { url } } } } }, options)
+		).toThrowError(new ConfigError());
+	});
+
+	it('keeps errors generic even for disabled links', () => {
+		const input = configurationInput();
+		const url = 'https://go.example.test/docs?private=dummy-value';
+
+		expect(() =>
+			validateConfig(
+				{ ...input, domains: { [redirectHost]: { links: { '/docs': { url, enabled: false } } } } },
+				options
+			)
+		).toThrowError(new ConfigError());
+	});
+
+	it.each([
+		'https://other.example.test/docs',
+		'https://go.example.test:8443/docs',
+		'https://go.example.test/Docs',
+		'https://go.example.test/docs/',
+		'https://go.example.test/docs/extra',
+		'https://go.example.test/%2564ocs',
+		'https://go.example.test/%FF',
+		'https:///other.example.test/docs',
+		'http://OTHER.example.test:80/p%61th?owned=%2f#fragment'
+	])('preserves distinct authored destinations: %s', (url) => {
+		const input = configurationInput();
+		const { domains } = validateConfig(
+			{ ...input, domains: { [redirectHost]: { links: { '/docs': { url } } } } },
+			options
+		);
+
+		expect(domains[redirectHost]?.links['/docs']?.url).toBe(url);
+	});
+
+	it('allows local fallback URLs without graph analysis', () => {
+		const input = configurationInput();
+		const fallback = 'https://go.example.test/landing';
+		const { domains } = validateConfig(
+			{
+				...input,
+				domains: { [redirectHost]: { defaults: { fallback }, links: {} } }
+			},
+			options
+		);
+
+		expect(domains[redirectHost]?.fallback).toBe(fallback);
+	});
+});
 
 describe('effective domains', () => {
 	it('keeps omissions in configuration and records built-in defaults separately', () => {
@@ -83,7 +153,7 @@ describe('effective domains', () => {
 				...input,
 				domains: {
 					'BÜCHER.Example:8443': input.domains['go.example.com'],
-					'OTHER.example:0443': { links: { '/docs': { url: 'https://other.example/docs' } } }
+					'OTHER.example:0443': { links: { '/docs': { url: 'https://destination.example/docs' } } }
 				}
 			},
 			options
@@ -92,7 +162,7 @@ describe('effective domains', () => {
 		expect(domains['xn--bcher-kva.example:8443']?.links['/docs']?.url).toBe(
 			'https://example.com/docs'
 		);
-		expect(domains['other.example']?.links['/docs']?.url).toBe('https://other.example/docs');
+		expect(domains['other.example']?.links['/docs']?.url).toBe('https://destination.example/docs');
 	});
 
 	it.each([

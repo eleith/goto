@@ -1,5 +1,6 @@
 import { ConfigError } from './errors.js';
 import { isCanonicalPath, normalizeHost } from './paths.js';
+import { isSelfRedirect } from './redirect.js';
 import type { DomainConfiguration, GotoConfiguration, LinkConfiguration } from './schema.js';
 import type { PreparedDomain, PreparedLink, SettingSource } from './types.js';
 
@@ -56,6 +57,7 @@ export function prepareDomains(
 		}
 		const links: Record<string, PreparedLink> = Object.create(null);
 		for (const [path, link] of Object.entries(domain.links)) {
+			if (isSelfRedirect(link.url, host, path)) throw new ConfigError();
 			links[path] = prepareLink(path, link, domain, configuration, authoredDefaults);
 		}
 		domains[host] = {

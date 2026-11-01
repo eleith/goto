@@ -1,5 +1,6 @@
 export { ConfigError } from './errors.js';
 export { loadConfigFile, parseConfig, validateConfig } from './load.js';
+export { isSelfRedirect } from './redirect.js';
 export {
 	isCanonicalPath,
 	normalizeHost,
