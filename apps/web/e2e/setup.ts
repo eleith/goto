@@ -17,7 +17,14 @@ export default async function setup() {
 
 	try {
 		await mkdir(projectDirectory);
-		for (const path of ['src', 'package.json', 'vite.config.ts', 'tsconfig.json']) {
+		for (const path of [
+			'src',
+			'server',
+			'server.js',
+			'package.json',
+			'vite.config.ts',
+			'tsconfig.json'
+		]) {
 			await cp(join(webDirectory, path), join(projectDirectory, path), { recursive: true });
 		}
 		await symlink(
@@ -32,7 +39,8 @@ export default async function setup() {
 			maxBuffer: 10 * 1024 * 1024
 		});
 		await access(join(projectDirectory, 'build/handler.js'));
-		await access(join(projectDirectory, 'build/index.js'));
+		await access(join(projectDirectory, 'build/server/goto-runtime.js'));
+		await access(join(projectDirectory, 'server.js'));
 		return cleanup;
 	} catch (error) {
 		await cleanup();

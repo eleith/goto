@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM node:26.5.0-alpine@sha256:e88a35be04478413b7c71c455cd9865de9b9360e1f43456be5951032d7ac1a66 AS builder
+FROM node:26.5.0-alpine AS builder
 WORKDIR /m
 
 ENV CI=true
@@ -12,7 +12,7 @@ COPY . .
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm install --offline --frozen-lockfile
 RUN pnpm --filter "@goto/cli..." build
 
-FROM node:26.5.0-alpine@sha256:e88a35be04478413b7c71c455cd9865de9b9360e1f43456be5951032d7ac1a66 AS prod
+FROM node:26.5.0-alpine AS prod
 WORKDIR /app
 
 ENV NODE_ENV=production

@@ -1,5 +1,3 @@
-import { createServer } from 'node:http';
-import { once } from 'node:events';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -7,40 +5,33 @@ import { pathToFileURL } from 'node:url';
 const directory = process.env.GOTO_E2E_BUILD_DIR;
 if (!directory) throw new Error('Missing E2E build directory');
 
-const server = createServer();
-
-function shutdown() {
-	server.close(() => process.exit(0));
-	server.closeIdleConnections();
-	setTimeout(() => process.exit(1), 5_000).unref();
-}
-
-process.on('SIGTERM', shutdown);
-process.on('SIGINT', shutdown);
-process.on('disconnect', shutdown);
-
-server.listen(0, '127.0.0.1');
-await once(server, 'listening');
-const origin = `http://localhost:${server.address().port}`;
-process.env.PROTOCOL_HEADER = 'x-forwarded-proto';
 const runtimeDirectory = join(directory, `runtime-${process.pid}`);
 await mkdir(join(runtimeDirectory, 'config'), { recursive: true });
 process.chdir(runtimeDirectory);
+process.env.PROTOCOL_HEADER = 'x-forwarded-proto';
+process.env.HOST = '127.0.0.1';
+process.env.PORT = '0';
 await writeFile(
 	join(runtimeDirectory, 'config/goto.yaml'),
 	JSON.stringify({
-		site: { url: origin },
+		site: { url: 'http://admin.example.test' },
 		auth: { credentials: { username: 'example', password: 'e2e-only-password' } },
 		domains: {
-			'go.example.org': { links: { '/schema.json': { url: 'https://example.org/documentation' } } }
+			'go.example.org': {
+				links: {
+					'/schema.json': { url: 'https://example.org/public-schema' },
+					'/_app/version.json': { url: 'https://example.org/public-asset' },
+					'/a/b': { url: 'https://example.org/decoded' },
+					'/a%2Fb': { url: 'https://example.org/literal-percent' },
+					'/docs': { url: 'https://example.org/first-domain' },
+					'/healthz': { url: 'https://example.org/public-health' }
+				}
+			},
+			'tiny.example.org': {
+				links: { '/docs': { url: 'https://example.org/second-domain' } }
+			}
 		}
 	})
 );
 
-const { handler } = await import(pathToFileURL(join(directory, 'build/handler.js')).href);
-server.on('request', (request, response) => {
-	request.headers['x-forwarded-proto'] = 'http';
-	handler(request, response);
-});
-
-process.send({ origin });
+await import(pathToFileURL(join(directory, 'server.js')).href);

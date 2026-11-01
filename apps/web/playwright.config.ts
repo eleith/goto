@@ -11,6 +11,7 @@ export default defineConfig({
 	retries: process.env.CI ? 2 : 0,
 	use: {
 		timezoneId: 'UTC',
+		extraHTTPHeaders: { host: 'admin.example.test', 'x-forwarded-proto': 'http' },
 		trace: 'on-first-retry',
 		screenshot: 'only-on-failure'
 	},

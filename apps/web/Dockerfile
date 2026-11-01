@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM node:26.5.0-alpine@sha256:e88a35be04478413b7c71c455cd9865de9b9360e1f43456be5951032d7ac1a66 AS base
+FROM node:26.5.0-alpine AS base
 WORKDIR /m
 
 ENV CI=true \
@@ -43,16 +43,17 @@ RUN --mount=type=cache,id=pnpm-store,target=/home/app/store \
     pnpm --config.hoist-workspace-packages=false --filter @goto/web --prod deploy --legacy /pruned \
     && mkdir -p /pruned/node_modules
 
-FROM node:26.5.0-alpine@sha256:e88a35be04478413b7c71c455cd9865de9b9360e1f43456be5951032d7ac1a66 AS prod
+FROM node:26.5.0-alpine AS prod
 WORKDIR /app
 
 ENV NODE_ENV=production \
     PORT=3000 \
     HOST=0.0.0.0
 COPY --from=pruner /pruned/build /app/build
+COPY --from=pruner /pruned/server.js /app/server.js
 COPY --from=pruner /pruned/node_modules /app/node_modules
 COPY --from=pruner /pruned/package.json /app/package.json
 RUN mkdir -p /app/config
 USER node
 EXPOSE 3000
-CMD ["node", "/app/build/index.js"]
+CMD ["node", "/app/server.js"]

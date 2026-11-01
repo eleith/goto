@@ -1,14 +1,6 @@
-import { loadConfigFile } from '@goto/config';
 import { building } from '$app/env';
-import { sequence, type Handle, type ServerInit } from '@sveltejs/kit/hooks';
-
-let adminOrigin: string | undefined;
-
-export const init: ServerInit = async () => {
-	if (building) return;
-	const { configuration } = await loadConfigFile();
-	adminOrigin = configuration.site.url;
-};
+import { sequence, type Handle } from '@sveltejs/kit/hooks';
+import { requestApplication } from '#lib/server/request-context.js';
 
 export const securityHeaders: Handle = async ({ event, resolve }) => {
 	const response = await resolve(event);
@@ -23,11 +15,27 @@ export const securityHeaders: Handle = async ({ event, resolve }) => {
 	});
 };
 
+export const applicationContext: Handle = ({ event, resolve }) => {
+	if (building) return resolve(event);
+	const application =
+		requestApplication(event.request) ??
+		event.platform?.application ??
+		(event.platform?.req && requestApplication(event.platform.req));
+	if (!application) {
+		return new Response('Unavailable', { status: 503, headers: { 'cache-control': 'no-store' } });
+	}
+	event.locals.application = application;
+	return resolve(event);
+};
+
 export const adminOriginGate: Handle = ({ event, resolve }) => {
-	if (event.route.id?.startsWith('/(admin)') && event.url.origin !== adminOrigin) {
+	if (
+		event.route.id?.startsWith('/(admin)') &&
+		event.url.origin !== event.locals.application?.configuration.site.url
+	) {
 		return new Response('Not found', { status: 404, headers: { 'cache-control': 'no-store' } });
 	}
 	return resolve(event);
 };
 
-export const handle = sequence(securityHeaders, adminOriginGate);
+export const handle = sequence(securityHeaders, applicationContext, adminOriginGate);
