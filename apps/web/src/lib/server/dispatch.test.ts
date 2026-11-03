@@ -4,8 +4,9 @@ import { expect, test } from 'vitest';
 import type { Application } from './application.js';
 import { handleIngress } from './dispatch.js';
 import { requestApplication } from './request-context.js';
+import { prepareSnapshot } from './snapshot.js';
 
-const application: Application = validateConfig(
+const prepared = validateConfig(
 	{
 		site: { url: 'https://admin.example.test' },
 		auth: { credentials: { username: 'example', password: 'unit-only-password' } },
@@ -23,6 +24,8 @@ const application: Application = validateConfig(
 	},
 	{ env: {} }
 );
+const snapshot = prepareSnapshot(prepared);
+const application: Application = { currentSnapshot: () => snapshot };
 
 function request(host: string, url = '/schema.json', remoteAddress = '127.0.0.1') {
 	return {

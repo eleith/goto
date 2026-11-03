@@ -1,11 +1,16 @@
 import { fork, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
+import { join } from 'node:path';
 import { test as base } from '@playwright/test';
 import { serverEnvironment } from './environment.ts';
 
 export { expect } from '@playwright/test';
 
-type AppServer = { origin: string };
+type AppServer = {
+	origin: string;
+	configurationPath: string;
+	logs(): string;
+};
 
 function waitForServerOrigin(child: ChildProcess): Promise<string> {
 	return new Promise((resolve, reject) => {
@@ -66,7 +71,12 @@ export const test = base.extend<{ appServer: AppServer }>({
 
 		try {
 			const origin = await waitForServerOrigin(child);
-			await use({ origin });
+			const runtimeDirectory = join(directory, `runtime-${child.pid}`);
+			await use({
+				origin,
+				configurationPath: join(runtimeDirectory, 'config/goto.yaml'),
+				logs: () => output
+			});
 		} finally {
 			await stopServer(child);
 			if (testInfo.status !== testInfo.expectedStatus) {

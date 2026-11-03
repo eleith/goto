@@ -16,16 +16,17 @@ export function handleIngress(
 ): Response | undefined {
 	const ingress = readIngress(request, env, defaultProtocol);
 	if (!ingress) return response(400);
-	if (Object.hasOwn(application.domains, ingress.host)) {
+	const snapshot = application.currentSnapshot();
+	if (Object.hasOwn(snapshot.domains, ingress.host)) {
 		return resolveRedirect(
-			application.domains[ingress.host]!,
+			snapshot.domains[ingress.host]!,
 			ingress.host,
 			request.url!,
 			request.method ?? 'GET'
 		);
 	}
-	if (ingress.url.origin === application.configuration.site.url) {
-		bindApplication(request, application, ingress.url.origin);
+	if (ingress.url.origin === snapshot.configuration.site.url) {
+		bindApplication(request, application, ingress.url.origin, snapshot);
 		return;
 	}
 	if (isLocalProbe(request, ingress.url)) return response(200);

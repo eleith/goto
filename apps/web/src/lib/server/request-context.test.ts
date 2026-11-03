@@ -3,10 +3,16 @@ import { Socket } from 'node:net';
 import { validateConfig } from '@goto/config';
 import { describe, expect, test } from 'vitest';
 import type { Application } from './application.js';
-import { bindApplication, requestApplication, requestOrigin } from './request-context.js';
+import {
+	bindApplication,
+	requestApplication,
+	requestOrigin,
+	requestSnapshot
+} from './request-context.js';
+import { prepareSnapshot } from './snapshot.js';
 
 function application(): Application {
-	return validateConfig(
+	const prepared = validateConfig(
 		{
 			site: { url: 'https://admin.example.org' },
 			auth: { credentials: { username: 'example', password: 'test-password' } },
@@ -14,6 +20,8 @@ function application(): Application {
 		},
 		{ env: {} }
 	);
+	const snapshot = prepareSnapshot(prepared);
+	return { currentSnapshot: () => snapshot };
 }
 
 function request(kind: 'web' | 'node'): Request | IncomingMessage {
@@ -89,7 +97,33 @@ test('carries the trusted request origin separately from the configured admin or
 	bindApplication(incoming, captured, 'http://localhost:5173');
 
 	expect(requestOrigin(incoming)).toBe('http://localhost:5173');
-	expect(requestApplication(incoming)?.configuration.site.url).toBe('https://admin.example.org');
+	expect(requestApplication(incoming)?.currentSnapshot().configuration.site.url).toBe(
+		'https://admin.example.org'
+	);
+});
+
+test('an existing request retains its snapshot when the application publishes another', () => {
+	const initial = application().currentSnapshot();
+	let current = initial;
+	const runtime: Application = { currentSnapshot: () => current };
+	const first = request('web');
+	bindApplication(first, runtime);
+	current = prepareSnapshot(
+		validateConfig(
+			{
+				site: { url: 'https://admin.example.org', title: 'Updated' },
+				auth: { credentials: { username: 'example', password: 'test-password' } },
+				domains: {}
+			},
+			{ env: {} }
+		)
+	);
+	const second = request('web');
+	bindApplication(second, runtime);
+
+	expect(requestSnapshot(first)).toBe(initial);
+	expect(requestSnapshot(second)).toBe(current);
+	expect(requestSnapshot(first)?.configuration.site.title).toBe('Goto');
 });
 
 test('binding neither consumes the request body nor serializes private configuration', async () => {

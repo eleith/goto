@@ -5,7 +5,8 @@ import { isRunnableDevEnvironment, type ViteDevServer } from 'vite';
 import {
 	bindApplication,
 	requestApplication,
-	requestOrigin
+	requestOrigin,
+	requestSnapshot
 } from '../src/lib/server/request-context.ts';
 import { createApplicationLifecycle } from './lifecycle.ts';
 
@@ -47,7 +48,8 @@ export class DevelopmentServer {
 		const origin = requestOrigin(options.request);
 		const request = convert({ ...options, ...(origin === undefined ? {} : { base: origin }) });
 		const application = requestApplication(options.request);
-		if (application) bindApplication(request, application, origin);
+		if (application)
+			bindApplication(request, application, origin, requestSnapshot(options.request));
 		return request;
 	}
 
@@ -62,7 +64,8 @@ export class DevelopmentServer {
 	private async platform(details: PlatformDetails, emulator?: Emulator): Promise<App.Platform> {
 		const platform = await emulator?.platform?.(details);
 		if (!this.server || details.prerender) return platform ?? ({} as App.Platform);
-		return { ...platform, application: await this.lifecycle.start() } as App.Platform;
+		const application = await this.lifecycle.start();
+		return { ...platform, application, snapshot: application.currentSnapshot() } as App.Platform;
 	}
 
 	private async runtime(): Promise<Runtime> {

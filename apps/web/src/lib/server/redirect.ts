@@ -1,4 +1,5 @@
 import { isSelfRedirect, type PreparedDomain } from '@goto/config';
+import type { Immutable } from './snapshot.js';
 
 function parseTarget(target: string): { path: string; query: string } | undefined {
 	if (!target.startsWith('/') || target.includes('#') || target.includes('\\')) return undefined;
@@ -40,7 +41,7 @@ function serializeLocation(destination: string): string {
 }
 
 export function resolveRedirect(
-	domain: PreparedDomain,
+	domain: Immutable<PreparedDomain>,
 	host: string,
 	target: string,
 	method: string,

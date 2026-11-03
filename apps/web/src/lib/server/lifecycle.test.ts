@@ -2,9 +2,10 @@ import { ConfigError, validateConfig } from '@goto/config';
 import { describe, expect, test, vi } from 'vitest';
 import { createApplicationLifecycle } from '../../../server/lifecycle.js';
 import type { Application } from './application.js';
+import { prepareSnapshot } from './snapshot.js';
 
 function application(): Application {
-	return validateConfig(
+	const prepared = validateConfig(
 		{
 			site: { url: 'https://admin.example.org' },
 			auth: { credentials: { username: 'example', password: 'test-password' } },
@@ -12,6 +13,8 @@ function application(): Application {
 		},
 		{ env: {} }
 	);
+	const snapshot = prepareSnapshot(prepared);
+	return { currentSnapshot: () => snapshot };
 }
 
 describe('application lifecycle', () => {

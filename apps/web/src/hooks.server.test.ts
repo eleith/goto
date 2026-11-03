@@ -5,6 +5,7 @@ import type { Handle } from '@sveltejs/kit/hooks';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import type { Application } from '#lib/server/application.js';
 import { bindApplication } from '#lib/server/request-context.js';
+import { prepareSnapshot } from '#lib/server/snapshot.js';
 import { adminOriginGate, applicationContext, securityHeaders } from './hooks.server.js';
 
 const framework = vi.hoisted(() => ({ building: false }));
@@ -27,7 +28,7 @@ function event(
 }
 
 function application(): Application {
-	return validateConfig(
+	const prepared = validateConfig(
 		{
 			site: { url: 'https://admin.example.org' },
 			auth: { credentials: { username: 'example', password: 'test-password' } },
@@ -35,6 +36,8 @@ function application(): Application {
 		},
 		{ env: {} }
 	);
+	const snapshot = prepareSnapshot(prepared);
+	return { currentSnapshot: () => snapshot };
 }
 
 beforeEach(() => {
@@ -175,6 +178,7 @@ describe('admin group origin', () => {
 	])('allows %s on the configured admin origin', async (routeId, path) => {
 		const current = event(`https://admin.example.org${path}`, routeId);
 		current.locals.application = application();
+		current.locals.snapshot = current.locals.application.currentSnapshot();
 		const resolve = vi.fn(async () => new Response('admin response'));
 
 		const response = await adminOriginGate({ event: current, resolve });
@@ -191,6 +195,7 @@ describe('admin group origin', () => {
 	])('blocks %s on another native origin: %s', async (routeId, url) => {
 		const current = event(url, routeId);
 		current.locals.application = application();
+		current.locals.snapshot = current.locals.application.currentSnapshot();
 		const resolve = vi.fn(async () => new Response('admin response'));
 
 		const response = await adminOriginGate({ event: current, resolve });
@@ -236,6 +241,7 @@ describe('admin group origin', () => {
 	test('leaves health outside the admin origin gate', async () => {
 		const current = event();
 		current.locals.application = application();
+		current.locals.snapshot = current.locals.application.currentSnapshot();
 		const resolve = vi.fn(async () => new Response('ready'));
 
 		const response = await adminOriginGate({ event: current, resolve });
