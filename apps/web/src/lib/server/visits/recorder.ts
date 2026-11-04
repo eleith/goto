@@ -1,7 +1,7 @@
 import { Piscina } from 'piscina';
 import type { NewVisit } from '@goto/db';
 
-const MAX_OUTSTANDING = 256;
+const MAX_OUTSTANDING = 1000;
 const MAX_VISIT_BYTES = 32 * 1024;
 const DRAIN_TIMEOUT = 5000;
 

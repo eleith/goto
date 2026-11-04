@@ -50,13 +50,13 @@ test('bounds all unsettled visits and releases capacity after a failed insert', 
 	expect(writes).toHaveLength(0);
 	initialized.resolve();
 	await initialized.promise;
-	for (let index = 0; index < 256; index++) recorder.recordVisit(visit);
+	for (let index = 0; index < 1000; index++) recorder.recordVisit(visit);
 	recorder.recordVisit(visit);
-	expect(writes).toHaveLength(256);
+	expect(writes).toHaveLength(1000);
 	writes[0]!.reject(new Error('private database detail'));
 	await Promise.resolve();
 	recorder.recordVisit(visit);
-	expect(writes).toHaveLength(257);
+	expect(writes).toHaveLength(1001);
 	expect(console.warn).toHaveBeenCalledExactlyOnceWith(
 		'Visit tracking unavailable; some visits may not be recorded'
 	);
