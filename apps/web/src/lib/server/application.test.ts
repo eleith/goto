@@ -8,8 +8,10 @@ import {
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { createApplication } from './application.js';
 import { createAuthentication } from './auth/index.js';
+import { createVisitRecorder } from './visits/recorder.js';
 
 vi.mock('./auth/index.js', () => ({ createAuthentication: vi.fn(() => ({})) }));
+vi.mock('./visits/recorder.js', () => ({ createVisitRecorder: vi.fn() }));
 
 vi.mock('@goto/config', async (importOriginal) => ({
 	...(await importOriginal<typeof import('@goto/config')>()),
@@ -21,6 +23,8 @@ type ReloadOptions = Parameters<typeof startConfigReloading<PreparedConfiguratio
 const options = { cwd: '/deployment', env: {} };
 let reload: ReloadOptions;
 const stop = vi.fn();
+const stopRecorder = vi.fn();
+const recordVisit = vi.fn();
 
 function prepared(
 	destination = 'https://example.org/first',
@@ -41,6 +45,7 @@ beforeEach(() => {
 	vi.clearAllMocks();
 	vi.spyOn(console, 'warn').mockImplementation(() => {});
 	vi.mocked(loadConfigFile).mockResolvedValue(prepared());
+	vi.mocked(createVisitRecorder).mockReturnValue({ recordVisit, stop: stopRecorder });
 	vi.mocked(startConfigReloading).mockImplementation(async (options) => {
 		reload = options as ReloadOptions;
 		return stop;
@@ -63,6 +68,9 @@ test('uses a fixed path/environment and stops monitoring with the application', 
 	expect(application.currentSnapshot().configuration.auth).not.toHaveProperty('secret');
 	await application.close?.();
 	expect(stop).toHaveBeenCalledOnce();
+	expect(createVisitRecorder).toHaveBeenCalledExactlyOnceWith('/deployment/data/goto.sqlite');
+	expect(application.recordVisit).toBe(recordVisit);
+	expect(stopRecorder).toHaveBeenCalledOnce();
 });
 
 test('publishes valid changes, ignores equivalent data, and retains last good data on failure', async () => {
@@ -80,6 +88,7 @@ test('publishes valid changes, ignores equivalent data, and retains last good da
 	reload.onError(new Error('private-parser-detail'));
 	expect(application.currentSnapshot()).toBe(accepted);
 	expect(createAuthentication).toHaveBeenCalledOnce();
+	expect(createVisitRecorder).toHaveBeenCalledOnce();
 	expect(console.warn).toHaveBeenCalledExactlyOnceWith(
 		'Invalid configuration update; keeping current configuration'
 	);
@@ -108,4 +117,5 @@ test('invalid startup fails before registering a monitor', async () => {
 
 	await expect(createApplication(options)).rejects.toThrow('Invalid configuration');
 	expect(startConfigReloading).not.toHaveBeenCalled();
+	expect(createVisitRecorder).not.toHaveBeenCalled();
 });

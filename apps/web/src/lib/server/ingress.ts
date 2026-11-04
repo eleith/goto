@@ -79,6 +79,15 @@ export function readIngress(
 	}
 }
 
+export function readClientAddress(request: IncomingMessage): string | undefined {
+	try {
+		const address = readHeader(request, 'x-real-ip') ?? request.socket.remoteAddress;
+		if (address && isIP(address)) return address;
+	} catch {
+		return;
+	}
+}
+
 function isLoopbackAddress(address: string | undefined): boolean {
 	if (!address) return false;
 	if (isIP(address) === 4) return address.startsWith('127.');

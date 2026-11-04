@@ -1,4 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
+import { resolve } from 'node:path';
+import type { NewVisit } from '@goto/db';
 import {
 	loadConfigFile,
 	resolveConfigPath,
@@ -8,10 +10,12 @@ import {
 } from '@goto/config';
 import { createAuthentication, type Authentication } from './auth/index.js';
 import { prepareSnapshot, type ConfigurationSnapshot } from './snapshot.js';
+import { createVisitRecorder } from './visits/recorder.js';
 
 export interface Application {
 	currentSnapshot(): ConfigurationSnapshot;
 	authentication?: Authentication;
+	recordVisit?(visit: NewVisit): void;
 	close?(): void | Promise<void>;
 }
 
@@ -41,7 +45,7 @@ export async function createApplication(options: ConfigOptions = {}): Promise<Ap
 	const startup = structuredClone(startupSettings(initial));
 	let snapshot = prepareSnapshot(initial);
 	const authentication = createAuthentication(snapshot.configuration);
-	const stop = await startConfigReloading({
+	const stopReloading = await startConfigReloading({
 		path,
 		initial,
 		load: (path) => loadConfigFile(path, captured),
@@ -57,6 +61,18 @@ export async function createApplication(options: ConfigOptions = {}): Promise<Ap
 			reportReloadIssue('Invalid configuration update; keeping current configuration');
 		}
 	});
-	const application: Application = { currentSnapshot: () => snapshot, authentication, close: stop };
+	const recorder = createVisitRecorder(resolve(captured.cwd, startup.databasePath));
+	const application: Application = {
+		currentSnapshot: () => snapshot,
+		authentication,
+		recordVisit: recorder.recordVisit,
+		async close() {
+			try {
+				await stopReloading();
+			} finally {
+				await recorder.stop();
+			}
+		}
+	};
 	return application;
 }

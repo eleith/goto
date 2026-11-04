@@ -1,6 +1,6 @@
 import { validateConfig } from '@goto/config';
 import type { IncomingMessage } from 'node:http';
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import type { Application } from './application.js';
 import { handleIngress } from './dispatch.js';
 import { requestApplication } from './request-context.js';
@@ -99,4 +99,73 @@ test('rejects malformed ingress without reaching either handler', () => {
 
 	expect(handleIngress(application, incoming, {})?.status).toBe(400);
 	expect(requestApplication(incoming)).toBeUndefined();
+});
+
+test('captures only raw visit fields from the matched logical path and trusted IP header', () => {
+	const recordVisit = vi.fn();
+	const tracked = { ...application, recordVisit };
+	const incoming = request('go.example.test', '/%73chema.json?private=not-collected');
+	Object.assign(incoming.headers, {
+		'x-real-ip': '2001:db8::1',
+		'user-agent': 'Example agent',
+		'accept-language': 'en-US,en;q=0.9',
+		cookie: 'private-cookie',
+		referer: 'https://private.example.test/'
+	});
+
+	expect(handleIngress(tracked, incoming, {})?.status).toBe(302);
+	expect(recordVisit).toHaveBeenCalledExactlyOnceWith({
+		domain: 'go.example.test',
+		path: '/schema.json',
+		visited_at: expect.any(Number),
+		ip: '2001:db8::1',
+		user_agent: 'Example agent',
+		accept_language: 'en-US,en;q=0.9'
+	});
+});
+
+test('does not record HEAD, fallback redirects, or visits when analytics is disabled', () => {
+	const recordVisit = vi.fn();
+	const fallbackSnapshot = {
+		...snapshot,
+		domains: {
+			...snapshot.domains,
+			'go.example.test': {
+				...snapshot.domains['go.example.test']!,
+				fallback: 'https://fallback.example.test/'
+			}
+		}
+	};
+	const tracked = { currentSnapshot: () => fallbackSnapshot, recordVisit };
+	const head = request('go.example.test');
+	head.method = 'HEAD';
+	expect(handleIngress(tracked, head, {})?.status).toBe(302);
+	expect(handleIngress(tracked, request('go.example.test', '/missing'), {})?.status).toBe(302);
+	const disabled = {
+		...snapshot,
+		configuration: {
+			...snapshot.configuration,
+			analytics: { ...snapshot.configuration.analytics, enabled: false }
+		}
+	};
+	expect(
+		handleIngress({ currentSnapshot: () => disabled, recordVisit }, request('go.example.test'), {})
+			?.status
+	).toBe(302);
+	expect(recordVisit).not.toHaveBeenCalled();
+});
+
+test('invalid client addresses and capture failures cannot prevent redirects', () => {
+	const recordVisit = vi.fn(() => {
+		throw new Error('private-writer-detail');
+	});
+	const tracked = { ...application, recordVisit };
+	const malformed = request('go.example.test');
+	malformed.headers['x-real-ip'] = 'not-an-address';
+	expect(handleIngress(tracked, malformed, {})?.status).toBe(302);
+	expect(recordVisit).not.toHaveBeenCalled();
+	const direct = request('go.example.test');
+	direct.headers['x-forwarded-for'] = '203.0.113.1';
+	expect(handleIngress(tracked, direct, {})?.status).toBe(302);
+	expect(recordVisit).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ ip: '127.0.0.1' }));
 });

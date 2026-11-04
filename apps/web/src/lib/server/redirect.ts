@@ -1,6 +1,17 @@
 import { isSelfRedirect, type PreparedDomain } from '@goto/config';
 import type { Immutable } from './snapshot.js';
 
+export interface ResolvedVisit {
+	domain: string;
+	path: string;
+	visitedAt: number;
+}
+
+export interface RedirectResult {
+	response: Response;
+	visit?: ResolvedVisit;
+}
+
 function parseTarget(target: string): { path: string; query: string } | undefined {
 	if (!target.startsWith('/') || target.includes('#') || target.includes('\\')) return undefined;
 	if (!target.isWellFormed()) return undefined;
@@ -46,15 +57,15 @@ export function resolveRedirect(
 	target: string,
 	method: string,
 	now: number = Date.now()
-): Response {
+): RedirectResult {
 	const headers = new Headers({ 'cache-control': 'no-store' });
 	if (method !== 'GET' && method !== 'HEAD') {
 		headers.set('allow', 'GET, HEAD');
-		return new Response(null, { status: 405, headers });
+		return { response: new Response(null, { status: 405, headers }) };
 	}
 
 	const parsed = parseTarget(target);
-	if (parsed === undefined) return new Response(null, { status: 400, headers });
+	if (parsed === undefined) return { response: new Response(null, { status: 400, headers }) };
 
 	const link = Object.hasOwn(domain.links, parsed.path) ? domain.links[parsed.path] : undefined;
 	const active =
@@ -70,8 +81,12 @@ export function resolveRedirect(
 	}
 
 	if (destination === 404 || isSelfRedirect(destination, host, parsed.path)) {
-		return new Response(null, { status: 404, headers });
+		return { response: new Response(null, { status: 404, headers }) };
 	}
 	headers.set('location', serializeLocation(destination));
-	return new Response(null, { status, headers });
+	const response = new Response(null, { status, headers });
+	if (active && method === 'GET') {
+		return { response, visit: { domain: host, path: parsed.path, visitedAt: now } };
+	}
+	return { response };
 }

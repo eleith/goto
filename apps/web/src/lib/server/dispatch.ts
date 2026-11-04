@@ -3,6 +3,7 @@ import type { Application } from './application.js';
 import { isLocalProbe, readIngress } from './ingress.js';
 import { resolveRedirect } from './redirect.js';
 import { bindApplication } from './request-context.js';
+import { recordRedirectVisit } from './visits/capture.js';
 
 function response(status: number): Response {
 	return new Response(null, { status, headers: { 'cache-control': 'no-store' } });
@@ -18,12 +19,16 @@ export function handleIngress(
 	if (!ingress) return response(400);
 	const snapshot = application.currentSnapshot();
 	if (Object.hasOwn(snapshot.domains, ingress.host)) {
-		return resolveRedirect(
+		const redirect = resolveRedirect(
 			snapshot.domains[ingress.host]!,
 			ingress.host,
 			request.url!,
 			request.method ?? 'GET'
 		);
+		if (snapshot.configuration.analytics.enabled) {
+			recordRedirectVisit(request, redirect.visit, application.recordVisit);
+		}
+		return redirect.response;
 	}
 	if (ingress.url.origin === snapshot.configuration.site.url) {
 		bindApplication(request, application, ingress.url.origin, snapshot);
