@@ -25,7 +25,9 @@
 	},
 	"dependencies": {
 		"@goto/config": "workspace:*",
-		"better-auth": "catalog:"
+		"@goto/db": "workspace:*",
+		"better-auth": "catalog:",
+		"piscina": "catalog:"
 	},
 	"devDependencies": {
 		"@playwright/test": "catalog:",
