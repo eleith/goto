@@ -1,0 +1,57 @@
+:root {
+	color-scheme: light dark;
+
+	--color-surface-page: light-dark(#f5f5f5, #101314);
+	--color-surface-card: light-dark(#ffffff, #1b2022);
+	--color-surface-muted: color-mix(in srgb, var(--color-text) 5%, var(--color-surface-page));
+	--color-border-subtle: light-dark(#dedede, #343b3d);
+	--color-text: light-dark(#171717, #f5f5f5);
+	--color-text-muted: light-dark(#525252, #b5babb);
+	--color-border-strong: light-dark(#525252, #b5babb);
+
+	--space-1: 2px;
+	--space-4: 0.75rem;
+	--space-5: 1rem;
+	--space-8: 2rem;
+	--space-9: 3rem;
+
+	--font-family: system-ui, sans-serif;
+	--font-size-sm: 0.875rem;
+	--font-size-base: 1rem;
+	--font-size-heading: 2rem;
+	--line-height-body: 1.5;
+	--line-height-heading: 1.2;
+
+	--content-max-width: 42rem;
+	--content-form-width: 25rem;
+	--content-admin-width: 72rem;
+	--control-min-height: 3rem;
+	--size-icon: 2rem;
+	--radius-sm: 0.25rem;
+	--radius-control: 0.5rem;
+	--radius-card: 0.75rem;
+	--shadow-card: 0 1px 6px light-dark(rgb(0 0 0 / 6%), rgb(0 0 0 / 40%));
+	--color-danger: light-dark(#991b1b, #ffb4b4);
+	--color-danger-bg: light-dark(#fef2f2, #450a0a);
+	--color-danger-border: light-dark(#fca5a5, #a34242);
+	--transition-control: 150ms ease;
+	--border-width: 1px;
+	--outline-focus: 2px solid var(--color-primary);
+}
+
+:root[data-theme='light'] {
+	color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+	color-scheme: dark;
+}
+
+html,
+body {
+	background: var(--color-surface-page);
+	color: var(--color-text);
+	font-family: var(--font-family);
+	font-size: var(--font-size-base);
+	line-height: var(--line-height-body);
+}
