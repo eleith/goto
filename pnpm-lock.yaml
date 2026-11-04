@@ -57,6 +57,9 @@ catalogs:
     gunshi:
       specifier: 0.35.1
       version: 0.35.1
+    kysely:
+      specifier: 0.28.17
+      version: 0.28.17
     prettier:
       specifier: 3.8.3
       version: 3.8.3
@@ -203,6 +206,28 @@ importers:
       yaml:
         specifier: 'catalog:'
         version: 2.9.1
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.12.4
+      '@vitest/coverage-v8':
+        specifier: 'catalog:'
+        version: 4.1.7(vitest@4.1.7)
+      prettier:
+        specifier: 'catalog:'
+        version: 3.8.3
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.7(@types/node@24.12.4)(@vitest/coverage-v8@4.1.7)(vite@8.0.16(@types/node@24.12.4)(esbuild@0.28.2)(yaml@2.9.1))
+
+  packages/db:
+    dependencies:
+      kysely:
+        specifier: 'catalog:'
+        version: 0.28.17
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -1340,6 +1365,10 @@ packages:
 
   known-css-properties@0.37.0:
     resolution: {integrity: sha512-JCDrsP4Z1Sb9JwG0aJ8Eo2r7k4Ou5MwmThS/6lcIe1ICyb7UBJKGRIUUdqc2ASdE/42lgz6zFUnzAIhtXnBVrQ==}
+
+  kysely@0.28.17:
+    resolution: {integrity: sha512-nbD8lB9EB3wNdMhOCdx5Li8DxnLbvKByylRLcJ1h+4SkrowVeECAyZlyiKMThF7xFdRz0jSQ2MoJr+wXux2y0Q==}
+    engines: {node: '>=20.0.0'}
 
   kysely@0.29.8:
     resolution: {integrity: sha512-ixHU1H4R+LeC5Y0nAhYgiGRFpFRHm2DXKEmJSs/vbes9sKXyssyzxzE/NYiOJX5fY0BL28biCre3GqlCqUwyXQ==}
@@ -2834,6 +2863,8 @@ snapshots:
       json-buffer: 3.0.1
 
   known-css-properties@0.37.0: {}
+
+  kysely@0.28.17: {}
 
   kysely@0.29.8: {}
 
