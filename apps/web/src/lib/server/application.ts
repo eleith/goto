@@ -6,10 +6,12 @@ import {
 	type ConfigOptions,
 	type PreparedConfiguration
 } from '@goto/config';
+import { createAuthentication, type Authentication } from './auth/index.js';
 import { prepareSnapshot, type ConfigurationSnapshot } from './snapshot.js';
 
 export interface Application {
 	currentSnapshot(): ConfigurationSnapshot;
+	authentication?: Authentication;
 	close?(): void | Promise<void>;
 }
 
@@ -38,6 +40,7 @@ export async function createApplication(options: ConfigOptions = {}): Promise<Ap
 	const initial = await loadConfigFile(path, captured);
 	const startup = structuredClone(startupSettings(initial));
 	let snapshot = prepareSnapshot(initial);
+	const authentication = createAuthentication(snapshot.configuration);
 	const stop = await startConfigReloading({
 		path,
 		initial,
@@ -54,6 +57,6 @@ export async function createApplication(options: ConfigOptions = {}): Promise<Ap
 			reportReloadIssue('Invalid configuration update; keeping current configuration');
 		}
 	});
-	const application: Application = { currentSnapshot: () => snapshot, close: stop };
+	const application: Application = { currentSnapshot: () => snapshot, authentication, close: stop };
 	return application;
 }

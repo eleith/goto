@@ -1,6 +1,8 @@
 import { building } from '$app/env';
 import { sequence, type Handle } from '@sveltejs/kit/hooks';
 import { requestContext } from '#lib/server/request-context.js';
+import { authHandle } from '#lib/server/auth/index.js';
+import { authGate } from '#lib/server/auth/access.js';
 
 export const securityHeaders: Handle = async ({ event, resolve }) => {
 	const response = await resolve(event);
@@ -39,4 +41,10 @@ export const adminOriginGate: Handle = ({ event, resolve }) => {
 	return resolve(event);
 };
 
-export const handle = sequence(securityHeaders, applicationContext, adminOriginGate);
+export const handle = sequence(
+	securityHeaders,
+	applicationContext,
+	adminOriginGate,
+	authHandle,
+	authGate
+);

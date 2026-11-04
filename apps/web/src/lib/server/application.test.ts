@@ -7,6 +7,9 @@ import {
 } from '@goto/config';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { createApplication } from './application.js';
+import { createAuthentication } from './auth/index.js';
+
+vi.mock('./auth/index.js', () => ({ createAuthentication: vi.fn(() => ({})) }));
 
 vi.mock('@goto/config', async (importOriginal) => ({
 	...(await importOriginal<typeof import('@goto/config')>()),
@@ -76,6 +79,7 @@ test('publishes valid changes, ignores equivalent data, and retains last good da
 	);
 	reload.onError(new Error('private-parser-detail'));
 	expect(application.currentSnapshot()).toBe(accepted);
+	expect(createAuthentication).toHaveBeenCalledOnce();
 	expect(console.warn).toHaveBeenCalledExactlyOnceWith(
 		'Invalid configuration update; keeping current configuration'
 	);

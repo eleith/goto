@@ -24,7 +24,8 @@
 		"test:e2e": "playwright test"
 	},
 	"dependencies": {
-		"@goto/config": "workspace:*"
+		"@goto/config": "workspace:*",
+		"better-auth": "catalog:"
 	},
 	"devDependencies": {
 		"@playwright/test": "catalog:",
