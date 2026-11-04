@@ -8,11 +8,14 @@ export interface VisitTable {
 	ip: string;
 	user_agent: string | null;
 	accept_language: string | null;
+	browser: string;
+	os: string;
 }
 
 export interface Database {
 	visits: VisitTable;
 }
 
-export type NewVisit = Omit<Insertable<VisitTable>, 'id'>;
+export type ClassifiedVisit = Omit<Insertable<VisitTable>, 'id'>;
+export type NewVisit = Omit<ClassifiedVisit, 'browser' | 'os'>;
 export type Visit = Selectable<VisitTable>;

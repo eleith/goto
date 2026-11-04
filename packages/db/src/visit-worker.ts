@@ -1,4 +1,5 @@
 import { workerData } from 'node:worker_threads';
+import { classifyUserAgent } from './classify-user-agent.js';
 import { openDb, runMigrations, insertVisit, type NewVisit } from './index.js';
 
 const { databasePath } = workerData as { databasePath: string };
@@ -13,7 +14,8 @@ try {
 export function ready(): void {}
 
 export async function recordVisit(visit: NewVisit): Promise<void> {
-	await insertVisit(db, visit);
+	const classification = classifyUserAgent(visit.user_agent);
+	await insertVisit(db, { ...visit, ...classification });
 }
 
 export async function close(): Promise<void> {

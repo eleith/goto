@@ -23,7 +23,14 @@ test('the compiled writer isolates lock waits and drains accepted visits before 
 	appServer
 }) => {
 	const databasePath = resolve(dirname(appServer.configurationPath), '../data/goto.sqlite');
-	const options = { headers: { host: 'go.example.org' }, maxRedirects: 0, timeout: 2000 };
+	const options = {
+		headers: {
+			host: 'go.example.org',
+			'user-agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:158.0) Gecko/20100101 Firefox/158.0'
+		},
+		maxRedirects: 0,
+		timeout: 2000
+	};
 	await expect
 		.poll(
 			async () => {
@@ -50,5 +57,13 @@ test('the compiled writer isolates lock waits and drains accepted visits before 
 	}
 	expect(await appServer.stop()).toEqual({ code: 0, signal: null });
 	expect(visitCount(databasePath, '/docs')).toBe(3);
+	const db = new DatabaseSync(databasePath, { readOnly: true });
+	try {
+		expect(
+			db.prepare('SELECT DISTINCT browser, os FROM visits WHERE path = ?').all('/docs')
+		).toEqual([{ browser: 'Firefox', os: 'Linux' }]);
+	} finally {
+		db.close();
+	}
 	expect(appServer.logs()).not.toContain('Visit tracking unavailable');
 });

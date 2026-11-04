@@ -1,4 +1,4 @@
-import { SqliteDialect, type SqliteDatabase, type SqliteStatement } from 'kysely';
+import { SqliteAdapter, SqliteDialect, type SqliteDatabase, type SqliteStatement } from 'kysely';
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 
 export interface NodeSqliteDialectConfig {
@@ -20,9 +20,19 @@ function adaptDatabase(database: DatabaseSync): SqliteDatabase {
 	};
 }
 
+class NodeSqliteAdapter extends SqliteAdapter {
+	override get supportsTransactionalDdl(): boolean {
+		return true;
+	}
+}
+
 export class NodeSqliteDialect extends SqliteDialect {
 	constructor(config: NodeSqliteDialectConfig) {
 		// Native connection ownership keeps other requests out of an active transaction.
 		super({ database: adaptDatabase(config.database) });
+	}
+
+	override createAdapter(): SqliteAdapter {
+		return new NodeSqliteAdapter();
 	}
 }

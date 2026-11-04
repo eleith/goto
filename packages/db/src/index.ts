@@ -7,7 +7,7 @@ import type { Database } from './types.js';
 
 export { runMigrations } from './migrate.js';
 export { insertVisit } from './visits.js';
-export type { Database, NewVisit, Visit } from './types.js';
+export type { ClassifiedVisit, Database, NewVisit, Visit } from './types.js';
 
 export async function openDb(
 	path: string,
