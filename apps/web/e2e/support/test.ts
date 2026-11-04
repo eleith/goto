@@ -10,6 +10,7 @@ type AppServer = {
 	origin: string;
 	configurationPath: string;
 	logs(): string;
+	stop(): Promise<{ code: number | null; signal: NodeJS.Signals | null }>;
 };
 
 function waitForServerOrigin(child: ChildProcess): Promise<string> {
@@ -75,7 +76,11 @@ export const test = base.extend<{ appServer: AppServer }>({
 			await use({
 				origin,
 				configurationPath: join(runtimeDirectory, 'config/goto.yaml'),
-				logs: () => output
+				logs: () => output,
+				async stop() {
+					await stopServer(child);
+					return { code: child.exitCode, signal: child.signalCode };
+				}
 			});
 		} finally {
 			await stopServer(child);

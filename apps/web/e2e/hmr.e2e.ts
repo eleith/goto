@@ -11,7 +11,7 @@ async function replaceSource(path: string, before: string, after: string) {
 	await writeFile(path, source.replace(before, after));
 }
 
-test('real client HMR and SSR edits share one server-owned application until a core restart', async ({
+test('client HMR preserves the application while worker and core edits restart it cleanly', async ({
 	browser
 }, testInfo) => {
 	test.setTimeout(120_000);
@@ -65,10 +65,10 @@ test('real client HMR and SSR edits share one server-owned application until a c
 			.poll(() => events)
 			.toEqual([{ type: 'application-start', testId: initial.testId }]);
 
-		const applicationPath = join(directory, 'src/lib/server/application.ts');
-		await writeFile(
-			applicationPath,
-			(await readFile(applicationPath, 'utf8')) + '\nexport const hmrCoreRevision = 2;\n'
+		await replaceSource(
+			join(directory, '.packages/db/src/visit-worker.ts'),
+			'export function ready(): void {}',
+			"export function ready(): void { console.info('writer revision two'); }"
 		);
 		await expect
 			.poll(
@@ -79,16 +79,43 @@ test('real client HMR and SSR edits share one server-owned application until a c
 				{ timeout: 30_000 }
 			)
 			.toEqual({ testId: expect.any(String), revision: 'leaf two' });
+		const workerReplacement = (await readRuntime())!;
+		await expect.poll(development.logs, { timeout: 15_000 }).toContain('writer revision two');
+		await expect
+			.poll(() => events)
+			.toEqual([
+				{ type: 'application-start', testId: initial.testId },
+				{ type: 'application-close', testId: initial.testId },
+				{ type: 'application-start', testId: workerReplacement.testId }
+			]);
+
+		const applicationPath = join(directory, 'src/lib/server/application.ts');
+		await writeFile(
+			applicationPath,
+			(await readFile(applicationPath, 'utf8')) + '\nexport const hmrCoreRevision = 2;\n'
+		);
+		await expect
+			.poll(
+				async () => {
+					const current = await readRuntime();
+					return current?.testId === workerReplacement.testId ? undefined : current;
+				},
+				{ timeout: 30_000 }
+			)
+			.toEqual({ testId: expect.any(String), revision: 'leaf two' });
 		const replacement = (await readRuntime())!;
 		await expect
 			.poll(() => events)
 			.toEqual([
 				{ type: 'application-start', testId: initial.testId },
 				{ type: 'application-close', testId: initial.testId },
+				{ type: 'application-start', testId: workerReplacement.testId },
+				{ type: 'application-close', testId: workerReplacement.testId },
 				{ type: 'application-start', testId: replacement.testId }
 			]);
 		expect(development.getpeak()).toBe(1);
 		expect([...live]).toEqual([replacement.testId]);
+		expect(development.logs()).not.toContain('Visit tracking unavailable');
 
 		await context.close();
 		context = undefined;
@@ -99,6 +126,8 @@ test('real client HMR and SSR edits share one server-owned application until a c
 		expect(events).toEqual([
 			{ type: 'application-start', testId: initial.testId },
 			{ type: 'application-close', testId: initial.testId },
+			{ type: 'application-start', testId: workerReplacement.testId },
+			{ type: 'application-close', testId: workerReplacement.testId },
 			{ type: 'application-start', testId: replacement.testId },
 			{ type: 'application-close', testId: replacement.testId }
 		]);

@@ -5,11 +5,13 @@ import { DevelopmentServer } from './development.ts';
 import { configureVite } from './plugins.ts';
 
 const entry = fileURLToPath(new URL('../src/lib/server/entry.ts', import.meta.url));
-const applicationFile = fileURLToPath(new URL('../src/lib/server/application.ts', import.meta.url));
+const applicationFiles = ['application.ts', 'visits/recorder.ts'].map((file) =>
+	fileURLToPath(new URL(`../src/lib/server/${file}`, import.meta.url))
+);
 
 export default function adapter(): Adapter {
 	const node = nodeAdapter();
-	const development = new DevelopmentServer(entry, applicationFile);
+	const development = new DevelopmentServer(entry, applicationFiles);
 	return {
 		...node,
 		emulate: () => development.emulate(node.emulate),

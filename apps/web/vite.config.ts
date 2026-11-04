@@ -40,7 +40,7 @@ export default defineConfig(({ command }) => {
 		],
 		server: { allowedHosts },
 		test: {
-			include: ['src/**/*.test.ts'],
+			include: ['src/**/*.test.ts', 'server/**/*.test.ts'],
 			environment: 'node',
 			coverage: {
 				provider: 'v8',

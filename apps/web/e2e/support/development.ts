@@ -122,6 +122,7 @@ export async function startDevelopment(testInfo: TestInfo) {
 			events,
 			live,
 			getpeak: () => peak,
+			logs: () => output,
 			getexit: () => exit,
 			stop,
 			dispose

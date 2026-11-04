@@ -1,7 +1,7 @@
-import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { createServer as createNetServer } from 'node:net';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const webDirectory = fileURLToPath(new URL('..', import.meta.url));
@@ -26,6 +26,29 @@ async function choosePort() {
 	return address.port;
 }
 
+async function prepareDependencies() {
+	const sourceModules = join(webDirectory, 'node_modules');
+	const modules = join(directory, 'node_modules');
+	await mkdir(join(modules, '@goto'), { recursive: true });
+	for (const name of await readdir(sourceModules)) {
+		if (name !== '@goto') await symlink(join(sourceModules, name), join(modules, name));
+	}
+	for (const name of await readdir(join(sourceModules, '@goto'))) {
+		if (name !== 'db') {
+			await symlink(join(sourceModules, '@goto', name), join(modules, '@goto', name));
+		}
+	}
+	const sourceDatabase = dirname(dirname(require.resolve('@goto/db/visit-worker')));
+	const database = join(directory, '.packages/db');
+	await mkdir(database, { recursive: true });
+	for (const path of ['src', 'dist', 'package.json', 'tsconfig.json', 'tsconfig.build.json']) {
+		await cp(join(sourceDatabase, path), join(database, path), { recursive: true });
+	}
+	await cp(join(sourceDatabase, '../../tsconfig.base.json'), join(directory, 'tsconfig.base.json'));
+	await symlink(join(sourceDatabase, 'node_modules'), join(database, 'node_modules'), 'dir');
+	await symlink(database, join(modules, '@goto/db'), 'dir');
+}
+
 async function prepareProject() {
 	const runsDirectory = join(webDirectory, '.e2e');
 	await mkdir(runsDirectory, { recursive: true });
@@ -33,7 +56,7 @@ async function prepareProject() {
 	for (const path of ['src', 'server', 'package.json', 'vite.config.ts', 'tsconfig.json']) {
 		await cp(join(webDirectory, path), join(directory, path), { recursive: true });
 	}
-	await symlink(join(webDirectory, 'node_modules'), join(directory, 'node_modules'), 'dir');
+	await prepareDependencies();
 
 	const applicationPath = join(directory, 'src/lib/server/application.ts');
 	const source = await readFile(applicationPath, 'utf8');

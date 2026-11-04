@@ -1,6 +1,8 @@
 import type { Adapter, Emulator } from '@sveltejs/kit';
 import { getRequest, setResponse } from '@sveltejs/kit/node';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { dirname, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { isRunnableDevEnvironment, type ViteDevServer } from 'vite';
 import {
 	bindApplication,
@@ -9,6 +11,7 @@ import {
 	requestSnapshot
 } from '../src/lib/server/request-context.ts';
 import { createApplicationLifecycle } from './lifecycle.ts';
+import { watchDatabase } from './database-compiler.ts';
 
 type Runtime = typeof import('../src/lib/server/entry.js');
 type RequestOptions = Parameters<typeof getRequest>[0];
@@ -17,14 +20,16 @@ type Next = (error?: unknown) => void;
 
 export class DevelopmentServer {
 	private readonly entry: string;
-	private readonly applicationFile: string;
+	private readonly restartFiles: Set<string>;
 	private server: ViteDevServer | undefined;
 	private listening: Promise<void> | undefined;
+	private databaseOutput: string | undefined;
+	private stopCompiling: (() => void) | undefined;
 	private readonly lifecycle = createApplicationLifecycle(this.createApplication.bind(this));
 
-	constructor(entry: string, applicationFile: string) {
+	constructor(entry: string, applicationFiles: string[]) {
 		this.entry = entry;
-		this.applicationFile = applicationFile;
+		this.restartFiles = new Set(applicationFiles);
 	}
 
 	configure(server: ViteDevServer): void {
@@ -36,12 +41,21 @@ export class DevelopmentServer {
 			else httpServer.once('listening', resolve);
 		});
 		server.middlewares.use(this.handleRequest.bind(this));
+		const workerUrl = import.meta.resolve('@goto/db/visit-worker');
+		this.databaseOutput = dirname(fileURLToPath(workerUrl));
+		// Compile before watching output so the initial emit does not restart Vite.
+		this.stopCompiling = watchDatabase(workerUrl);
+		server.watcher.add(this.databaseOutput);
 		server.watcher.on('change', this.applicationChanged);
 	}
 
 	async close(): Promise<void> {
 		this.server?.watcher.off('change', this.applicationChanged);
-		await this.lifecycle.stop();
+		try {
+			this.stopCompiling?.();
+		} finally {
+			await this.lifecycle.stop();
+		}
 	}
 
 	request(options: RequestOptions, convert = getRequest): Request {
@@ -98,7 +112,13 @@ export class DevelopmentServer {
 	}
 
 	private readonly applicationChanged = (file: string): void => {
-		if (file === this.applicationFile) setImmediate(() => void this.restart());
+		const databaseChanged =
+			this.databaseOutput !== undefined &&
+			file.endsWith('.js') &&
+			!relative(this.databaseOutput, file).startsWith('..');
+		if (this.restartFiles.has(file) || databaseChanged) {
+			setImmediate(() => void this.restart());
+		}
 	};
 
 	private async restart(): Promise<void> {
