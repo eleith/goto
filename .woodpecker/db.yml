@@ -1,0 +1,63 @@
+workspace:
+  base: /workspace
+  path: src
+
+when:
+  - event: push
+    branch: main
+    path:
+      include:
+        - '*'
+        - .changeset/**
+        - .github/workflows/**
+        - .woodpecker/**
+        - packages/db/**
+  - event: pull_request
+    branch: main
+    path:
+      include:
+        - '*'
+        - .changeset/**
+        - .github/workflows/**
+        - .woodpecker/**
+        - packages/db/**
+
+steps:
+  prepare:
+    image: node:26.5.0-bookworm
+    environment:
+      COREPACK_HOME: /workspace/src/.pnpm-store/corepack
+    commands:
+      - npm install --global corepack@0.36.0
+      - corepack enable
+      - corepack install --global pnpm@11.9.0
+      - pnpm config set store-dir .pnpm-store
+      - pnpm install --frozen-lockfile
+
+  build:
+    image: node:26.5.0-bookworm
+    environment:
+      COREPACK_HOME: /workspace/src/.pnpm-store/corepack
+    commands:
+      - npm install --global corepack@0.36.0
+      - corepack enable
+      - pnpm --filter '@goto/db...' build
+
+  lint:
+    image: node:26.5.0-bookworm
+    environment:
+      COREPACK_HOME: /workspace/src/.pnpm-store/corepack
+    commands:
+      - npm install --global corepack@0.36.0
+      - corepack enable
+      - pnpm --filter @goto/db check
+      - pnpm --filter @goto/db lint
+
+  test:
+    image: node:26.5.0-bookworm
+    environment:
+      COREPACK_HOME: /workspace/src/.pnpm-store/corepack
+    commands:
+      - npm install --global corepack@0.36.0
+      - corepack enable
+      - pnpm --filter @goto/db test:coverage

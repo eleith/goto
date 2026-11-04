@@ -1,0 +1,50 @@
+name: CI (DB Package)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '*'
+      - .changeset/**
+      - .github/workflows/**
+      - .woodpecker/**
+      - packages/db/**
+  pull_request:
+    branches: [main]
+    paths:
+      - '*'
+      - .changeset/**
+      - .github/workflows/**
+      - .woodpecker/**
+      - packages/db/**
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-build:
+    name: DB checks
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.9.0
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 26.5.0
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build DB
+        run: pnpm --filter '@goto/db...' build
+      - name: Check types
+        run: pnpm --filter @goto/db check
+      - name: Lint DB
+        run: pnpm --filter @goto/db lint
+      - name: Unit tests
+        run: pnpm --filter @goto/db test:coverage
