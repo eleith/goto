@@ -1,0 +1,133 @@
+workspace:
+  base: /workspace
+  path: src
+
+when:
+  - event: push
+    branch: main
+    path:
+      include:
+        - '*'
+        - .changeset/**
+        - .github/workflows/**
+        - .woodpecker/**
+        - apps/worker/**
+        - packages/config/**
+        - tools/**
+  - event: pull_request
+    path:
+      include:
+        - '*'
+        - .changeset/**
+        - .github/workflows/**
+        - .woodpecker/**
+        - apps/worker/**
+        - packages/config/**
+        - tools/**
+  - event: tag
+    ref: 'refs/tags/@goto/worker@*'
+
+steps:
+  prepare:
+    image: node:26.5.0-bookworm
+    environment:
+      COREPACK_HOME: /workspace/src/.pnpm-store/corepack
+    commands:
+      - npm install --global corepack@0.36.0
+      - corepack enable
+      - corepack install --global pnpm@11.9.0
+      - pnpm config set store-dir .pnpm-store
+      - pnpm install --frozen-lockfile
+      - pnpm schema:check
+      - pnpm --filter '@goto/worker...' build
+
+  lint:
+    image: node:26.5.0-bookworm
+    environment:
+      COREPACK_HOME: /workspace/src/.pnpm-store/corepack
+    commands:
+      - npm install --global corepack@0.36.0
+      - corepack enable
+      - pnpm --filter @goto/worker check
+      - pnpm --filter @goto/worker lint
+
+  test:
+    image: node:26.5.0-bookworm
+    environment:
+      COREPACK_HOME: /workspace/src/.pnpm-store/corepack
+    commands:
+      - npm install --global corepack@0.36.0
+      - corepack enable
+      - pnpm --filter @goto/worker test:coverage
+      - pnpm --filter @goto/worker test:smoke
+
+  check-version-and-extract-tags:
+    image: node:26.5.0-bookworm
+    commands:
+      - |
+        node --input-type=module <<'NODE'
+        import { readFileSync, writeFileSync } from 'node:fs';
+        const tag = process.env.CI_COMMIT_TAG ?? '';
+        const version = JSON.parse(readFileSync('apps/worker/package.json', 'utf8')).version;
+        const stableVersion = /^(0|[1-9][0-9]*)[.](0|[1-9][0-9]*)[.](0|[1-9][0-9]*)$/;
+        if (!stableVersion.test(version) || tag !== '@goto/worker@' + version) {
+          throw new Error('Expected a stable @goto/worker@<version> tag matching apps/worker/package.json');
+        }
+        const [major, minor] = version.split('.');
+        writeFileSync('.tags', [version, major + '.' + minor, major].join('\n') + '\n');
+        NODE
+    when:
+      - event: tag
+        ref: 'refs/tags/@goto/worker@*'
+
+  build-docker-main:
+    image: woodpeckerci/plugin-docker-buildx:6.0.3
+    settings:
+      repo: git.eleith.com/eleith.private/goto-worker
+      username: eleith
+      registry: https://git.eleith.com
+      context: .
+      dockerfile: apps/worker/Dockerfile
+      target: prod
+      platforms: linux/amd64
+      tags:
+        - latest
+      password:
+        from_secret: gitea_docker_registry
+    when:
+      - event: push
+        branch: main
+
+  build-docker-tag:
+    image: woodpeckerci/plugin-docker-buildx:6.0.3
+    settings:
+      repo: git.eleith.com/eleith.private/goto-worker
+      username: eleith
+      registry: https://git.eleith.com
+      context: .
+      dockerfile: apps/worker/Dockerfile
+      target: prod
+      platforms: linux/amd64
+      tags_file: .tags
+      password:
+        from_secret: gitea_docker_registry
+    when:
+      - event: tag
+        ref: 'refs/tags/@goto/worker@*'
+
+  notify:
+    image: deblan/woodpecker-email:3.3.0
+    settings:
+      dsn:
+        from_secret: woodpecker_email_dsn
+      from:
+        address:
+          from_secret: woodpecker_email_from_address
+        name:
+          from_secret: woodpecker_email_from_name
+      recipients:
+        from_secret: woodpecker_email_recipient
+      recipients_only: true
+    when:
+      - event: [push, tag]
+        status: [failure, success]
