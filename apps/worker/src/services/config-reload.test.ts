@@ -37,12 +37,12 @@ test('accepts unchanged worker storage and requests restart for a new storage pa
 test('initial reread restart waits until the monitor stop handle is owned', async () => {
 	vi.useFakeTimers();
 	const initial = configuration();
-	const stopWatch = vi.fn();
+	const stopWatch = vi.fn(async () => {});
 	const resources: ShutdownResources = {};
 	const shutdown = vi.fn(async () => {
 		resources.stopWatch?.();
 	});
-	const monitor = Promise.withResolvers<() => void>();
+	const monitor = Promise.withResolvers<() => Promise<void>>();
 	vi.mocked(startConfigReloading).mockImplementationOnce(async (options) => {
 		options.onChange(configuration('./data/new.sqlite'), initial);
 		return monitor.promise;

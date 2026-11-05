@@ -14,7 +14,9 @@ function input() {
 		path: '/config/goto.yaml',
 		initial: 'initial',
 		load: vi.fn<(path: string) => Promise<string>>().mockResolvedValue('reconciled'),
-		onChange: vi.fn<(next: string, previous: string) => boolean>().mockReturnValue(true),
+		onChange: vi
+			.fn<(next: string, previous: string) => boolean | Promise<boolean>>()
+			.mockReturnValue(true),
 		onError: vi.fn<(error: unknown) => void>()
 	};
 }
@@ -120,6 +122,31 @@ test.each(['resolve', 'reject'])('stop suppresses late %s and pending reloads', 
 	expect(options.load).toHaveBeenCalledTimes(2);
 	expect(options.onChange).toHaveBeenCalledOnce();
 	expect(options.onError).not.toHaveBeenCalled();
+});
+
+test('awaits policy application before accepting another candidate and drains it on stop', async () => {
+	const options = input();
+	const stop = await startConfigReloading(options);
+	const applied = Promise.withResolvers<boolean>();
+	options.load.mockResolvedValueOnce('zero');
+	options.onChange.mockReturnValueOnce(applied.promise);
+	const applying = change();
+	await Promise.resolve();
+	await Promise.resolve();
+	expect(options.onChange).toHaveBeenLastCalledWith('zero', 'reconciled');
+	void change();
+	const stopping = stop();
+	let stopped = false;
+	void stopping.then(() => {
+		stopped = true;
+	});
+	await Promise.resolve();
+	expect(stopped).toBe(false);
+	expect(options.load).toHaveBeenCalledTimes(2);
+	applied.resolve(true);
+	await applying;
+	await stopping;
+	expect(options.load).toHaveBeenCalledTimes(2);
 });
 
 test('stop prevents a queued read from starting', async () => {

@@ -23,10 +23,38 @@ describe('configuration loading', () => {
 			version: 1,
 			site: { url: 'http://localhost:3000', title: 'Goto' },
 			database: { path: './data/goto.sqlite', worker_path: './data/worker.sqlite' },
-			analytics: { enabled: true, retention_days: 90 },
+			analytics: { retention_months: 3 },
 			defaults: { status_code: 302, forward_query: false, fallback: 404 }
 		});
 		expect(input).toEqual(original);
+	});
+
+	it.each([0, 3, 9, 12])('accepts the finite analytics retention %s', (retention_months) => {
+		const input = { ...configurationInput(), analytics: { retention_months } };
+		expect(validateConfig(input, options).configuration.analytics.retention_months).toBe(
+			retention_months
+		);
+	});
+
+	it.each([1, 6, Infinity, '3'])(
+		'rejects unsupported analytics retention %j',
+		(retention_months) => {
+			expect(() =>
+				validateConfig({ ...configurationInput(), analytics: { retention_months } }, options)
+			).toThrow(ConfigError);
+		}
+	);
+
+	it('rejects the replaced analytics switches instead of silently ignoring them', () => {
+		expect(() =>
+			validateConfig(
+				{
+					...configurationInput(),
+					analytics: { enabled: false, retention_days: 90 }
+				},
+				options
+			)
+		).toThrow(ConfigError);
 	});
 
 	it.each([
@@ -230,7 +258,7 @@ describe('configuration loading', () => {
 				GOTO_OIDC_CLIENT_SECRET: 'example-client-secret'
 			}
 		});
-		expect(prepared.configuration.analytics.retention_days).toBe(90);
+		expect(prepared.configuration.analytics.retention_months).toBe(3);
 		expect(prepared.domains['go.example.org']?.links['/docs']).toMatchObject({
 			forward_query: false,
 			provenance: { forward_query: 'link' }

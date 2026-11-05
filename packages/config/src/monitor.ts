@@ -10,10 +10,10 @@ export async function startConfigReloading<T>({
 	path: string;
 	initial: T;
 	load: (path: string) => Promise<T>;
-	onChange: (next: T, previous: T) => boolean;
+	onChange: (next: T, previous: T) => boolean | Promise<boolean>;
 	/** Receives raw failures; the caller is responsible for safe diagnostics. */
 	onError: (error: unknown) => void;
-}): Promise<() => void> {
+}): Promise<() => Promise<void>> {
 	let accepted = initial;
 	let stopped = false;
 	let pending = false;
@@ -26,7 +26,8 @@ export async function startConfigReloading<T>({
 				try {
 					const next = await load(path);
 					if (stopped) return;
-					if (onChange(next, accepted) && !stopped) accepted = next;
+					const applied = await onChange(next, accepted);
+					if (applied && !stopped) accepted = next;
 				} catch (error) {
 					if (stopped) return;
 					try {
@@ -62,11 +63,13 @@ export async function startConfigReloading<T>({
 		return reload();
 	}
 
-	function stop(): void {
-		if (stopped) return;
-		stopped = true;
-		pending = false;
-		unwatchFile(path, listener);
+	async function stop(): Promise<void> {
+		if (!stopped) {
+			stopped = true;
+			pending = false;
+			unwatchFile(path, listener);
+		}
+		await active;
 	}
 
 	// Poll the path so atomic saves and deletion/recreation remain observable.

@@ -1,13 +1,17 @@
-import { Piscina } from 'piscina';
+import type { Piscina } from 'piscina';
 import type { NewVisit } from '@goto/db';
+import { closeVisitPool, createVisitPool, MAX_OUTSTANDING } from './pool.js';
 
-const MAX_OUTSTANDING = 1000;
 const MAX_VISIT_BYTES = 32 * 1024;
-const DRAIN_TIMEOUT = 5000;
 
 export interface VisitRecorder {
 	recordVisit(visit: NewVisit): void;
+	setEnabled(enabled: boolean): void;
 	stop(): Promise<void>;
+}
+
+export function createVisitRecorder(databasePath: string, enabled: boolean): VisitRecorder {
+	return new Recorder(databasePath, enabled);
 }
 
 function visitBytes(visit: NewVisit): number {
@@ -17,86 +21,93 @@ function visitBytes(visit: NewVisit): number {
 	);
 }
 
-export function createVisitRecorder(databasePath: string): VisitRecorder {
-	let reported = false;
-	function report(): void {
-		if (reported) return;
-		reported = true;
+class Recorder implements VisitRecorder {
+	private readonly databasePath: string;
+	private enabled: boolean;
+	private reported = false;
+	private pool: Piscina | undefined;
+	private ready = false;
+	private outstanding = 0;
+	private stopping: Promise<void> | undefined;
+
+	constructor(databasePath: string, enabled: boolean) {
+		this.databasePath = databasePath;
+		this.enabled = enabled;
+		if (enabled) this.startPool();
+	}
+
+	readonly recordVisit = (visit: NewVisit): void => {
+		const pool = this.pool;
+		if (!this.enabled || !this.ready || !pool || this.stopping) return;
+		const bytes = visitBytes(visit);
+		if (this.outstanding >= MAX_OUTSTANDING || bytes > MAX_VISIT_BYTES) {
+			this.report();
+			return;
+		}
+		this.submitVisit(pool, visit);
+	};
+
+	readonly setEnabled = (enabled: boolean): void => {
+		if (this.stopping) return;
+		this.enabled = enabled;
+		if (enabled) this.startPool();
+	};
+
+	readonly stop = (): Promise<void> => {
+		if (!this.stopping) {
+			this.stopping = this.pool ? closeVisitPool(this.pool).catch(this.report) : Promise.resolve();
+		}
+		return this.stopping;
+	};
+
+	private submitVisit(pool: Piscina, visit: NewVisit): void {
+		this.outstanding += 1;
+		try {
+			const recorded = pool.run(visit);
+			void recorded.then(this.onRecorded, this.onRecordFailure);
+		} catch {
+			this.onRecordFailure();
+		}
+	}
+
+	private startPool(): void {
+		if (this.pool || this.stopping) return;
+		try {
+			const pool = createVisitPool(this.databasePath);
+			this.pool = pool;
+			pool.on('error', this.onPoolFailure);
+			const initialized = pool.run(null, { name: 'ready' });
+			void initialized.then(this.onReady, this.onPoolFailure);
+		} catch {
+			this.onPoolFailure();
+		}
+	}
+
+	private readonly onRecorded = (): void => {
+		this.outstanding -= 1;
+	};
+
+	private readonly onRecordFailure = (): void => {
+		this.onRecorded();
+		this.report();
+	};
+
+	private readonly onReady = (): void => {
+		if (!this.stopping) this.ready = true;
+	};
+
+	private readonly onPoolFailure = (): void => {
+		this.report();
+		void this.stop();
+	};
+
+	private readonly report = (): void => {
+		if (this.reported) return;
+		this.reported = true;
 		try {
 			console.warn('Visit tracking unavailable; some visits may not be recorded');
 		} catch {
 			return;
 		}
-	}
-
-	let pool: Piscina;
-	try {
-		pool = new Piscina({
-			filename: import.meta.resolve('@goto/db/visit-worker'),
-			name: 'recordVisit',
-			workerData: { databasePath },
-			minThreads: 1,
-			maxThreads: 1,
-			concurrentTasksPerWorker: 1,
-			stricterFIFO: true,
-			maxQueue: MAX_OUTSTANDING,
-			closeTimeout: DRAIN_TIMEOUT
-		});
-	} catch {
-		report();
-		return { recordVisit() {}, async stop() {} };
-	}
-
-	let accepting = false;
-	let outstanding = 0;
-	let stopping: Promise<void> | undefined;
-
-	function stop(): Promise<void> {
-		if (stopping) return stopping;
-		accepting = false;
-		const closed = pool.run(null, { name: 'close' });
-		stopping = Promise.allSettled([closed, pool.close()]).then((results) => {
-			if (results.some((result) => result.status === 'rejected')) report();
-		});
-		return stopping;
-	}
-
-	pool.on('error', () => {
-		report();
-		void stop();
-	});
-	void pool.run(null, { name: 'ready' }).then(
-		() => {
-			if (!stopping) accepting = true;
-		},
-		() => {
-			report();
-			void stop();
-		}
-	);
-
-	function recordVisit(visit: NewVisit): void {
-		if (!accepting) return;
-		if (outstanding >= MAX_OUTSTANDING || visitBytes(visit) > MAX_VISIT_BYTES) {
-			report();
-			return;
-		}
-		outstanding += 1;
-		try {
-			void pool.run(visit).then(
-				() => {
-					outstanding -= 1;
-				},
-				() => {
-					outstanding -= 1;
-					report();
-				}
-			);
-		} catch {
-			outstanding -= 1;
-			report();
-		}
-	}
-
-	return { recordVisit, stop };
+	};
 }

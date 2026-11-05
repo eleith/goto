@@ -288,8 +288,16 @@
 			"additionalProperties": false,
 			"type": "object",
 			"properties": {
-				"enabled": { "default": true, "type": "boolean" },
-				"retention_days": { "minimum": 1, "default": 90, "type": "integer" }
+				"retention_months": {
+					"default": 3,
+					"description": "Calendar months of analytics history. Zero disables collection and purges retained visits.",
+					"anyOf": [
+						{ "const": 0, "type": "number" },
+						{ "const": 3, "type": "number" },
+						{ "const": 9, "type": "number" },
+						{ "const": 12, "type": "number" }
+					]
+				}
 			}
 		},
 		"Defaults": {

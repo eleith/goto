@@ -5,7 +5,7 @@ import { DevelopmentServer } from './development.ts';
 import { configureVite } from './plugins.ts';
 
 const entry = fileURLToPath(new URL('../src/lib/server/entry.ts', import.meta.url));
-const applicationFiles = ['application.ts', 'visits/recorder.ts'].map((file) =>
+const applicationFiles = ['application.ts', 'visits/recorder.ts', 'visits/pool.ts'].map((file) =>
 	fileURLToPath(new URL(`../src/lib/server/${file}`, import.meta.url))
 );
 

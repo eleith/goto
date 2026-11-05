@@ -42,28 +42,58 @@ export async function createApplication(options: ConfigOptions = {}): Promise<Ap
 	};
 	const path = resolveConfigPath(captured);
 	const initial = await loadConfigFile(path, captured);
-	const startup = structuredClone(startupSettings(initial));
+	const initialSettings = startupSettings(initial);
+	const startup = structuredClone(initialSettings);
 	let snapshot = prepareSnapshot(initial);
 	const authentication = createAuthentication(snapshot.configuration);
-	const stopReloading = await startConfigReloading({
+	const databasePath = resolve(captured.cwd, startup.databasePath);
+	const collectionEnabled = snapshot.configuration.analytics.retention_months !== 0;
+	const recorder = createVisitRecorder(databasePath, collectionEnabled);
+
+	function loadConfiguration(path: string): Promise<PreparedConfiguration> {
+		return loadConfigFile(path, captured);
+	}
+
+	function applyConfiguration(
+		next: PreparedConfiguration,
+		previous: PreparedConfiguration
+	): boolean {
+		const nextSettings = startupSettings(next);
+		if (!isDeepStrictEqual(nextSettings, startup)) {
+			reportReloadIssue('Configuration change requires restart; keeping current configuration');
+			return false;
+		}
+		if (!isDeepStrictEqual(next, previous)) {
+			const candidate = prepareSnapshot(next);
+			const collectionEnabled = candidate.configuration.analytics.retention_months !== 0;
+			recorder.setEnabled(collectionEnabled);
+			snapshot = candidate;
+		}
+		return true;
+	}
+
+	function reportConfigurationFailure(): void {
+		reportReloadIssue('Invalid configuration update; keeping current configuration');
+	}
+
+	const reloadOptions = {
 		path,
 		initial,
-		load: (path) => loadConfigFile(path, captured),
-		onChange(next, previous) {
-			if (!isDeepStrictEqual(startupSettings(next), startup)) {
-				reportReloadIssue('Configuration change requires restart; keeping current configuration');
-				return false;
-			}
-			if (!isDeepStrictEqual(next, previous)) snapshot = prepareSnapshot(next);
-			return true;
-		},
-		onError() {
-			reportReloadIssue('Invalid configuration update; keeping current configuration');
-		}
-	});
-	const recorder = createVisitRecorder(resolve(captured.cwd, startup.databasePath));
+		load: loadConfiguration,
+		onChange: applyConfiguration,
+		onError: reportConfigurationFailure
+	};
+	let stopReloading: () => Promise<void>;
+	try {
+		stopReloading = await startConfigReloading(reloadOptions);
+	} catch (error) {
+		await recorder.stop();
+		throw error;
+	}
 	const application: Application = {
-		currentSnapshot: () => snapshot,
+		currentSnapshot() {
+			return snapshot;
+		},
 		authentication,
 		recordVisit: recorder.recordVisit,
 		async close() {

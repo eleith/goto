@@ -21,8 +21,7 @@ database:
   worker_path: ./data/worker.sqlite
 
 analytics:
-  enabled: true
-  retention_days: 90
+  retention_months: 3
 
 defaults:
   status_code: 302

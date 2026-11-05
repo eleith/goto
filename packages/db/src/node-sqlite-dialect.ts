@@ -1,4 +1,12 @@
-import { SqliteAdapter, SqliteDialect, type SqliteDatabase, type SqliteStatement } from 'kysely';
+import {
+	sql,
+	SqliteAdapter,
+	SqliteDialect,
+	type Kysely,
+	type MigrationLockOptions,
+	type SqliteDatabase,
+	type SqliteStatement
+} from 'kysely';
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 
 export interface NodeSqliteDialectConfig {
@@ -23,6 +31,19 @@ function adaptDatabase(database: DatabaseSync): SqliteDatabase {
 class NodeSqliteAdapter extends SqliteAdapter {
 	override get supportsTransactionalDdl(): boolean {
 		return true;
+	}
+
+	override async acquireMigrationLock(
+		db: Kysely<unknown>,
+		options: MigrationLockOptions
+	): Promise<void> {
+		const name = options.lockTableSchema
+			? `${options.lockTableSchema}.${options.lockTable}`
+			: options.lockTable;
+		const table = sql.table(name);
+		// Reserve the SQLite writer before Kysely reads migration history.
+		const lock = sql`UPDATE ${table} SET is_locked = 0 WHERE id = ${options.lockRowId}`;
+		await lock.execute(db);
 	}
 }
 

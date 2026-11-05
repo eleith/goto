@@ -186,8 +186,14 @@ const DatabaseSchema = Type.Object(
 
 const AnalyticsSchema = Type.Object(
 	{
-		enabled: Type.Boolean({ default: true }),
-		retention_days: Type.Integer({ minimum: 1, default: 90 })
+		retention_months: Type.Union(
+			[Type.Literal(0), Type.Literal(3), Type.Literal(9), Type.Literal(12)],
+			{
+				default: 3,
+				description:
+					'Calendar months of analytics history. Zero disables collection and purges retained visits.'
+			}
+		)
 	},
 	{ $id: 'Analytics', additionalProperties: false }
 );

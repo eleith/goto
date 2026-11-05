@@ -25,7 +25,7 @@ export function handleIngress(
 			request.url!,
 			request.method ?? 'GET'
 		);
-		if (snapshot.configuration.analytics.enabled) {
+		if (snapshot.configuration.analytics.retention_months !== 0) {
 			recordRedirectVisit(request, redirect.visit, application.recordVisit);
 		}
 		return redirect.response;

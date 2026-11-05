@@ -145,7 +145,7 @@ test('does not record HEAD, fallback redirects, or visits when analytics is disa
 		...snapshot,
 		configuration: {
 			...snapshot.configuration,
-			analytics: { ...snapshot.configuration.analytics, enabled: false }
+			analytics: { ...snapshot.configuration.analytics, retention_months: 0 as const }
 		}
 	};
 	expect(
