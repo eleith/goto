@@ -4,10 +4,11 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { applyConfig, watchConfiguration } from './config-reload.js';
 import type { WorkerContext } from './context.js';
 import type { ShutdownResources } from './lifecycle.js';
-import { configureRetention, requestRetention } from './retention.js';
+import { logger } from './logger.js';
+import { requestRetention } from './retention.js';
 
 vi.mock('./logger.js', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
-vi.mock('./retention.js', () => ({ configureRetention: vi.fn(), requestRetention: vi.fn() }));
+vi.mock('./retention.js', () => ({ requestRetention: vi.fn() }));
 vi.mock('@goto/config', async (importOriginal) => ({
 	...(await importOriginal<typeof import('@goto/config')>()),
 	startConfigReloading: vi.fn()
@@ -34,41 +35,62 @@ function context(): WorkerContext {
 	return { config: configuration().configuration, db: {} as WorkerContext['db'] };
 }
 
-beforeEach(() => {
-	vi.resetAllMocks();
-});
+beforeEach(() => vi.resetAllMocks());
 
 afterEach(() => {
 	vi.restoreAllMocks();
 	vi.useRealTimers();
 });
 
-test('requests restart for either database path and rejects the whole candidate', async () => {
+test('requests restart for either database path when collection remains enabled', async () => {
 	const initial = configuration();
 	const restart = vi.fn();
 	const ctx = context();
 	const accepted = ctx.config;
 	expect(await applyConfig(configuration(), initial, restart, ctx, engine)).toBe(true);
 	ctx.config = accepted;
-	expect(await applyConfig(configuration('./other.sqlite', 0), initial, restart, ctx, engine)).toBe(
+	expect(await applyConfig(configuration('./other.sqlite'), initial, restart, ctx, engine)).toBe(
 		false
 	);
 	expect(
-		await applyConfig(configuration(undefined, 0, './other.sqlite'), initial, restart, ctx, engine)
+		await applyConfig(configuration(undefined, 3, './other.sqlite'), initial, restart, ctx, engine)
 	).toBe(false);
 	expect(restart).toHaveBeenCalledTimes(2);
 	expect(ctx.config).toBe(accepted);
-	expect(configureRetention).not.toHaveBeenCalled();
+	expect(requestRetention).not.toHaveBeenCalled();
 });
 
-test('waits for zero-policy purge and reconciles a later re-enable', async () => {
+test.each([
+	[3, 0],
+	[0, 9]
+])(
+	'collection %s to %s rejects the whole candidate without auto-restart',
+	async (before, after) => {
+		const initial = configuration(undefined, before);
+		const next = configuration('./changed-worker.sqlite', after);
+		const ctx = context();
+		ctx.config = initial.configuration;
+		const restart = vi.fn();
+		expect(await applyConfig(next, initial, restart, ctx, engine)).toBe(false);
+		expect(ctx.config).toBe(initial.configuration);
+		expect(restart).not.toHaveBeenCalled();
+		expect(requestRetention).not.toHaveBeenCalled();
+		expect(logger.warn).toHaveBeenCalledExactlyOnceWith(
+			'Analytics collection change requires coordinated restart; keeping current configuration'
+		);
+	}
+);
+
+test('waits for a positive policy change to be pruned and accepts a later positive change', async () => {
+	const initial = configuration(undefined, 9);
 	const ctx = context();
-	const purged = Promise.withResolvers<void>();
-	vi.mocked(requestRetention).mockReturnValueOnce(purged.promise);
-	const disabled = configuration(undefined, 0);
-	const applying = applyConfig(disabled, configuration(), vi.fn(), ctx, engine);
+	ctx.config = initial.configuration;
+	const pruned = Promise.withResolvers<void>();
+	vi.mocked(requestRetention).mockReturnValueOnce(pruned.promise);
+	const next = configuration();
+	const applying = applyConfig(next, initial, vi.fn(), ctx, engine);
 	await Promise.resolve();
-	expect(ctx.config.analytics.retention_months).toBe(0);
+	expect(ctx.config.analytics.retention_months).toBe(3);
 	expect(requestRetention).toHaveBeenCalledExactlyOnceWith(ctx, engine);
 	let accepted = false;
 	void applying.then(() => {
@@ -76,32 +98,22 @@ test('waits for zero-policy purge and reconciles a later re-enable', async () =>
 	});
 	await Promise.resolve();
 	expect(accepted).toBe(false);
-	purged.resolve();
+	pruned.resolve();
 	expect(await applying).toBe(true);
-	expect(await applyConfig(configuration(undefined, 9), disabled, vi.fn(), ctx, engine)).toBe(true);
-	expect(ctx.config.analytics.retention_months).toBe(9);
+	expect(await applyConfig(configuration(undefined, 12), next, vi.fn(), ctx, engine)).toBe(true);
+	expect(ctx.config.analytics.retention_months).toBe(12);
 	expect(requestRetention).toHaveBeenCalledTimes(2);
 });
 
-test('reconciles positive policy changes immediately', async () => {
+test('a failed positive policy reconciliation requests shutdown', async () => {
+	const initial = configuration(undefined, 9);
 	const ctx = context();
-	await applyConfig(configuration(), configuration(undefined, 9), vi.fn(), ctx, engine);
-	expect(requestRetention).toHaveBeenCalledOnce();
-	await applyConfig(configuration(undefined, 12), configuration(), vi.fn(), ctx, engine);
-	expect(configureRetention).toHaveBeenCalledTimes(2);
-	expect(requestRetention).toHaveBeenCalledTimes(2);
-});
-
-test('a failed policy reconciliation keeps zero effective and requests shutdown', async () => {
-	const ctx = context();
-	const initial = configuration();
+	ctx.config = initial.configuration;
 	const failure = new Error('Private storage detail');
 	vi.mocked(requestRetention).mockRejectedValueOnce(failure);
 	const stop = vi.fn();
-	await expect(applyConfig(configuration(undefined, 0), initial, stop, ctx, engine)).rejects.toBe(
-		failure
-	);
-	expect(ctx.config.analytics.retention_months).toBe(0);
+	await expect(applyConfig(configuration(), initial, stop, ctx, engine)).rejects.toBe(failure);
+	expect(ctx.config.analytics.retention_months).toBe(3);
 	expect(stop).toHaveBeenCalledOnce();
 });
 

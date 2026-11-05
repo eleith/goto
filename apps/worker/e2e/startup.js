@@ -25,21 +25,20 @@ async function seedHistory(directory) {
 	const db = await openDb(join(directory, 'data/goto.sqlite'));
 	try {
 		await runMigrations(db);
+		const middle = new Date();
+		middle.setUTCMonth(middle.getUTCMonth() - 6);
 		await insertVisit(db, { ...visit, visited_at: Date.UTC(2020, 0, 1) });
+		await insertVisit(db, { ...visit, visited_at: middle.getTime() });
 		await insertVisit(db, visit);
 	} finally {
 		await db.destroy();
 	}
 }
 
-function visitState(directory) {
+function visitCount(directory) {
 	const db = new DatabaseSync(join(directory, 'data/goto.sqlite'), { readOnly: true });
 	try {
-		return {
-			count: db.prepare('SELECT count(*) AS count FROM visits').get().count,
-			collectAfter: db.prepare('SELECT collect_after FROM visit_collection WHERE id = 1').get()
-				.collect_after
-		};
+		return db.prepare('SELECT count(*) AS count FROM visits').get().count;
 	} finally {
 		db.close();
 	}
@@ -70,7 +69,7 @@ async function checkStartup(mode, port = 0) {
 			JSON.stringify({
 				site: { url: 'http://admin.example.test' },
 				auth: { credentials: { username: 'smoke', password: 'private-worker-smoke-password' } },
-				analytics: { retention_months: mode === 'retention-change' ? 3 : 0 },
+				analytics: { retention_months: mode === 'retention-change' ? 9 : 0 },
 				domains: {}
 			})
 		);
@@ -141,9 +140,8 @@ async function checkStartup(mode, port = 0) {
 			});
 			assert.equal(response.status, 200);
 			assert.deepEqual(await response.json(), { status: 'ok' });
-			const visits = visitState(directory);
-			assert.equal(visits.count, mode === 'retention-change' ? 1 : 0);
-			if (mode !== 'retention-change') assert.equal(visits.collectAfter, null);
+			const visits = visitCount(directory);
+			assert.equal(visits, mode === 'retention-change' ? 2 : 0);
 			const database = new DatabaseSync(join(directory, 'data/worker.sqlite'), {
 				readOnly: true
 			});
@@ -167,13 +165,24 @@ async function checkStartup(mode, port = 0) {
 				);
 				const path = join(directory, 'config/goto.yaml');
 				const configuration = JSON.parse(await readFile(path, 'utf8'));
+				configuration.analytics.retention_months = 3;
+				await saveConfiguration(path, configuration);
+				await waitUntil(() => visitCount(directory) === 1, stopped.signal);
 				configuration.analytics.retention_months = 0;
 				await saveConfiguration(path, configuration);
-				await waitUntil(() => visitState(directory).count === 0, stopped.signal);
-				assert.equal(visitState(directory).collectAfter, null);
-				configuration.analytics.retention_months = 9;
-				await saveConfiguration(path, configuration);
-				await waitUntil(() => visitState(directory).collectAfter !== null, stopped.signal);
+				await waitUntil(
+					() => output.includes('Analytics collection change requires coordinated restart'),
+					stopped.signal
+				);
+				assert.equal(visitCount(directory), 1, 'Live collection disable must not purge history');
+				const stillRunning = await fetch(`http://127.0.0.1:${ready.port}/healthz`, {
+					signal: AbortSignal.timeout(2000)
+				});
+				assert.equal(
+					stillRunning.status,
+					200,
+					'Collection change must not auto-restart one service'
+				);
 				child.kill('SIGTERM');
 			} else {
 				child.kill('SIGTERM');
@@ -215,5 +224,5 @@ try {
 	await new Promise((resolve) => occupied.close(resolve));
 }
 console.log(
-	'Compiled/source startup, config restart, idle zero policy, live retention, health, partial-startup cleanup, and shutdown passed'
+	'Compiled/source startup, config restart, idle zero policy, live positive retention, restart-only collection, health, partial-startup cleanup, and shutdown passed'
 );

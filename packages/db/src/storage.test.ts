@@ -11,7 +11,6 @@ import {
 	pruneVisits,
 	purgeVisits,
 	runMigrations,
-	setVisitCollection,
 	type ClassifiedVisit
 } from './index.js';
 import { migrations } from './migrations/index.js';
@@ -52,8 +51,12 @@ test('opens a real WAL database and applies versioned migrations once', async ()
 		expect(await runMigrations(db)).toEqual([
 			'0001_visits',
 			'0002_visit_classification',
-			'0003_visit_retention'
+			'0003_visit_retention',
+			'0004_remove_visit_collection'
 		]);
+		const tables = await db.introspection.getTables();
+		const names = tables.map((table) => table.name);
+		expect(names).not.toContain('visit_collection');
 		expect(await runMigrations(db)).toEqual([]);
 	} finally {
 		await db.destroy();
@@ -63,7 +66,7 @@ test('opens a real WAL database and applies versioned migrations once', async ()
 test('persists classified visits for the same logical path on different domains', async () => {
 	const path = join(directory, 'visits.sqlite');
 	const writer = await openDb(path);
-	const ids: (number | undefined)[] = [];
+	const ids: number[] = [];
 	try {
 		await runMigrations(writer);
 		ids.push(await insertVisit(writer, visit));
@@ -119,7 +122,11 @@ test('adds classification columns without changing existing visit data', async (
 			VALUES (${visit.domain}, ${visit.path}, ${visit.visited_at}, ${visit.ip}, ${visit.user_agent}, ${visit.accept_language})
 		`.execute(db);
 
-		expect(await runMigrations(db)).toEqual(['0002_visit_classification', '0003_visit_retention']);
+		expect(await runMigrations(db)).toEqual([
+			'0002_visit_classification',
+			'0003_visit_retention',
+			'0004_remove_visit_collection'
+		]);
 		expect(await db.selectFrom('visits').selectAll().executeTakeFirstOrThrow()).toEqual({
 			...visit,
 			id: 1,
@@ -154,7 +161,8 @@ test('a failed migration rolls back schema and bookkeeping so startup can retry'
 		expect(await runMigrations(db)).toEqual([
 			'0001_visits',
 			'0002_visit_classification',
-			'0003_visit_retention'
+			'0003_visit_retention',
+			'0004_remove_visit_collection'
 		]);
 		expect(await runMigrations(db)).toEqual([]);
 	} finally {
@@ -186,31 +194,6 @@ test('prunes expired visits in bounded passes and zero-retention purge removes t
 		expect(await db.selectFrom('visits').selectAll().execute()).toEqual([]);
 	} finally {
 		await db.destroy();
-	}
-});
-
-test('a collection fence rejects queued writes after purge and after re-enabling', async () => {
-	const path = join(directory, 'collection.sqlite');
-	const writer = await openDb(path);
-	await runMigrations(writer);
-	const maintenance = await openDb(path);
-	try {
-		await insertVisit(writer, visit);
-		await setVisitCollection(maintenance, false);
-		await purgeVisits(maintenance);
-		expect(await insertVisit(writer, visit)).toBeUndefined();
-		const resumedAt = visit.visited_at + 10;
-		await setVisitCollection(maintenance, true, resumedAt);
-		expect(await insertVisit(writer, visit)).toBeUndefined();
-		expect(await insertVisit(writer, { ...visit, visited_at: resumedAt })).toBeUndefined();
-		await setVisitCollection(maintenance, true, resumedAt + 100);
-		const resumed = { ...visit, visited_at: resumedAt + 1 };
-		expect(await insertVisit(writer, resumed)).toBeTypeOf('number');
-		const rows = await writer.selectFrom('visits').select('visited_at').execute();
-		expect(rows).toEqual([{ visited_at: resumed.visited_at }]);
-	} finally {
-		await maintenance.destroy();
-		await writer.destroy();
 	}
 });
 

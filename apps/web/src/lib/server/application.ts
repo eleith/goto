@@ -31,7 +31,8 @@ function startupSettings({ configuration }: PreparedConfiguration) {
 	return {
 		siteUrl: configuration.site.url,
 		auth: configuration.auth,
-		databasePath: configuration.database.path
+		databasePath: configuration.database.path,
+		collectionEnabled: configuration.analytics.retention_months !== 0
 	};
 }
 
@@ -47,8 +48,7 @@ export async function createApplication(options: ConfigOptions = {}): Promise<Ap
 	let snapshot = prepareSnapshot(initial);
 	const authentication = createAuthentication(snapshot.configuration);
 	const databasePath = resolve(captured.cwd, startup.databasePath);
-	const collectionEnabled = snapshot.configuration.analytics.retention_months !== 0;
-	const recorder = createVisitRecorder(databasePath, collectionEnabled);
+	const recorder = startup.collectionEnabled ? createVisitRecorder(databasePath) : undefined;
 
 	function loadConfiguration(path: string): Promise<PreparedConfiguration> {
 		return loadConfigFile(path, captured);
@@ -59,14 +59,18 @@ export async function createApplication(options: ConfigOptions = {}): Promise<Ap
 		previous: PreparedConfiguration
 	): boolean {
 		const nextSettings = startupSettings(next);
+		if (nextSettings.collectionEnabled !== startup.collectionEnabled) {
+			reportReloadIssue(
+				'Analytics collection change requires coordinated restart; keeping current configuration'
+			);
+			return false;
+		}
 		if (!isDeepStrictEqual(nextSettings, startup)) {
 			reportReloadIssue('Configuration change requires restart; keeping current configuration');
 			return false;
 		}
 		if (!isDeepStrictEqual(next, previous)) {
 			const candidate = prepareSnapshot(next);
-			const collectionEnabled = candidate.configuration.analytics.retention_months !== 0;
-			recorder.setEnabled(collectionEnabled);
 			snapshot = candidate;
 		}
 		return true;
@@ -87,7 +91,7 @@ export async function createApplication(options: ConfigOptions = {}): Promise<Ap
 	try {
 		stopReloading = await startConfigReloading(reloadOptions);
 	} catch (error) {
-		await recorder.stop();
+		await recorder?.stop();
 		throw error;
 	}
 	const application: Application = {
@@ -95,14 +99,14 @@ export async function createApplication(options: ConfigOptions = {}): Promise<Ap
 			return snapshot;
 		},
 		authentication,
-		recordVisit: recorder.recordVisit,
 		async close() {
 			try {
 				await stopReloading();
 			} finally {
-				await recorder.stop();
+				await recorder?.stop();
 			}
 		}
 	};
+	if (recorder) application.recordVisit = recorder.recordVisit;
 	return application;
 }

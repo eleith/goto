@@ -25,7 +25,6 @@ let reload: ReloadOptions;
 const stop = vi.fn();
 const stopRecorder = vi.fn();
 const recordVisit = vi.fn();
-const setEnabled = vi.fn();
 
 function prepared(
 	destination = 'https://example.org/first',
@@ -46,7 +45,7 @@ beforeEach(() => {
 	vi.clearAllMocks();
 	vi.spyOn(console, 'warn').mockImplementation(() => {});
 	vi.mocked(loadConfigFile).mockResolvedValue(prepared());
-	vi.mocked(createVisitRecorder).mockReturnValue({ recordVisit, setEnabled, stop: stopRecorder });
+	vi.mocked(createVisitRecorder).mockReturnValue({ recordVisit, stop: stopRecorder });
 	vi.mocked(startConfigReloading).mockImplementation(async (options) => {
 		reload = options as ReloadOptions;
 		return stop;
@@ -69,7 +68,7 @@ test('uses a fixed path/environment and stops monitoring with the application', 
 	expect(application.currentSnapshot().configuration.auth).not.toHaveProperty('secret');
 	await application.close?.();
 	expect(stop).toHaveBeenCalledOnce();
-	expect(createVisitRecorder).toHaveBeenCalledExactlyOnceWith('/deployment/data/goto.sqlite', true);
+	expect(createVisitRecorder).toHaveBeenCalledExactlyOnceWith('/deployment/data/goto.sqlite');
 	expect(application.recordVisit).toBe(recordVisit);
 	expect(stopRecorder).toHaveBeenCalledOnce();
 });
@@ -99,7 +98,7 @@ test('publishes valid changes, ignores equivalent data, and retains last good da
 test.each([
 	{ site: { url: 'https://different-admin.example.test' } },
 	{ auth: { credentials: { username: 'changed', password: 'private-changed-password' } } },
-	{ database: { path: './data/different.sqlite' }, analytics: { retention_months: 0 } }
+	{ database: { path: './data/different.sqlite' } }
 ])('rejects the whole candidate when startup settings change: %j', async (changes) => {
 	const application = await createApplication(options);
 	const initial = application.currentSnapshot();
@@ -107,19 +106,43 @@ test.each([
 	expect(reload.onChange(prepared('https://example.org/blocked', changes), prepared())).toBe(false);
 
 	expect(application.currentSnapshot()).toBe(initial);
-	expect(setEnabled).not.toHaveBeenCalled();
 	expect(console.warn).toHaveBeenCalledExactlyOnceWith(
 		'Configuration change requires restart; keeping current configuration'
 	);
 	await application.close?.();
 });
 
-test('disables live collection without replacing the recorder', async () => {
+test('rejects live collection disable and the rest of its candidate until coordinated restart', async () => {
 	const application = await createApplication(options);
-	const next = prepared('https://example.org/first', { analytics: { retention_months: 0 } });
+	const initial = application.currentSnapshot();
+	const next = prepared('https://example.org/blocked', { analytics: { retention_months: 0 } });
+	expect(reload.onChange(next, prepared())).toBe(false);
+	expect(application.currentSnapshot()).toBe(initial);
+	expect(createVisitRecorder).toHaveBeenCalledOnce();
+	expect(console.warn).toHaveBeenCalledExactlyOnceWith(
+		'Analytics collection change requires coordinated restart; keeping current configuration'
+	);
+	await application.close?.();
+});
+
+test('zero startup creates no recorder and rejects live enabling', async () => {
+	const initial = prepared('https://example.org/first', { analytics: { retention_months: 0 } });
+	vi.mocked(loadConfigFile).mockResolvedValueOnce(initial);
+	const application = await createApplication(options);
+	const snapshot = application.currentSnapshot();
+	expect(createVisitRecorder).not.toHaveBeenCalled();
+	expect(application.recordVisit).toBeUndefined();
+	expect(reload.onChange(prepared('https://example.org/blocked'), initial)).toBe(false);
+	expect(application.currentSnapshot()).toBe(snapshot);
+	await application.close?.();
+	expect(stopRecorder).not.toHaveBeenCalled();
+});
+
+test('changes positive retention live without replacing the recorder', async () => {
+	const application = await createApplication(options);
+	const next = prepared('https://example.org/second', { analytics: { retention_months: 9 } });
 	expect(reload.onChange(next, prepared())).toBe(true);
-	expect(setEnabled).toHaveBeenCalledExactlyOnceWith(false);
-	expect(application.currentSnapshot().configuration.analytics.retention_months).toBe(0);
+	expect(application.currentSnapshot().configuration.analytics.retention_months).toBe(9);
 	expect(createVisitRecorder).toHaveBeenCalledOnce();
 	await application.close?.();
 });

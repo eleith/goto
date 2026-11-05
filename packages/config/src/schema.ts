@@ -191,7 +191,7 @@ const AnalyticsSchema = Type.Object(
 			{
 				default: 3,
 				description:
-					'Calendar months of analytics history. Zero disables collection and purges retained visits.'
+					'Calendar months of analytics history. Zero disables collection and purges retained visits at startup. Stop both services before changing between zero and positive retention, then restart. Positive retention changes reload live.'
 			}
 		)
 	},

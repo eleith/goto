@@ -1,10 +1,10 @@
 import { validateConfig } from '@goto/config';
-import { openDb, runMigrations, setVisitCollection } from '@goto/db';
+import { openDb, runMigrations } from '@goto/db';
 import type { OpenWorkflow } from 'openworkflow';
 import { expect, test, vi } from 'vitest';
 import {
 	applyRetention,
-	configureRetention,
+	configureRetentionSchedule,
 	requestRetention,
 	retentionCutoff
 } from './retention.js';
@@ -58,7 +58,7 @@ test('zero pauses the native schedule and queues one purge only when data exists
 	const sdk = engine as unknown as OpenWorkflow;
 	try {
 		ctx.config.analytics.retention_months = 0;
-		await configureRetention(ctx, sdk);
+		await configureRetentionSchedule(ctx, sdk);
 		expect(engine.scheduleWorkflow).toHaveBeenCalledExactlyOnceWith(
 			retainVisits,
 			retentionSchedule.input,
@@ -88,9 +88,6 @@ test('zero pauses the native schedule and queues one purge only when data exists
 		expect(engine.runWorkflow).toHaveBeenCalledExactlyOnceWith(retainVisits, {});
 		await applyRetention(ctx);
 		expect(await ctx.db.selectFrom('visits').selectAll().execute()).toEqual([]);
-		expect(
-			await ctx.db.selectFrom('visit_collection').select('collect_after').executeTakeFirstOrThrow()
-		).toEqual({ collect_after: null });
 	} finally {
 		await ctx.db.destroy();
 	}
@@ -109,7 +106,7 @@ test('positive retention resumes the schedule and prunes every expired batch usi
 				{ ...visit, visited_at: cutoff }
 			])
 			.execute();
-		await configureRetention(ctx, engine as unknown as OpenWorkflow);
+		await configureRetentionSchedule(ctx, engine as unknown as OpenWorkflow);
 		expect(engine.schedules.resume).toHaveBeenCalledExactlyOnceWith(retentionSchedule.id);
 		expect(engine.schedules.pause).not.toHaveBeenCalled();
 		await applyRetention(ctx, now);
@@ -117,54 +114,6 @@ test('positive retention resumes the schedule and prunes every expired batch usi
 			{ visited_at: cutoff }
 		]);
 	} finally {
-		await ctx.db.destroy();
-	}
-});
-
-test('finishes an interrupted zero-policy purge before reopening collection', async () => {
-	const ctx = await context();
-	try {
-		const now = Date.now();
-		await setVisitCollection(ctx.db, false);
-		await ctx.db
-			.insertInto('visits')
-			.values({ ...visit, visited_at: now })
-			.execute();
-		ctx.config.analytics.retention_months = 9;
-		await applyRetention(ctx, now);
-		expect(await ctx.db.selectFrom('visits').selectAll().execute()).toEqual([]);
-		const state = await ctx.db
-			.selectFrom('visit_collection')
-			.select('collect_after')
-			.executeTakeFirstOrThrow();
-		expect(state.collect_after).toBeTypeOf('number');
-	} finally {
-		await ctx.db.destroy();
-	}
-});
-
-test('a positive job waiting for its connection cannot reopen collection after zero', async () => {
-	const ctx = await context();
-	const acquired = Promise.withResolvers<void>();
-	const release = Promise.withResolvers<void>();
-	try {
-		await setVisitCollection(ctx.db, false);
-		const holding = ctx.db.transaction().execute(async () => {
-			acquired.resolve();
-			await release.promise;
-		});
-		await Promise.race([acquired.promise, holding]);
-		const applying = applyRetention(ctx);
-		ctx.config.analytics.retention_months = 0;
-		release.resolve();
-		await Promise.all([holding, applying]);
-		const state = await ctx.db
-			.selectFrom('visit_collection')
-			.select('collect_after')
-			.executeTakeFirstOrThrow();
-		expect(state.collect_after).toBeNull();
-	} finally {
-		release.resolve();
 		await ctx.db.destroy();
 	}
 });

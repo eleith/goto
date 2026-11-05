@@ -3,7 +3,7 @@ import { logger } from './logger.js';
 import type { ShutdownResources } from './lifecycle.js';
 import type { OpenWorkflow } from 'openworkflow';
 import type { WorkerContext } from './context.js';
-import { configureRetention, requestRetention } from './retention.js';
+import { requestRetention } from './retention.js';
 
 interface ConfigurationSource {
 	path: string;
@@ -18,6 +18,16 @@ export async function applyConfig(
 	context: WorkerContext,
 	engine: OpenWorkflow
 ): Promise<boolean> {
+	const months = next.configuration.analytics.retention_months;
+	const previousMonths = previous.configuration.analytics.retention_months;
+	const collectionEnabled = months !== 0;
+	const previousCollectionEnabled = previousMonths !== 0;
+	if (collectionEnabled !== previousCollectionEnabled) {
+		logger.warn(
+			'Analytics collection change requires coordinated restart; keeping current configuration'
+		);
+		return false;
+	}
 	const nextDatabase = next.configuration.database;
 	const previousDatabase = previous.configuration.database;
 	if (
@@ -30,11 +40,8 @@ export async function applyConfig(
 	}
 	const currentMonths = context.config.analytics.retention_months;
 	context.config = next.configuration;
-	const months = next.configuration.analytics.retention_months;
-	const previousMonths = previous.configuration.analytics.retention_months;
 	try {
 		if (months !== previousMonths || months !== currentMonths) {
-			await configureRetention(context, engine);
 			await requestRetention(context, engine);
 		}
 	} catch (error) {

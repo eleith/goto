@@ -11,7 +11,7 @@ import { createShutdown, type ShutdownResources } from './lifecycle.js';
 import { watchConfiguration } from './config-reload.js';
 import { logger } from './logger.js';
 import type { WorkerContext } from './context.js';
-import { configureRetention, requestRetention } from './retention.js';
+import { configureRetentionSchedule, requestRetention } from './retention.js';
 import { registerRetentionWorkflow } from '../workflows/retain-visits.js';
 
 export interface WorkerService {
@@ -80,7 +80,7 @@ async function startWorkflowWorker(
 	const engineLogger = createEngineLogger(logger);
 	const engine = new OpenWorkflow({ backend, logger: engineLogger });
 	registerRetentionWorkflow(engine, context);
-	await configureRetention(context, engine);
+	await configureRetentionSchedule(context, engine);
 	const workflowWorker = engine.newWorker({ concurrency: 1 });
 	resources.workflowWorker = workflowWorker;
 	await workflowWorker.start();

@@ -44,59 +44,46 @@ afterEach(() => {
 	vi.restoreAllMocks();
 });
 
-test('bounds unsettled visits and releases capacity after a failed insert', async () => {
-	const recorder = createVisitRecorder('/data/goto.sqlite', true);
+test('bounds unsettled visits and reports queue and insert failures separately', async () => {
+	const recorder = createVisitRecorder('/data/goto.sqlite');
 	recorder.recordVisit(visit);
 	expect(writes).toHaveLength(0);
 	initialized.resolve();
 	await initialized.promise;
 	for (let index = 0; index < 1000; index++) recorder.recordVisit(visit);
 	recorder.recordVisit(visit);
+	recorder.recordVisit(visit);
 	expect(writes).toHaveLength(1000);
 	writes[0]!.reject(new Error('private database detail'));
 	await Promise.resolve();
 	recorder.recordVisit(visit);
 	expect(writes).toHaveLength(1001);
-	expect(console.warn).toHaveBeenCalledExactlyOnceWith(
-		'Visit tracking unavailable; some visits may not be recorded'
-	);
+	expect(vi.mocked(console.warn).mock.calls).toEqual([
+		['Visit recording queue full (1000 outstanding); dropping analytics visit'],
+		['Visit tracking unavailable; some visits may not be recorded']
+	]);
 	await recorder.stop();
 });
 
-test('drops oversized events without changing the payload', async () => {
-	const recorder = createVisitRecorder('/data/goto.sqlite', true);
+test('drops whole oversized events and warns once without logging their payload', async () => {
+	const recorder = createVisitRecorder('/data/goto.sqlite');
 	initialized.resolve();
 	await initialized.promise;
 	const oversized = { ...visit, user_agent: 'x'.repeat(32 * 1024) };
 	recorder.recordVisit(oversized);
+	recorder.recordVisit(oversized);
 	expect(writes).toHaveLength(0);
 	expect(oversized.user_agent).toHaveLength(32 * 1024);
-	await recorder.stop();
-});
-
-test('disabled collection starts no worker and can later enable and pause admission', async () => {
-	const recorder = createVisitRecorder('/data/goto.sqlite', false);
-	recorder.recordVisit(visit);
-	expect(Piscina).not.toHaveBeenCalled();
-	recorder.setEnabled(true);
-	initialized.resolve();
-	await initialized.promise;
-	recorder.recordVisit(visit);
-	expect(writes).toHaveLength(1);
-	recorder.setEnabled(false);
-	recorder.recordVisit(visit);
-	expect(writes).toHaveLength(1);
-	recorder.setEnabled(true);
-	recorder.recordVisit(visit);
-	expect(writes).toHaveLength(2);
-	expect(Piscina).toHaveBeenCalledOnce();
+	expect(console.warn).toHaveBeenCalledExactlyOnceWith(
+		'Visit payload exceeds 32 KiB; dropping analytics visit'
+	);
 	await recorder.stop();
 });
 
 test('stops admission and waits for database and pool closure', async () => {
 	const closed = Promise.withResolvers<void>();
 	const poolClosed = Promise.withResolvers<void>();
-	const recorder = createVisitRecorder('/data/goto.sqlite', true);
+	const recorder = createVisitRecorder('/data/goto.sqlite');
 	initialized.resolve();
 	await initialized.promise;
 	pool.run.mockImplementation(() => closed.promise);
@@ -126,7 +113,7 @@ test('stops admission and waits for database and pool closure', async () => {
 });
 
 test('initialization failures disable capture without propagating private errors', async () => {
-	const recorder = createVisitRecorder('/data/goto.sqlite', true);
+	const recorder = createVisitRecorder('/data/goto.sqlite');
 	initialized.reject(new Error('private database path'));
 	await Promise.resolve();
 	recorder.recordVisit(visit);

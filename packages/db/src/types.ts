@@ -12,14 +12,8 @@ export interface VisitTable {
 	os: string;
 }
 
-export interface VisitCollectionTable {
-	id: number;
-	collect_after: number | null;
-}
-
 export interface Database {
 	visits: VisitTable;
-	visit_collection: VisitCollectionTable;
 }
 
 export type ClassifiedVisit = Omit<Insertable<VisitTable>, 'id'>;

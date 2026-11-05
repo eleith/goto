@@ -55,19 +55,12 @@ test('scheduled cleanup uses durable jitter; startup and policy runs do not', as
 	expect(applyRetention).toHaveBeenCalledExactlyOnceWith(ctx);
 });
 
-test('a scheduled run does no cleanup if collection is disabled during its delay', async () => {
+test('a prior scheduled run does no cleanup when the service starts with collection disabled', async () => {
 	const ctx = context();
-	const { step, sleep } = steps();
-	const sleeping = Promise.withResolvers<void>();
-	const resumed = Promise.withResolvers<void>();
-	sleep.mockImplementationOnce(async () => {
-		sleeping.resolve();
-		await resumed.promise;
-	});
-	const running = runRetentionWorkflow(ctx, { scheduled: true }, step);
-	await sleeping.promise;
 	ctx.config.analytics.retention_months = 0;
-	resumed.resolve();
-	await running;
+	const { step, names, sleep } = steps();
+	await runRetentionWorkflow(ctx, { scheduled: true }, step);
+	expect(names).toEqual([]);
+	expect(sleep).not.toHaveBeenCalled();
 	expect(applyRetention).not.toHaveBeenCalled();
 });

@@ -1,18 +1,17 @@
 import { setImmediate } from 'node:timers/promises';
 import type { GotoConfiguration } from '@goto/config';
-import { pruneVisits, purgeVisits, purgeVisitsIfDisabled, setVisitCollection } from '@goto/db';
+import { pruneVisits, purgeVisits } from '@goto/db';
 import type { OpenWorkflow } from 'openworkflow';
 import { retainVisits, retentionSchedule } from '../workflows/specs.js';
 import type { WorkerContext } from './context.js';
 
 export type RetentionMonths = GotoConfiguration['analytics']['retention_months'];
 
-export async function configureRetention(
+export async function configureRetentionSchedule(
 	context: WorkerContext,
 	engine: OpenWorkflow
 ): Promise<void> {
 	const enabled = context.config.analytics.retention_months !== 0;
-	if (!enabled) await setVisitCollection(context.db, false);
 	await engine.scheduleWorkflow(retainVisits, retentionSchedule.input, retentionSchedule);
 	if (enabled) await engine.schedules.resume(retentionSchedule.id);
 	else await engine.schedules.pause(retentionSchedule.id);
@@ -33,16 +32,9 @@ export async function requestRetention(
 export async function applyRetention(context: WorkerContext, now = Date.now()): Promise<void> {
 	const months = context.config.analytics.retention_months;
 	if (months === 0) {
-		await setVisitCollection(context.db, false);
 		await purgeVisits(context.db);
 		return;
 	}
-	await context.db.transaction().execute(async (transaction) => {
-		await purgeVisitsIfDisabled(transaction);
-		if (context.config.analytics.retention_months !== 0) {
-			await setVisitCollection(transaction, true);
-		}
-	});
 	const before = retentionCutoff(months, now);
 	while (await pruneVisits(context.db, before)) {
 		await setImmediate();

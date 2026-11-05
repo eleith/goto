@@ -30,7 +30,6 @@ export async function runRetentionWorkflow(
 		const seconds = await step.run({ name: 'choose-jitter' }, chooseJitter);
 		const duration: `${number}s` = `${seconds}s`;
 		await step.sleep('retention-jitter', duration);
-		if (collectionDisabled(context)) return 'completed';
 	}
 	function applyPolicy(): Promise<void> {
 		return applyRetention(context);

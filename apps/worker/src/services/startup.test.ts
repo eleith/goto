@@ -53,9 +53,6 @@ test('starts an idle zero-policy service, migrates visit storage, and exposes he
 		const db = await openDb(join(directory, 'data/visits.sqlite'), { readOnly: true });
 		try {
 			expect(await db.selectFrom('visits').selectAll().execute()).toEqual([]);
-			expect(
-				await db.selectFrom('visit_collection').select('collect_after').executeTakeFirstOrThrow()
-			).toEqual({ collect_after: null });
 		} finally {
 			await db.destroy();
 		}
