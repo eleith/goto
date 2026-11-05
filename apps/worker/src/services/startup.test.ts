@@ -70,6 +70,7 @@ test('an existing zero-policy database is purged by a real startup workflow', as
 		await insertVisit(db, {
 			domain: 'go.example.test',
 			path: '/docs',
+			outcome: 'valid',
 			visited_at: Date.now(),
 			ip: '127.0.0.1',
 			user_agent: null,

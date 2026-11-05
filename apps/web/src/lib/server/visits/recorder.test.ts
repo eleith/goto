@@ -13,6 +13,7 @@ let writes: ReturnType<typeof Promise.withResolvers<void>>[];
 const visit: NewVisit = {
 	domain: 'go.example.test',
 	path: '/docs',
+	outcome: 'valid',
 	visited_at: 1_700_000_000_000,
 	ip: '2001:db8::1',
 	user_agent: null,

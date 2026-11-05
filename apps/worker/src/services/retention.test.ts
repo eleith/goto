@@ -1,5 +1,5 @@
 import { validateConfig } from '@goto/config';
-import { openDb, runMigrations } from '@goto/db';
+import { openDb, runMigrations, type ClassifiedVisit } from '@goto/db';
 import type { OpenWorkflow } from 'openworkflow';
 import { expect, test, vi } from 'vitest';
 import {
@@ -41,9 +41,10 @@ function client() {
 	return { engine, result };
 }
 
-const visit = {
+const visit: ClassifiedVisit = {
 	domain: 'go.example.test',
 	path: '/docs',
+	outcome: 'valid',
 	visited_at: 1,
 	ip: '127.0.0.1',
 	user_agent: null,

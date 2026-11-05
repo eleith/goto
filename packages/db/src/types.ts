@@ -1,9 +1,12 @@
 import type { Generated, Insertable, Selectable } from 'kysely';
 
+export type VisitOutcome = 'valid' | 'invalid';
+
 export interface VisitTable {
 	id: Generated<number>;
 	domain: string;
 	path: string;
+	outcome: VisitOutcome;
 	visited_at: number;
 	ip: string;
 	user_agent: string | null;

@@ -18,7 +18,7 @@ function visitCount(path: string, logicalPath: string): number {
 	}
 }
 
-test('the compiled writer isolates lock waits and drains accepted visits before shutdown', async ({
+test('the compiled writer persists outcomes, isolates locks and drains visits before shutdown', async ({
 	request,
 	appServer
 }) => {
@@ -55,13 +55,29 @@ test('the compiled writer isolates lock waits and drains accepted visits before 
 		competingWriter.exec('ROLLBACK');
 		competingWriter.close();
 	}
+	const invalid = await request.get('/missing', options);
+	const base = await request.get('/', options);
+	const head = await request.head('/missing', options);
+	expect(invalid.status()).toBe(404);
+	expect(base.status()).toBe(404);
+	expect(head.status()).toBe(404);
 	expect(await appServer.stop()).toEqual({ code: 0, signal: null });
 	expect(visitCount(databasePath, '/docs')).toBe(3);
 	const db = new DatabaseSync(databasePath, { readOnly: true });
 	try {
 		expect(
-			db.prepare('SELECT DISTINCT browser, os FROM visits WHERE path = ?').all('/docs')
-		).toEqual([{ browser: 'Firefox', os: 'Linux' }]);
+			db.prepare('SELECT DISTINCT outcome, browser, os FROM visits WHERE path = ?').all('/docs')
+		).toEqual([{ outcome: 'valid', browser: 'Firefox', os: 'Linux' }]);
+		expect(
+			db
+				.prepare(
+					'SELECT path, outcome FROM visits WHERE domain = ? AND path IN (?, ?) ORDER BY path'
+				)
+				.all('go.example.org', '/', '/missing')
+		).toEqual([
+			{ path: '/', outcome: 'invalid' },
+			{ path: '/missing', outcome: 'invalid' }
+		]);
 	} finally {
 		db.close();
 	}

@@ -3,7 +3,7 @@ import type { IncomingMessage } from 'node:http';
 import { readClientAddress } from '../ingress.js';
 import type { ResolvedVisit } from '../redirect.js';
 
-export function recordRedirectVisit(
+export function captureVisit(
 	request: IncomingMessage,
 	visit: ResolvedVisit | undefined,
 	recordVisit: ((visit: NewVisit) => void) | undefined
@@ -19,6 +19,7 @@ export function recordRedirectVisit(
 		recordVisit({
 			domain: visit.domain,
 			path: visit.path,
+			outcome: visit.outcome,
 			visited_at: visit.visitedAt,
 			ip,
 			user_agent: userAgent,

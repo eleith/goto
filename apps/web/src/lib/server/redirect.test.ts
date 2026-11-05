@@ -55,10 +55,11 @@ describe('exact single-decode lookup', () => {
 		['/100%25', '/100%'],
 		['/docs?next=/missing?part=two', '/docs']
 	])('%s resolves logical key %s', (target, path) => {
-		const { response } = resolveRedirect(domain, host, target, 'GET');
+		const { response, visit } = resolveRedirect(domain, host, target, 'GET');
 
 		expect(response.status).toBe(302);
 		expect(response.headers.get('location')).toBe(domain.links[path]?.url);
+		expect(visit).toMatchObject({ path, outcome: 'valid' });
 	});
 
 	test.each([
@@ -71,9 +72,10 @@ describe('exact single-decode lookup', () => {
 		'/docs%3Fignored=one',
 		'/docs%23fragment'
 	])('%s is not normalized, prefix-matched or reparsed', (target) => {
-		const { response } = resolveRedirect(domain, host, target, 'GET');
+		const { response, visit } = resolveRedirect(domain, host, target, 'GET');
 
 		expect(response.status).toBe(404);
+		expect(visit?.outcome).toBe('invalid');
 		expect(response.headers.has('location')).toBe(false);
 		expect(response.headers.get('cache-control')).toBe('no-store');
 	});
@@ -131,9 +133,10 @@ describe('HTTP responses', () => {
 		'rejects %s without resolving a link or fallback',
 		(method) => {
 			const domain = preparedDomain({ '/docs': preparedLink() }, fallback);
-			const { response } = resolveRedirect(domain, host, '/docs', method);
+			const { response, visit } = resolveRedirect(domain, host, '/docs', method);
 
 			expect(response.status).toBe(405);
+			expect(visit).toBeUndefined();
 			expect(response.headers.get('allow')).toBe('GET, HEAD');
 			expect(response.headers.get('cache-control')).toBe('no-store');
 			expect(response.headers.has('location')).toBe(false);
@@ -161,9 +164,11 @@ describe('HTTP responses', () => {
 		'/%C3%28',
 		'/%FF'
 	])('rejects malformed raw target %j before using fallback', (target) => {
-		const { response } = resolveRedirect(preparedDomain({}, fallback), host, target, 'GET');
+		const domain = preparedDomain({}, fallback);
+		const { response, visit } = resolveRedirect(domain, host, target, 'GET');
 
 		expect(response.status).toBe(400);
+		expect(visit).toBeUndefined();
 		expect(response.headers.get('cache-control')).toBe('no-store');
 		expect(response.headers.has('location')).toBe(false);
 	});
@@ -197,13 +202,13 @@ describe('validity and fallback', () => {
 	const end = Date.parse(until);
 
 	test.each([
-		{ enabled: true, now: start - 1, status: 302, location: fallback },
-		{ enabled: true, now: start, status: 307, location: destination },
-		{ enabled: true, now: end - 1, status: 307, location: destination },
-		{ enabled: true, now: end, status: 302, location: fallback },
-		{ enabled: true, now: end + 1, status: 302, location: fallback },
-		{ enabled: false, now: start, status: 302, location: fallback }
-	])('enabled=$enabled at $now returns $status', ({ enabled, now, status, location }) => {
+		{ enabled: true, now: start - 1, status: 302, location: fallback, outcome: 'invalid' },
+		{ enabled: true, now: start, status: 307, location: destination, outcome: 'valid' },
+		{ enabled: true, now: end - 1, status: 307, location: destination, outcome: 'valid' },
+		{ enabled: true, now: end, status: 302, location: fallback, outcome: 'invalid' },
+		{ enabled: true, now: end + 1, status: 302, location: fallback, outcome: 'invalid' },
+		{ enabled: false, now: start, status: 302, location: fallback, outcome: 'invalid' }
+	])('enabled=$enabled at $now returns $status', ({ enabled, now, status, location, outcome }) => {
 		const domain = preparedDomain(
 			{
 				'/docs': preparedLink({
@@ -215,11 +220,22 @@ describe('validity and fallback', () => {
 			},
 			fallback
 		);
-		const { response } = resolveRedirect(domain, host, '/docs?incoming=ignored', 'GET', now);
+		const { response, visit } = resolveRedirect(domain, host, '/docs?incoming=ignored', 'GET', now);
 
 		expect(response.status).toBe(status);
+		expect(visit).toEqual({ domain: host, path: '/docs', outcome, visitedAt: now });
 		expect(response.headers.get('location')).toBe(location);
 		expect(response.headers.get('cache-control')).toBe('no-store');
+	});
+
+	test('visit outcomes do not change with later link configuration', () => {
+		const link = preparedLink();
+		const domain = preparedDomain({ '/docs': link }, fallback);
+		const first = resolveRedirect(domain, host, '/docs', 'GET');
+		link.enabled = false;
+		const next = resolveRedirect(domain, host, '/docs', 'GET');
+		expect(first.visit?.outcome).toBe('valid');
+		expect(next.visit?.outcome).toBe('invalid');
 	});
 
 	test('uses Date.now when no clock is supplied', () => {
@@ -229,7 +245,7 @@ describe('validity and fallback', () => {
 
 			const { response, visit } = resolveRedirect(domain, host, '/docs', 'GET');
 			expect(response.status).toBe(302);
-			expect(visit).toEqual({ domain: host, path: '/docs', visitedAt: start });
+			expect(visit).toEqual({ domain: host, path: '/docs', outcome: 'valid', visitedAt: start });
 		} finally {
 			clock.mockRestore();
 		}
@@ -238,15 +254,11 @@ describe('validity and fallback', () => {
 	test.each([preparedLink({ enabled: false }), preparedLink({ valid_until: until })])(
 		'inactive links can fall back to 404',
 		(link) => {
-			const { response } = resolveRedirect(
-				preparedDomain({ '/docs': link }),
-				host,
-				'/docs',
-				'GET',
-				end
-			);
+			const domain = preparedDomain({ '/docs': link });
+			const { response, visit } = resolveRedirect(domain, host, '/docs', 'GET', end);
 
 			expect(response.status).toBe(404);
+			expect(visit?.outcome).toBe('invalid');
 			expect(response.headers.has('location')).toBe(false);
 			expect(response.headers.get('cache-control')).toBe('no-store');
 		}
@@ -255,20 +267,29 @@ describe('validity and fallback', () => {
 	test('a root link takes precedence over URL fallback', () => {
 		const domain = preparedDomain({ '/': preparedLink() }, fallback);
 
-		expect(
-			resolveRedirect(domain, host, '/?incoming=ignored', 'GET').response.headers.get('location')
-		).toBe(destination);
+		const { response, visit } = resolveRedirect(domain, host, '/?incoming=ignored', 'GET');
+		expect(response.headers.get('location')).toBe(destination);
+		expect(visit).toMatchObject({ path: '/', outcome: 'valid' });
+	});
+
+	test('an unconfigured root remains a base visit with an invalid outcome', () => {
+		const domain = preparedDomain();
+		const { response, visit } = resolveRedirect(domain, host, '/', 'GET');
+		expect(response.status).toBe(404);
+		expect(visit).toMatchObject({ path: '/', outcome: 'invalid' });
 	});
 
 	test('URL fallback is always 302 and never appends the incoming path or query', () => {
-		const { response } = resolveRedirect(
-			preparedDomain({}, fallback),
+		const domain = preparedDomain({}, fallback);
+		const { response, visit } = resolveRedirect(
+			domain,
 			host,
 			'/missing/nested?owned=replaced&new=value',
 			'GET'
 		);
 
 		expect(response.status).toBe(302);
+		expect(visit).toMatchObject({ path: '/missing/nested', outcome: 'invalid' });
 		expect(response.headers.get('location')).toBe(fallback);
 		expect(response.headers.get('cache-control')).toBe('no-store');
 	});

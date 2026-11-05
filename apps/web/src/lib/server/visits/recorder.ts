@@ -21,7 +21,14 @@ export function createVisitRecorder(databasePath: string): VisitRecorder {
 }
 
 function exceedsVisitSizeLimit(visit: NewVisit): boolean {
-	const textFields = [visit.domain, visit.path, visit.ip, visit.user_agent, visit.accept_language];
+	const textFields = [
+		visit.domain,
+		visit.path,
+		visit.outcome,
+		visit.ip,
+		visit.user_agent,
+		visit.accept_language
+	];
 	let bytes = 8;
 	for (const value of textFields) {
 		bytes += Buffer.byteLength(value ?? '');

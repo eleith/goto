@@ -3,7 +3,7 @@ import type { Application } from './application.js';
 import { isLocalProbe, readIngress } from './ingress.js';
 import { resolveRedirect } from './redirect.js';
 import { bindApplication } from './request-context.js';
-import { recordRedirectVisit } from './visits/capture.js';
+import { captureVisit } from './visits/capture.js';
 
 function response(status: number): Response {
 	return new Response(null, { status, headers: { 'cache-control': 'no-store' } });
@@ -26,7 +26,7 @@ export function handleIngress(
 			request.method ?? 'GET'
 		);
 		if (snapshot.configuration.analytics.retention_months !== 0) {
-			recordRedirectVisit(request, redirect.visit, application.recordVisit);
+			captureVisit(request, redirect.visit, application.recordVisit);
 		}
 		return redirect.response;
 	}

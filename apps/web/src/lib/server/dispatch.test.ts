@@ -101,7 +101,7 @@ test('rejects malformed ingress without reaching either handler', () => {
 	expect(requestApplication(incoming)).toBeUndefined();
 });
 
-test('captures only raw visit fields from the matched logical path and trusted IP header', () => {
+test('captures the request outcome, logical path and raw fields using the trusted IP header', () => {
 	const recordVisit = vi.fn();
 	const tracked = { ...application, recordVisit };
 	const incoming = request('go.example.test', '/%73chema.json?private=not-collected');
@@ -117,6 +117,7 @@ test('captures only raw visit fields from the matched logical path and trusted I
 	expect(recordVisit).toHaveBeenCalledExactlyOnceWith({
 		domain: 'go.example.test',
 		path: '/schema.json',
+		outcome: 'valid',
 		visited_at: expect.any(Number),
 		ip: '2001:db8::1',
 		user_agent: 'Example agent',
@@ -124,7 +125,7 @@ test('captures only raw visit fields from the matched logical path and trusted I
 	});
 });
 
-test('does not record HEAD, fallback redirects, or visits when analytics is disabled', () => {
+test('captures invalid decoded paths even when the fallback redirects', () => {
 	const recordVisit = vi.fn();
 	const fallbackSnapshot = {
 		...snapshot,
@@ -137,10 +138,28 @@ test('does not record HEAD, fallback redirects, or visits when analytics is disa
 		}
 	};
 	const tracked = { currentSnapshot: () => fallbackSnapshot, recordVisit };
+	const incoming = request('go.example.test', '/%6dissing?private=not-collected');
+	expect(handleIngress(tracked, incoming, {})?.status).toBe(302);
+	expect(recordVisit).toHaveBeenCalledExactlyOnceWith({
+		domain: 'go.example.test',
+		path: '/missing',
+		outcome: 'invalid',
+		visited_at: expect.any(Number),
+		ip: '127.0.0.1',
+		user_agent: null,
+		accept_language: null
+	});
+});
+
+test('does not record HEAD, malformed, admin, unknown-host or disabled-analytics requests', () => {
+	const recordVisit = vi.fn();
+	const tracked = { ...application, recordVisit };
 	const head = request('go.example.test');
 	head.method = 'HEAD';
 	expect(handleIngress(tracked, head, {})?.status).toBe(302);
-	expect(handleIngress(tracked, request('go.example.test', '/missing'), {})?.status).toBe(302);
+	expect(handleIngress(tracked, request('go.example.test', '/%'), {})?.status).toBe(400);
+	expect(handleIngress(tracked, request('unknown.example.test'), {})?.status).toBe(404);
+	expect(handleIngress(tracked, request('admin.example.test'), {})).toBeUndefined();
 	const disabled = {
 		...snapshot,
 		configuration: {
@@ -152,6 +171,13 @@ test('does not record HEAD, fallback redirects, or visits when analytics is disa
 		handleIngress({ currentSnapshot: () => disabled, recordVisit }, request('go.example.test'), {})
 			?.status
 	).toBe(302);
+	expect(
+		handleIngress(
+			{ currentSnapshot: () => disabled, recordVisit },
+			request('go.example.test', '/missing'),
+			{}
+		)?.status
+	).toBe(404);
 	expect(recordVisit).not.toHaveBeenCalled();
 });
 

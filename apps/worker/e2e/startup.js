@@ -13,6 +13,7 @@ import { insertVisit, openDb, runMigrations } from '@goto/db';
 const visit = {
 	domain: 'go.example.test',
 	path: '/docs',
+	outcome: 'valid',
 	visited_at: Date.now(),
 	ip: '127.0.0.1',
 	user_agent: null,

@@ -1,9 +1,11 @@
-import { isSelfRedirect, type PreparedDomain } from '@goto/config';
+import { isSelfRedirect, type PreparedDomain, type PreparedLink } from '@goto/config';
+import type { VisitOutcome } from '@goto/db';
 import type { Immutable } from './snapshot.js';
 
 export interface ResolvedVisit {
 	domain: string;
 	path: string;
+	outcome: VisitOutcome;
 	visitedAt: number;
 }
 
@@ -12,7 +14,17 @@ export interface RedirectResult {
 	visit?: ResolvedVisit;
 }
 
-function parseTarget(target: string): { path: string; query: string } | undefined {
+interface ParsedTarget {
+	path: string;
+	query: string;
+}
+
+interface ResolvedResponse {
+	response: Response;
+	outcome: VisitOutcome;
+}
+
+function parseTarget(target: string): ParsedTarget | undefined {
 	if (!target.startsWith('/') || target.includes('#') || target.includes('\\')) return undefined;
 	if (!target.isWellFormed()) return undefined;
 	for (let index = 0; index < target.length; index++) {
@@ -51,6 +63,61 @@ function serializeLocation(destination: string): string {
 	return destination;
 }
 
+function emptyResponse(status: number): Response {
+	return new Response(null, { status, headers: { 'cache-control': 'no-store' } });
+}
+
+function redirectResponse(destination: string, status: number): Response {
+	const location = serializeLocation(destination);
+	const headers = { 'cache-control': 'no-store', location };
+	return new Response(null, { status, headers });
+}
+
+function findActiveLink(
+	domain: Immutable<PreparedDomain>,
+	path: string,
+	now: number
+): Immutable<PreparedLink> | undefined {
+	const link = Object.hasOwn(domain.links, path) ? domain.links[path] : undefined;
+	if (!link || !link.enabled) return;
+	const started = link.valid_from === undefined || now >= Date.parse(link.valid_from);
+	const notExpired = link.valid_until === undefined || now < Date.parse(link.valid_until);
+	if (started && notExpired) return link;
+}
+
+function fallbackResponse(
+	fallback: PreparedDomain['fallback'],
+	host: string,
+	path: string
+): Response {
+	if (fallback === 404) return emptyResponse(404);
+	if (isSelfRedirect(fallback, host, path)) return emptyResponse(404);
+	return redirectResponse(fallback, 302);
+}
+
+function resolveVisitResponse(
+	domain: Immutable<PreparedDomain>,
+	host: string,
+	target: ParsedTarget,
+	now: number
+): ResolvedResponse {
+	const link = findActiveLink(domain, target.path, now);
+	if (!link) {
+		const response = fallbackResponse(domain.fallback, host, target.path);
+		return { response, outcome: 'invalid' };
+	}
+
+	let destination = link.url;
+	if (link.forward_query) destination = forwardQuery(link.url, target.query);
+	if (isSelfRedirect(destination, host, target.path)) {
+		const response = emptyResponse(404);
+		return { response, outcome: 'invalid' };
+	}
+
+	const response = redirectResponse(destination, link.status_code);
+	return { response, outcome: 'valid' };
+}
+
 export function resolveRedirect(
 	domain: Immutable<PreparedDomain>,
 	host: string,
@@ -58,35 +125,26 @@ export function resolveRedirect(
 	method: string,
 	now: number = Date.now()
 ): RedirectResult {
-	const headers = new Headers({ 'cache-control': 'no-store' });
 	if (method !== 'GET' && method !== 'HEAD') {
-		headers.set('allow', 'GET, HEAD');
-		return { response: new Response(null, { status: 405, headers }) };
+		const response = emptyResponse(405);
+		response.headers.set('allow', 'GET, HEAD');
+		return { response };
 	}
 
 	const parsed = parseTarget(target);
-	if (parsed === undefined) return { response: new Response(null, { status: 400, headers }) };
-
-	const link = Object.hasOwn(domain.links, parsed.path) ? domain.links[parsed.path] : undefined;
-	const active =
-		link !== undefined &&
-		link.enabled &&
-		(link.valid_from === undefined || now >= Date.parse(link.valid_from)) &&
-		(link.valid_until === undefined || now < Date.parse(link.valid_until));
-	let destination = domain.fallback;
-	let status = 302;
-	if (link !== undefined && active) {
-		destination = link.forward_query ? forwardQuery(link.url, parsed.query) : link.url;
-		status = link.status_code;
+	if (parsed === undefined) {
+		const response = emptyResponse(400);
+		return { response };
 	}
 
-	if (destination === 404 || isSelfRedirect(destination, host, parsed.path)) {
-		return { response: new Response(null, { status: 404, headers }) };
-	}
-	headers.set('location', serializeLocation(destination));
-	const response = new Response(null, { status, headers });
-	if (active && method === 'GET') {
-		return { response, visit: { domain: host, path: parsed.path, visitedAt: now } };
-	}
-	return { response };
+	const resolved = resolveVisitResponse(domain, host, parsed, now);
+	const response = resolved.response;
+	if (method === 'HEAD') return { response };
+	const visit: ResolvedVisit = {
+		domain: host,
+		path: parsed.path,
+		outcome: resolved.outcome,
+		visitedAt: now
+	};
+	return { response, visit };
 }

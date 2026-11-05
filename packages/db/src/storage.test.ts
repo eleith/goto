@@ -28,6 +28,7 @@ afterEach(async () => {
 const visit: ClassifiedVisit = {
 	domain: 'go.example.test',
 	path: '/café',
+	outcome: 'valid',
 	visited_at: 1_700_000_000_000,
 	ip: '2001:db8::1',
 	user_agent: 'Mozilla/5.0 (X11; Linux x86_64; rv:158.0) Gecko/20100101 Firefox/158.0',
@@ -52,7 +53,8 @@ test('opens a real WAL database and applies versioned migrations once', async ()
 			'0001_visits',
 			'0002_visit_classification',
 			'0003_visit_retention',
-			'0004_remove_visit_collection'
+			'0004_remove_visit_collection',
+			'0005_visit_outcome'
 		]);
 		const tables = await db.introspection.getTables();
 		const names = tables.map((table) => table.name);
@@ -63,7 +65,7 @@ test('opens a real WAL database and applies versioned migrations once', async ()
 	}
 });
 
-test('persists classified visits for the same logical path on different domains', async () => {
+test('persists request-time outcomes for the same logical path on different domains', async () => {
 	const path = join(directory, 'visits.sqlite');
 	const writer = await openDb(path);
 	const ids: number[] = [];
@@ -74,6 +76,7 @@ test('persists classified visits for the same logical path on different domains'
 			await insertVisit(writer, {
 				...visit,
 				domain: 'tiny.example.test',
+				outcome: 'invalid',
 				user_agent: null,
 				accept_language: null,
 				browser: 'Other',
@@ -91,6 +94,7 @@ test('persists classified visits for the same logical path on different domains'
 			{
 				...visit,
 				domain: 'tiny.example.test',
+				outcome: 'invalid',
 				id: ids[1],
 				user_agent: null,
 				accept_language: null,
@@ -104,7 +108,7 @@ test('persists classified visits for the same logical path on different domains'
 	}
 });
 
-test('adds classification columns without changing existing visit data', async () => {
+test('adds request-time labels without changing existing visit data', async () => {
 	const db = await openDb(join(directory, 'legacy.sqlite'));
 	try {
 		const migrator = new Migrator({
@@ -125,7 +129,8 @@ test('adds classification columns without changing existing visit data', async (
 		expect(await runMigrations(db)).toEqual([
 			'0002_visit_classification',
 			'0003_visit_retention',
-			'0004_remove_visit_collection'
+			'0004_remove_visit_collection',
+			'0005_visit_outcome'
 		]);
 		expect(await db.selectFrom('visits').selectAll().executeTakeFirstOrThrow()).toEqual({
 			...visit,
@@ -162,7 +167,8 @@ test('a failed migration rolls back schema and bookkeeping so startup can retry'
 			'0001_visits',
 			'0002_visit_classification',
 			'0003_visit_retention',
-			'0004_remove_visit_collection'
+			'0004_remove_visit_collection',
+			'0005_visit_outcome'
 		]);
 		expect(await runMigrations(db)).toEqual([]);
 	} finally {
