@@ -270,6 +270,17 @@
 							"pattern": "(?:^|[^$])(?:\\$\\$)*\\$\\{[A-Z_][A-Z0-9_]*(?::-[^}]*)?\\}"
 						}
 					]
+				},
+				"worker_path": {
+					"default": "./data/worker.sqlite",
+					"type": "string",
+					"anyOf": [
+						{ "type": "string", "pattern": "\\S", "minLength": 1 },
+						{
+							"type": "string",
+							"pattern": "(?:^|[^$])(?:\\$\\$)*\\$\\{[A-Z_][A-Z0-9_]*(?::-[^}]*)?\\}"
+						}
+					]
 				}
 			}
 		},

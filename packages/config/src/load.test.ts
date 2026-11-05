@@ -22,7 +22,7 @@ describe('configuration loading', () => {
 		expect(configuration).toMatchObject({
 			version: 1,
 			site: { url: 'http://localhost:3000', title: 'Goto' },
-			database: { path: './data/goto.sqlite' },
+			database: { path: './data/goto.sqlite', worker_path: './data/worker.sqlite' },
 			analytics: { enabled: true, retention_days: 90 },
 			defaults: { status_code: 302, forward_query: false, fallback: 404 }
 		});
@@ -246,7 +246,10 @@ describe('configuration loading', () => {
 				join(configDirectory, 'custom.yaml'),
 				JSON.stringify({
 					...configurationInput(),
-					database: { path: './data/custom.sqlite' }
+					database: {
+						path: './data/custom.sqlite',
+						worker_path: './data/custom-worker.sqlite'
+					}
 				})
 			);
 			const loaded = await loadConfigFile(undefined, {
@@ -254,6 +257,9 @@ describe('configuration loading', () => {
 				env: { CONFIG_PATH: 'deployment/config/custom.yaml' }
 			});
 			expect(loaded.configuration.database.path).toBe(join(root, 'deployment/data/custom.sqlite'));
+			expect(loaded.configuration.database.worker_path).toBe(
+				join(root, 'deployment/data/custom-worker.sqlite')
+			);
 			const explicit = await loadConfigFile('deployment/config/custom.yaml', {
 				cwd: root,
 				env: { CONFIG_PATH: 'missing.yaml' }

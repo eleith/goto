@@ -178,7 +178,8 @@ const AuthSchema = Type.Union(
 
 const DatabaseSchema = Type.Object(
 	{
-		path: Type.String({ ...nonBlankText, default: './data/goto.sqlite' })
+		path: Type.String({ ...nonBlankText, default: './data/goto.sqlite' }),
+		worker_path: Type.String({ ...nonBlankText, default: './data/worker.sqlite' })
 	},
 	{ $id: 'Database', additionalProperties: false }
 );

@@ -18,6 +18,7 @@ auth:
 
 database:
   path: ./data/goto.sqlite
+  worker_path: ./data/worker.sqlite
 
 analytics:
   enabled: true

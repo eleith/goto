@@ -2,7 +2,7 @@
 	"$schema": "https://unpkg.com/@changesets/config/schema.json",
 	"changelog": "@changesets/cli/changelog",
 	"commit": false,
-	"fixed": [["@goto/web", "@goto/cli"]],
+	"fixed": [["@goto/web", "@goto/cli", "@goto/worker"]],
 	"linked": [],
 	"access": "restricted",
 	"baseBranch": "main",

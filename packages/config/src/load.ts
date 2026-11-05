@@ -23,10 +23,10 @@ export async function loadConfigFile(
 		throw new ConfigError();
 	}
 	const prepared = parseConfig(source, options);
-	prepared.configuration.database.path = resolve(
-		resolveDeploymentRoot(configPath),
-		prepared.configuration.database.path
-	);
+	const deploymentRoot = resolveDeploymentRoot(configPath);
+	const database = prepared.configuration.database;
+	database.path = resolve(deploymentRoot, database.path);
+	database.worker_path = resolve(deploymentRoot, database.worker_path);
 	return prepared;
 }
 
