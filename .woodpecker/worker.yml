@@ -13,6 +13,7 @@ when:
         - .woodpecker/**
         - apps/worker/**
         - packages/config/**
+        - packages/db/**
         - tools/**
   - event: pull_request
     path:
@@ -23,6 +24,7 @@ when:
         - .woodpecker/**
         - apps/worker/**
         - packages/config/**
+        - packages/db/**
         - tools/**
   - event: tag
     ref: 'refs/tags/@goto/worker@*'
@@ -48,6 +50,8 @@ steps:
     commands:
       - npm install --global corepack@0.36.0
       - corepack enable
+      - pnpm --filter @goto/db check
+      - pnpm --filter @goto/db lint
       - pnpm --filter @goto/worker check
       - pnpm --filter @goto/worker lint
 
@@ -58,6 +62,7 @@ steps:
     commands:
       - npm install --global corepack@0.36.0
       - corepack enable
+      - pnpm --filter @goto/db test:coverage
       - pnpm --filter @goto/worker test:coverage
       - pnpm --filter @goto/worker test:smoke
 

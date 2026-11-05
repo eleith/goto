@@ -1,6 +1,9 @@
 import { startConfigReloading, type PreparedConfiguration } from '@goto/config';
 import { logger } from './logger.js';
 import type { ShutdownResources } from './lifecycle.js';
+import type { OpenWorkflow } from 'openworkflow';
+import type { WorkerContext } from './context.js';
+import { configureRetention, requestRetention } from './retention.js';
 
 interface ConfigurationSource {
 	path: string;
@@ -8,15 +11,36 @@ interface ConfigurationSource {
 	load(path: string): Promise<PreparedConfiguration>;
 }
 
-export function applyConfig(
+export async function applyConfig(
 	next: PreparedConfiguration,
 	previous: PreparedConfiguration,
-	onRestart: () => void
-): boolean {
-	if (next.configuration.database.worker_path !== previous.configuration.database.worker_path) {
+	onRestart: () => void,
+	context: WorkerContext,
+	engine: OpenWorkflow
+): Promise<boolean> {
+	const nextDatabase = next.configuration.database;
+	const previousDatabase = previous.configuration.database;
+	if (
+		nextDatabase.worker_path !== previousDatabase.worker_path ||
+		nextDatabase.path !== previousDatabase.path
+	) {
 		logger.warn('Worker configuration change requires restart');
 		onRestart();
 		return false;
+	}
+	const currentMonths = context.config.analytics.retention_months;
+	context.config = next.configuration;
+	const months = next.configuration.analytics.retention_months;
+	const previousMonths = previous.configuration.analytics.retention_months;
+	try {
+		if (months !== previousMonths || months !== currentMonths) {
+			await configureRetention(context, engine);
+			await requestRetention(context, engine);
+		}
+	} catch (error) {
+		logger.error('Unable to apply worker retention policy; stopping service');
+		onRestart();
+		throw error;
 	}
 	logger.info('Worker configuration reloaded');
 	return true;
@@ -25,7 +49,9 @@ export function applyConfig(
 export async function watchConfiguration(
 	source: ConfigurationSource,
 	resources: ShutdownResources,
-	shutdown: () => Promise<void>
+	shutdown: () => Promise<void>,
+	context: WorkerContext,
+	engine: OpenWorkflow
 ): Promise<void> {
 	let watchOwned = false;
 	let restartRequested = false;
@@ -42,9 +68,9 @@ export async function watchConfiguration(
 	}
 	resources.stopWatch = await startConfigReloading({
 		...source,
-		onChange: (next, previous) => applyConfig(next, previous, requestRestart),
+		onChange: (next, previous) => applyConfig(next, previous, requestRestart, context, engine),
 		onError: () =>
-			logger.error('Invalid worker configuration update; keeping current configuration')
+			logger.error('Unable to apply worker configuration update; keeping current configuration')
 	});
 	watchOwned = true;
 	if (restartRequested) shutdownForRestart();

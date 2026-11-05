@@ -15,10 +15,11 @@
 		"format": "prettier --ignore-path ../../.prettierignore --write .",
 		"test": "vitest run",
 		"test:coverage": "vitest run --coverage",
-		"test:smoke": "node e2e/startup.mjs"
+		"test:smoke": "node e2e/startup.js"
 	},
 	"dependencies": {
 		"@goto/config": "workspace:*",
+		"@goto/db": "workspace:*",
 		"openworkflow": "catalog:",
 		"tslog": "catalog:"
 	},

@@ -7,6 +7,52 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
+import { setTimeout as delay } from 'node:timers/promises';
+import { insertVisit, openDb, runMigrations } from '@goto/db';
+
+const visit = {
+	domain: 'go.example.test',
+	path: '/docs',
+	visited_at: Date.now(),
+	ip: '127.0.0.1',
+	user_agent: null,
+	accept_language: null,
+	browser: 'Other',
+	os: 'Other'
+};
+
+async function seedHistory(directory) {
+	const db = await openDb(join(directory, 'data/goto.sqlite'));
+	try {
+		await runMigrations(db);
+		await insertVisit(db, { ...visit, visited_at: Date.UTC(2020, 0, 1) });
+		await insertVisit(db, visit);
+	} finally {
+		await db.destroy();
+	}
+}
+
+function visitState(directory) {
+	const db = new DatabaseSync(join(directory, 'data/goto.sqlite'), { readOnly: true });
+	try {
+		return {
+			count: db.prepare('SELECT count(*) AS count FROM visits').get().count,
+			collectAfter: db.prepare('SELECT collect_after FROM visit_collection WHERE id = 1').get()
+				.collect_after
+		};
+	} finally {
+		db.close();
+	}
+}
+
+async function saveConfiguration(path, configuration) {
+	await writeFile(`${path}.next`, JSON.stringify(configuration));
+	await rename(`${path}.next`, path);
+}
+
+async function waitUntil(check, signal) {
+	while (!check()) await delay(25, undefined, { signal });
+}
 
 async function checkStartup(mode, port = 0) {
 	const directory = await mkdtemp(join(tmpdir(), 'goto-worker-startup-'));
@@ -24,9 +70,11 @@ async function checkStartup(mode, port = 0) {
 			JSON.stringify({
 				site: { url: 'http://admin.example.test' },
 				auth: { credentials: { username: 'smoke', password: 'private-worker-smoke-password' } },
+				analytics: { retention_months: mode === 'retention-change' ? 3 : 0 },
 				domains: {}
 			})
 		);
+		if (mode === 'retention-change') await seedHistory(directory);
 		const source = mode === 'source';
 		const entry = new URL(source ? '../src/index.ts' : '../dist/index.js', import.meta.url);
 		const register = fileURLToPath(new URL('../../../tools/register.mjs', import.meta.url));
@@ -93,15 +141,16 @@ async function checkStartup(mode, port = 0) {
 			});
 			assert.equal(response.status, 200);
 			assert.deepEqual(await response.json(), { status: 'ok' });
-			assert(!existsSync(join(directory, 'data/goto.sqlite')), 'Visit database was opened');
+			const visits = visitState(directory);
+			assert.equal(visits.count, mode === 'retention-change' ? 1 : 0);
+			if (mode !== 'retention-change') assert.equal(visits.collectAfter, null);
 			const database = new DatabaseSync(join(directory, 'data/worker.sqlite'), {
 				readOnly: true
 			});
 			try {
-				assert.equal(
-					database.prepare('SELECT count(*) AS count FROM workflow_runs').get().count,
-					0
-				);
+				const runs = database.prepare('SELECT count(*) AS count FROM workflow_runs').get().count;
+				if (mode === 'retention-change') assert(runs >= 1);
+				else assert.equal(runs, 0);
 			} finally {
 				database.close();
 			}
@@ -109,8 +158,23 @@ async function checkStartup(mode, port = 0) {
 				const path = join(directory, 'config/goto.yaml');
 				const configuration = JSON.parse(await readFile(path, 'utf8'));
 				configuration.database = { worker_path: './data/restarted-worker.sqlite' };
-				await writeFile(`${path}.next`, JSON.stringify(configuration));
-				await rename(`${path}.next`, path);
+				await saveConfiguration(path, configuration);
+			} else if (mode === 'retention-change') {
+				const stopped = new AbortController();
+				void finished.then(
+					() => stopped.abort(),
+					() => stopped.abort()
+				);
+				const path = join(directory, 'config/goto.yaml');
+				const configuration = JSON.parse(await readFile(path, 'utf8'));
+				configuration.analytics.retention_months = 0;
+				await saveConfiguration(path, configuration);
+				await waitUntil(() => visitState(directory).count === 0, stopped.signal);
+				assert.equal(visitState(directory).collectAfter, null);
+				configuration.analytics.retention_months = 9;
+				await saveConfiguration(path, configuration);
+				await waitUntil(() => visitState(directory).collectAfter !== null, stopped.signal);
+				child.kill('SIGTERM');
 			} else {
 				child.kill('SIGTERM');
 			}
@@ -137,6 +201,7 @@ async function checkStartup(mode, port = 0) {
 await checkStartup('compiled');
 await checkStartup('source');
 await checkStartup('storage-change');
+await checkStartup('retention-change');
 const occupied = createServer();
 await new Promise((resolve, reject) => {
 	occupied.once('error', reject);
@@ -150,5 +215,5 @@ try {
 	await new Promise((resolve) => occupied.close(resolve));
 }
 console.log(
-	'Compiled/source startup, config restart, empty queue, health, partial-startup cleanup, and shutdown passed'
+	'Compiled/source startup, config restart, idle zero policy, live retention, health, partial-startup cleanup, and shutdown passed'
 );

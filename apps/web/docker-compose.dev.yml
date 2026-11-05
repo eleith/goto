@@ -63,6 +63,7 @@ services:
       - ./data:/m/apps/worker/data
       - ../worker/src:/m/apps/worker/src:ro
       - ../../packages/config/src:/m/packages/config/src:ro
+      - ../../packages/db/src:/m/packages/db/src:ro
     restart: unless-stopped
     healthcheck:
       test:

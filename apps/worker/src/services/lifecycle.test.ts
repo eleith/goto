@@ -5,19 +5,26 @@ test('shutdown is idempotent and waits for the worker before closing its backend
 	const workerStopped = Promise.withResolvers<void>();
 	const workflowWorker = { stop: vi.fn(() => workerStopped.promise) };
 	const backend = { stop: vi.fn(async () => {}) };
-	const stopWatch = vi.fn();
-	const stop = createShutdown({ workflowWorker, backend, stopWatch });
+	const db = { destroy: vi.fn(async () => {}) };
+	const monitorStopped = Promise.withResolvers<void>();
+	const stopWatch = vi.fn(() => monitorStopped.promise);
+	const stop = createShutdown({ workflowWorker, backend, stopWatch, db });
 	const stopping = stop();
 	expect(stop()).toBe(stopping);
-	expect(workflowWorker.stop).toHaveBeenCalledOnce();
+	expect(workflowWorker.stop).not.toHaveBeenCalled();
 	expect(stopWatch).toHaveBeenCalledOnce();
+	monitorStopped.resolve();
+	await Promise.resolve();
+	expect(workflowWorker.stop).toHaveBeenCalledOnce();
 	expect(stopWatch.mock.invocationCallOrder[0]).toBeLessThan(
 		workflowWorker.stop.mock.invocationCallOrder[0]!
 	);
 	expect(backend.stop).not.toHaveBeenCalled();
+	expect(db.destroy).not.toHaveBeenCalled();
 	workerStopped.resolve();
 	await stopping;
 	expect(backend.stop).toHaveBeenCalledOnce();
+	expect(db.destroy).toHaveBeenCalledOnce();
 });
 
 test('a failed monitor stop still stops the worker and closes the backend', async () => {
@@ -34,7 +41,7 @@ test('a failed monitor stop still stops the worker and closes the backend', asyn
 	expect(backend.stop).toHaveBeenCalledOnce();
 });
 
-test('a failed worker stop still closes the workflow backend', async () => {
+test('a failed worker stop still closes both databases', async () => {
 	const failure = new Error('Worker stop failed');
 	const workflowWorker = {
 		stop: vi.fn(async () => {
@@ -42,8 +49,10 @@ test('a failed worker stop still closes the workflow backend', async () => {
 		})
 	};
 	const backend = { stop: vi.fn(async () => {}) };
-	const stop = createShutdown({ workflowWorker, backend });
+	const db = { destroy: vi.fn(async () => {}) };
+	const stop = createShutdown({ workflowWorker, backend, db });
 
 	await expect(stop()).rejects.toBe(failure);
 	expect(backend.stop).toHaveBeenCalledOnce();
+	expect(db.destroy).toHaveBeenCalledOnce();
 });
