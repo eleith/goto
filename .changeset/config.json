@@ -7,7 +7,7 @@
 	"access": "restricted",
 	"baseBranch": "main",
 	"updateInternalDependencies": "patch",
-	"ignore": ["@goto/config", "@goto/db"],
+	"ignore": ["@goto/analytics", "@goto/config", "@goto/db"],
 	"privatePackages": {
 		"version": true,
 		"tag": true
