@@ -12,6 +12,9 @@ when:
         - .github/workflows/**
         - .woodpecker/**
         - packages/db/**
+        - packages/config/**
+        - scripts/**
+        - tools/**
   - event: pull_request
     branch: main
     path:
@@ -21,6 +24,9 @@ when:
         - .github/workflows/**
         - .woodpecker/**
         - packages/db/**
+        - packages/config/**
+        - scripts/**
+        - tools/**
 
 steps:
   prepare:
@@ -52,6 +58,8 @@ steps:
       - corepack enable
       - pnpm --filter @goto/db check
       - pnpm --filter @goto/db lint
+      - pnpm exec prettier --check scripts
+      - pnpm exec eslint scripts
 
   test:
     image: node:26.5.0-bookworm
@@ -61,3 +69,4 @@ steps:
       - npm install --global corepack@0.36.0
       - corepack enable
       - pnpm --filter @goto/db test:coverage
+      - pnpm test:scripts

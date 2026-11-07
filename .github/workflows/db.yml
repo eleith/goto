@@ -9,6 +9,9 @@ on:
       - .github/workflows/**
       - .woodpecker/**
       - packages/db/**
+      - packages/config/**
+      - scripts/**
+      - tools/**
   pull_request:
     branches: [main]
     paths:
@@ -17,6 +20,9 @@ on:
       - .github/workflows/**
       - .woodpecker/**
       - packages/db/**
+      - packages/config/**
+      - scripts/**
+      - tools/**
 
 permissions:
   contents: read
@@ -48,3 +54,8 @@ jobs:
         run: pnpm --filter @goto/db lint
       - name: Unit tests
         run: pnpm --filter @goto/db test:coverage
+      - name: Development script checks
+        run: |
+          pnpm exec prettier --check scripts
+          pnpm exec eslint scripts
+          pnpm test:scripts
