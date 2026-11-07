@@ -9,7 +9,12 @@
 			"development": "./src/index.ts",
 			"import": "./dist/index.js"
 		},
-		"./visit-worker": "./dist/visit-worker.js"
+		"./visit-worker": "./dist/visit-worker.js",
+		"./visit-reports": {
+			"development": "./src/visit-reports/index.ts",
+			"types": "./dist/visit-reports/index.d.ts",
+			"import": "./dist/visit-reports/index.js"
+		}
 	},
 	"files": [
 		"dist"

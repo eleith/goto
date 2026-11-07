@@ -15,8 +15,14 @@ export interface VisitTable {
 	os: string;
 }
 
+export interface VisitReportTable {
+	key: string;
+	data: string;
+}
+
 export interface Database {
 	visits: VisitTable;
+	visit_reports: VisitReportTable;
 }
 
 export type ClassifiedVisit = Omit<Insertable<VisitTable>, 'id'>;

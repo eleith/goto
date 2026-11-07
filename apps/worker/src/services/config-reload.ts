@@ -1,9 +1,10 @@
 import { startConfigReloading, type PreparedConfiguration } from '@goto/config';
+import { isDeepStrictEqual } from 'node:util';
 import { logger } from './logger.js';
 import type { ShutdownResources } from './lifecycle.js';
 import type { OpenWorkflow } from 'openworkflow';
 import type { WorkerContext } from './context.js';
-import { requestRetention } from './retention.js';
+import { requestReportRefresh } from './report-schedule.js';
 
 interface ConfigurationSource {
 	path: string;
@@ -40,9 +41,11 @@ export async function applyConfig(
 	}
 	const currentMonths = context.config.analytics.retention_months;
 	context.config = next.configuration;
+	context.domains = next.domains;
 	try {
-		if (months !== previousMonths || months !== currentMonths) {
-			await requestRetention(context, engine);
+		const inventoryChanged = !isDeepStrictEqual(next.domains, previous.domains);
+		if (months !== previousMonths || months !== currentMonths || inventoryChanged) {
+			await requestReportRefresh(context, engine);
 		}
 	} catch (error) {
 		logger.error('Unable to apply worker retention policy; stopping service');

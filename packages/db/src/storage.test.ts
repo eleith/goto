@@ -54,7 +54,8 @@ test('opens a real WAL database and applies versioned migrations once', async ()
 			'0002_visit_classification',
 			'0003_visit_retention',
 			'0004_remove_visit_collection',
-			'0005_visit_outcome'
+			'0005_visit_outcome',
+			'0006_visit_reports'
 		]);
 		const tables = await db.introspection.getTables();
 		const names = tables.map((table) => table.name);
@@ -130,7 +131,8 @@ test('adds request-time labels without changing existing visit data', async () =
 			'0002_visit_classification',
 			'0003_visit_retention',
 			'0004_remove_visit_collection',
-			'0005_visit_outcome'
+			'0005_visit_outcome',
+			'0006_visit_reports'
 		]);
 		expect(await db.selectFrom('visits').selectAll().executeTakeFirstOrThrow()).toEqual({
 			...visit,
@@ -168,7 +170,8 @@ test('a failed migration rolls back schema and bookkeeping so startup can retry'
 			'0002_visit_classification',
 			'0003_visit_retention',
 			'0004_remove_visit_collection',
-			'0005_visit_outcome'
+			'0005_visit_outcome',
+			'0006_visit_reports'
 		]);
 		expect(await runMigrations(db)).toEqual([]);
 	} finally {

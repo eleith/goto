@@ -11,8 +11,8 @@ import { createShutdown, type ShutdownResources } from './lifecycle.js';
 import { watchConfiguration } from './config-reload.js';
 import { logger } from './logger.js';
 import type { WorkerContext } from './context.js';
-import { configureRetentionSchedule, requestRetention } from './retention.js';
-import { registerRetentionWorkflow } from '../workflows/retain-visits.js';
+import { configureReportSchedule, requestReportRefresh } from './report-schedule.js';
+import { registerReportWorkflow } from '../workflows/refresh-visit-reports.js';
 
 export interface WorkerService {
 	port: number;
@@ -44,7 +44,11 @@ export async function startWorkerService(
 	const stop = createShutdown(resources);
 	try {
 		const db = await openVisitDatabase(visitDatabasePath, resources);
-		const context: WorkerContext = { config: prepared.configuration, db };
+		const context: WorkerContext = {
+			config: prepared.configuration,
+			domains: prepared.domains,
+			db
+		};
 		const engine = await startWorkflowWorker(databasePath, context, resources);
 		const host = captured.env.HOST ?? '0.0.0.0';
 		const healthPort = await startHealthServer(host, port, resources);
@@ -79,12 +83,12 @@ async function startWorkflowWorker(
 	resources.backend = backend;
 	const engineLogger = createEngineLogger(logger);
 	const engine = new OpenWorkflow({ backend, logger: engineLogger });
-	registerRetentionWorkflow(engine, context);
-	await configureRetentionSchedule(context, engine);
+	registerReportWorkflow(engine, context);
+	await configureReportSchedule(context, engine);
 	const workflowWorker = engine.newWorker({ concurrency: 1 });
 	resources.workflowWorker = workflowWorker;
 	await workflowWorker.start();
-	await requestRetention(context, engine);
+	await requestReportRefresh(context, engine);
 	logger.info('Workflow worker started');
 	return engine;
 }
