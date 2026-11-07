@@ -2,7 +2,7 @@
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { authClient } from '#lib/auth-client.js';
-	import ThemeToggle from './ThemeToggle.svelte';
+	import ThemeToggle from '../ThemeToggle.svelte';
 
 	let { title }: { title: string } = $props();
 
@@ -49,7 +49,8 @@
 <header class="admin-nav">
 	<div class="nav-container">
 		<nav aria-label="Administration">
-			<a href="/admin" aria-current="page">{title}</a>
+			<a href="/admin" aria-current={page.url.pathname === '/admin' ? 'page' : undefined}>{title}</a
+			>
 		</nav>
 		<div class="nav-actions">
 			<ThemeToggle />

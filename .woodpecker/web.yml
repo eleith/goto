@@ -13,6 +13,7 @@ when:
         - .github/workflows/**
         - .woodpecker/**
         - apps/web/**
+        - apps/worker/**
         - packages/**
   - event: pull_request
     path:
@@ -23,6 +24,7 @@ when:
         - .github/workflows/**
         - .woodpecker/**
         - apps/web/**
+        - apps/worker/**
         - packages/**
   - event: tag
     ref: 'refs/tags/@goto/web@*'

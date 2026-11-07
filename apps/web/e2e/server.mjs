@@ -1,11 +1,12 @@
 import { mkdir, writeFile } from 'node:fs/promises';
+import { fork } from 'node:child_process';
+import { insertVisit, openDb, runMigrations } from '@goto/db';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const directory = process.env.GOTO_E2E_BUILD_DIR;
 if (!directory) throw new Error('Missing E2E build directory');
-
 const runtimeDirectory = join(directory, `runtime-${process.pid}`);
 await mkdir(join(runtimeDirectory, 'config'), { recursive: true });
 process.chdir(runtimeDirectory);
@@ -22,27 +23,86 @@ await new Promise((resolve, reject) =>
 	reservation.close((error) => (error ? reject(error) : resolve()))
 );
 process.env.PORT = String(address.port);
-await writeFile(
-	join(runtimeDirectory, 'config/goto.yaml'),
-	JSON.stringify({
-		site: { url: `http://localhost:${address.port}` },
-		auth: { credentials: { username: 'example', password: 'e2e-only-password' } },
-		domains: {
-			'go.example.org': {
-				links: {
-					'/schema.json': { url: 'https://example.org/public-schema' },
-					'/_app/version.json': { url: 'https://example.org/public-asset' },
-					'/a/b': { url: 'https://example.org/decoded' },
-					'/a%2Fb': { url: 'https://example.org/literal-percent' },
-					'/docs': { url: 'https://example.org/first-domain' },
-					'/healthz': { url: 'https://example.org/public-health' }
-				}
-			},
-			'tiny.example.org': {
-				links: { '/docs': { url: 'https://example.org/second-domain' } }
+const configuration = {
+	site: { url: `http://localhost:${address.port}` },
+	auth: { credentials: { username: 'example', password: 'e2e-only-password' } },
+	domains: {
+		'go.example.org': {
+			links: {
+				'/schema.json': { url: 'https://example.org/public-schema' },
+				'/_app/version.json': { url: 'https://example.org/public-asset' },
+				'/a/b': { url: 'https://example.org/decoded' },
+				'/a%2Fb': { url: 'https://example.org/literal-percent' },
+				'/docs': { url: 'https://example.org/first-domain' },
+				'/healthz': { url: 'https://example.org/public-health' }
 			}
-		}
-	})
-);
-
+		},
+		'tiny.example.org': { links: { '/docs': { url: 'https://example.org/second-domain' } } }
+	}
+};
+await writeFile(join(runtimeDirectory, 'config/goto.yaml'), JSON.stringify(configuration));
+if (process.env.GOTO_E2E_WORKER === '1') {
+	await seedVisits();
+	await startWorker();
+}
 await import(pathToFileURL(join(directory, 'server.js')).href);
+
+async function seedVisits() {
+	const db = await openDb(join(runtimeDirectory, 'data/goto.sqlite'));
+	try {
+		await runMigrations(db);
+		const common = {
+			visited_at: Date.now() - 1000,
+			ip: '203.0.113.1',
+			user_agent: null,
+			accept_language: null,
+			browser: 'Other',
+			os: 'Other'
+		};
+		const visits = [
+			{ domain: 'go.example.org', path: '/docs', outcome: 'valid' },
+			{ domain: 'go.example.org', path: '/a/b', outcome: 'invalid' },
+			{ domain: 'go.example.org', path: '/', outcome: 'invalid' },
+			{ domain: 'go.example.org', path: '/a%2Fb', outcome: 'valid' },
+			{ domain: 'tiny.example.org', path: '/docs', outcome: 'valid' }
+		];
+		for (const visit of visits) await insertVisit(db, { ...common, ...visit });
+	} finally {
+		await db.destroy();
+	}
+}
+
+async function startWorker() {
+	const worker = fork(new URL('../../worker/dist/index.js', import.meta.url), [], {
+		cwd: runtimeDirectory,
+		env: { ...process.env, HOST: '127.0.0.1', PORT: '0', SHUTDOWN_TIMEOUT: '5' },
+		execArgv: [],
+		stdio: ['ignore', 'inherit', 'inherit', 'ipc']
+	});
+	process.on('SIGTERM', () => worker.kill('SIGTERM'));
+	process.on('SIGINT', () => worker.kill('SIGTERM'));
+	process.on('disconnect', () => worker.kill('SIGTERM'));
+	process.once('exit', () => worker.kill('SIGKILL'));
+	worker.once('exit', (code, signal) => {
+		if (code !== 0 || signal !== null) process.exitCode = 1;
+	});
+	const ready = await new Promise((resolve, reject) => {
+		const timer = setTimeout(() => {
+			worker.kill('SIGKILL');
+			reject(new Error('E2E worker startup timed out'));
+		}, 15_000);
+		worker.once('message', (message) => {
+			clearTimeout(timer);
+			resolve(message);
+		});
+		worker.once('error', (error) => {
+			clearTimeout(timer);
+			reject(error);
+		});
+		worker.once('exit', () => {
+			clearTimeout(timer);
+			reject(new Error('E2E worker exited before readiness'));
+		});
+	});
+	if (ready.type !== 'ready') throw new Error('Invalid worker readiness');
+}

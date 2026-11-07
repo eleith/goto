@@ -53,13 +53,17 @@ async function stopServer(child: ChildProcess): Promise<void> {
 	}
 }
 
-export const test = base.extend<{ appServer: AppServer }>({
-	// eslint-disable-next-line no-empty-pattern -- Playwright discovers dependencies by destructuring.
-	appServer: async ({}, use, testInfo) => {
+export const test = base.extend<{ appServer: AppServer; withWorker: boolean }>({
+	withWorker: [false, { option: true }],
+	appServer: async ({ withWorker }, use, testInfo) => {
 		const directory = process.env.GOTO_E2E_BUILD_DIR;
 		if (!directory) throw new Error('Missing E2E build directory');
 		const child = fork(new URL('../server.mjs', import.meta.url), [], {
-			env: { ...serverEnvironment(), GOTO_E2E_BUILD_DIR: directory },
+			env: {
+				...serverEnvironment(),
+				GOTO_E2E_BUILD_DIR: directory,
+				GOTO_E2E_WORKER: withWorker ? '1' : '0'
+			},
 			execArgv: [],
 			stdio: ['ignore', 'pipe', 'pipe', 'ipc']
 		});

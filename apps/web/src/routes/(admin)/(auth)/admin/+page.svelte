@@ -1,127 +1,42 @@
 <script lang="ts">
-	import AdminNav from '#lib/components/AdminNav.svelte';
+	import AdminPage from '#lib/components/admin/AdminPage.svelte';
+	import StatCard from '#lib/components/admin/StatCard.svelte';
+	import ReportNotice from '#lib/components/admin/ReportNotice.svelte';
+	import { formatCount, formatRetention } from '#lib/components/admin/format.js';
 	import type { PageData } from './$types';
-
 	let { data }: { data: PageData } = $props();
 </script>
 
-<svelte:head>
-	<title>Configured links — {data.title}</title>
-</svelte:head>
-
-<AdminNav title={data.title} />
-
-<main>
-	<header class="page-header">
-		<h1>Configured links</h1>
-		<p>Read-only. Edit the YAML configuration to change links.</p>
-	</header>
-
-	{#if data.domains.length === 0}
-		<p>No links configured.</p>
-	{:else}
-		{#each data.domains as group (group.domain)}
-			<section>
-				<h2>{group.domain}</h2>
-				<div class="table-scroll" role="region" aria-label={`Links on ${group.domain}`}>
-					<table>
-						<caption>Configured links on {group.domain}</caption>
-						<thead>
+<AdminPage siteTitle={data.title} title="Overview" updatedAt={data.asOf}>
+	<ReportNotice collectionEnabled={data.collectionEnabled} available={data.available} />
+	<div class="admin-cards admin-cards-summary">
+		<StatCard label="Domains" value={data.domainCount} />
+		<StatCard label="Links" value={data.linkCount} />
+		<StatCard label="Valid visits" value={data.totals?.valid ?? null} />
+		<StatCard label="Retention" value={formatRetention(data.retentionMonths)} />
+	</div>
+	<section>
+		<h2>Domains</h2>
+		{#if data.domains.length === 0}<p>No domains configured.</p>
+		{:else}
+			<div class="admin-table-scroll" role="region" aria-label="Domain inventory">
+				<table class="admin-table">
+					<thead
+						><tr
+							><th scope="col">Domain</th><th scope="col">Links</th><th scope="col">Visits</th></tr
+						></thead
+					>
+					<tbody>
+						{#each data.domains as row (row.domain)}
 							<tr>
-								<th scope="col">Path</th>
-								<th scope="col">Title</th>
-								<th scope="col">Destination</th>
-								<th scope="col">Enabled</th>
-								<th scope="col">HTTP status</th>
+								<th scope="row"><a class="admin-row-link" href={row.href}>{row.domain}</a></th>
+								<td>{formatCount(row.linkCount)}</td>
+								<td>{formatCount(row.counts?.valid ?? null)}</td>
 							</tr>
-						</thead>
-						<tbody>
-							{#each group.links as link (link.path)}
-								<tr>
-									<th scope="row"><code>{link.path}</code></th>
-									<td>{link.title}</td>
-									<td><a href={link.url}>{link.url}</a></td>
-									<td>{link.enabled ? 'Yes' : 'No'}</td>
-									<td>{link.status_code}</td>
-								</tr>
-							{/each}
-						</tbody>
-					</table>
-				</div>
-			</section>
-		{/each}
-	{/if}
-</main>
-
-<style>
-	main {
-		max-width: var(--content-admin-width);
-		margin-inline: auto;
-		padding: var(--space-8) var(--space-5);
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-8);
-	}
-
-	.page-header {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-4);
-	}
-
-	h1 {
-		font-size: var(--font-size-heading);
-		line-height: var(--line-height-heading);
-	}
-
-	h2 {
-		font-size: var(--font-size-base);
-		overflow-wrap: anywhere;
-		margin-bottom: var(--space-4);
-	}
-
-	.page-header p,
-	caption {
-		color: var(--color-text-muted);
-	}
-
-	.table-scroll {
-		overflow-x: auto;
-		border: var(--border-width) solid var(--color-border-subtle);
-		border-radius: var(--radius-card);
-		background: var(--color-surface-card);
-	}
-
-	.table-scroll:focus-visible {
-		outline: var(--outline-focus);
-		outline-offset: var(--space-1);
-	}
-
-	table {
-		width: 100%;
-		border-collapse: collapse;
-		font-size: var(--font-size-sm);
-	}
-
-	caption {
-		padding: var(--space-4);
-		text-align: start;
-	}
-
-	th,
-	td {
-		padding: var(--space-4);
-		text-align: start;
-		vertical-align: top;
-		border-top: var(--border-width) solid var(--color-border-subtle);
-		overflow-wrap: anywhere;
-	}
-
-	thead {
-		background: var(--color-surface-muted);
-	}
-
-	a {
-		color: var(--color-primary);
-	}
-</style>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+		{/if}
+	</section>
+</AdminPage>

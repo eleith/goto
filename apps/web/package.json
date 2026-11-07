@@ -21,7 +21,7 @@
 		"format": "prettier --ignore-path ../../.prettierignore --write .",
 		"test": "vitest run",
 		"test:coverage": "vitest run --coverage",
-		"test:e2e": "playwright test"
+		"test:e2e": "pnpm --filter @goto/worker... build && playwright test"
 	},
 	"dependencies": {
 		"@goto/config": "workspace:*",
