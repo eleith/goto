@@ -1,7 +1,7 @@
 import { error } from '@sveltejs/kit';
-import type { StoredVisitReports } from '@goto/db/visit-reports';
+import type { VisitSummary } from '@goto/analytics';
 import { currentLinkState } from '#lib/server/link-state.js';
-import { readVisitReport } from '#lib/server/visit-reports.js';
+import { readVisitSummary } from '#lib/server/visit-reports.js';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals, params }) => {
@@ -15,9 +15,13 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 	const link = prepared.links[path];
 	const configuration = snapshot.configuration;
 	const collectionEnabled = configuration.analytics.retention_months !== 0;
-	let reports: StoredVisitReports | null = null;
-	if (collectionEnabled) reports = await readVisitReport(configuration, domain, path);
+	let linkSummary: VisitSummary | null = null;
+	if (collectionEnabled) {
+		const scope = { kind: 'link' as const, domain, path };
+		linkSummary = await readVisitSummary(configuration, scope);
+	}
 	const state = link ? currentLinkState(link, Date.now()) : 'Fallback';
+	const asOf = linkSummary ? Date.parse(linkSummary.period.asOf) : null;
 
 	return {
 		domain,
@@ -28,9 +32,8 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 		state,
 		retentionMonths: configuration.analytics.retention_months,
 		collectionEnabled,
-		available: reports !== null,
-		since: reports?.period.since ?? null,
-		asOf: reports?.period.asOf ?? null,
-		totals: reports?.selection.totals ?? null
+		available: linkSummary !== null,
+		asOf,
+		totals: linkSummary?.totals ?? null
 	};
 };

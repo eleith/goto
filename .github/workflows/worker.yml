@@ -12,6 +12,7 @@ on:
       - apps/worker/**
       - packages/config/**
       - packages/db/**
+      - packages/analytics/**
       - tools/**
   pull_request:
     branches: [main]
@@ -23,6 +24,7 @@ on:
       - apps/worker/**
       - packages/config/**
       - packages/db/**
+      - packages/analytics/**
       - tools/**
 
 permissions:
@@ -55,6 +57,11 @@ jobs:
         run: pnpm --filter @goto/worker check
       - name: Lint worker
         run: pnpm --filter @goto/worker lint
+      - name: Check analytics dependency
+        run: |
+          pnpm --filter @goto/analytics check
+          pnpm --filter @goto/analytics lint
+          pnpm --filter @goto/analytics test:coverage
       - name: Check database dependency
         run: |
           pnpm --filter @goto/db check

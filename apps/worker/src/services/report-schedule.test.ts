@@ -1,8 +1,11 @@
+import { createVisitPeriod, encodeVisitReports } from '@goto/analytics';
 import { validateConfig } from '@goto/config';
 import { openDb, runMigrations } from '@goto/db';
+import { publishVisitReports } from '@goto/db/visit-reports';
 import type { OpenWorkflow } from 'openworkflow';
 import { expect, test, vi } from 'vitest';
 import type { WorkerContext } from './context.js';
+import { buildVisitReports } from './build-visit-reports.js';
 import { configureReportSchedule, requestReportRefresh } from './report-schedule.js';
 import { refreshVisitReports, reportSchedule } from '../workflows/specs.js';
 
@@ -46,7 +49,13 @@ test('zero pauses hourly scheduling and purges prepared output even if raw histo
 		expect(engine.schedules.pause).toHaveBeenCalledExactlyOnceWith(reportSchedule.id);
 		await requestReportRefresh(ctx, sdk);
 		expect(engine.runWorkflow).not.toHaveBeenCalled();
-		await ctx.db.insertInto('visit_reports').values({ key: 'old-output', data: '{}' }).execute();
+		const period = createVisitPeriod(3, Date.now());
+		const reports = buildVisitReports(
+			{ daily: [], browsers: [], operatingSystems: [] },
+			[],
+			period
+		);
+		await publishVisitReports(ctx.db, encodeVisitReports(reports));
 		await requestReportRefresh(ctx, sdk);
 		expect(engine.runWorkflow).toHaveBeenCalledExactlyOnceWith(refreshVisitReports, {});
 	} finally {

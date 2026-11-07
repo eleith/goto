@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { openDb, runMigrations, type ClassifiedVisit } from '../index.js';
 import { aggregateVisitReports } from './queries.js';
-import { visitReportKey, type ReportInventory } from './types.js';
+import type { ReportInventory } from './types.js';
 
 let db: Awaited<ReturnType<typeof openDb>>;
 
@@ -71,75 +71,228 @@ async function seedVisits(): Promise<void> {
 		.execute();
 }
 
-test('aggregates UTC days and stored families for overview, current domains and known paths', async () => {
+test('aggregates explicit UTC scope identities, outcomes and root subsets', async () => {
 	await seedVisits();
 	const result = await aggregateVisitReports(db, since, asOf, inventory);
-	const overview = visitReportKey();
-	const domainScope = visitReportKey(domain);
-	const docs = visitReportKey(domain, '/docs');
-	const root = visitReportKey(domain, '/');
-	const otherDomainScope = visitReportKey(otherDomain);
-	const otherDocs = visitReportKey(otherDomain, '/docs');
 
 	expect(result.daily).toHaveLength(8);
 	expect(result.daily).toEqual(
 		expect.arrayContaining([
-			{ scope: overview, day: '2026-01-31', total: 1, valid: 1, invalid: 0, base: 0 },
-			{ scope: overview, day: '2026-02-01', total: 5, valid: 1, invalid: 4, base: 3 },
-			{ scope: domainScope, day: '2026-01-31', total: 1, valid: 1, invalid: 0, base: 0 },
-			{ scope: domainScope, day: '2026-02-01', total: 3, valid: 1, invalid: 2, base: 2 },
-			{ scope: docs, day: '2026-01-31', total: 1, valid: 1, invalid: 0, base: 0 },
-			{ scope: root, day: '2026-02-01', total: 2, valid: 1, invalid: 1, base: 2 },
-			{ scope: otherDomainScope, day: '2026-02-01', total: 1, valid: 0, invalid: 1, base: 0 },
-			{ scope: otherDocs, day: '2026-02-01', total: 1, valid: 0, invalid: 1, base: 0 }
+			{
+				scopeKind: 'overview',
+				domain: null,
+				path: null,
+				day: '2026-01-31',
+				validVisits: 1,
+				invalidVisits: 0,
+				baseValidVisits: 0,
+				baseInvalidVisits: 0
+			},
+			{
+				scopeKind: 'overview',
+				domain: null,
+				path: null,
+				day: '2026-02-01',
+				validVisits: 1,
+				invalidVisits: 4,
+				baseValidVisits: 1,
+				baseInvalidVisits: 2
+			},
+			{
+				scopeKind: 'domain',
+				domain,
+				path: null,
+				day: '2026-01-31',
+				validVisits: 1,
+				invalidVisits: 0,
+				baseValidVisits: 0,
+				baseInvalidVisits: 0
+			},
+			{
+				scopeKind: 'domain',
+				domain,
+				path: null,
+				day: '2026-02-01',
+				validVisits: 1,
+				invalidVisits: 2,
+				baseValidVisits: 1,
+				baseInvalidVisits: 1
+			},
+			{
+				scopeKind: 'link',
+				domain,
+				path: '/docs',
+				day: '2026-01-31',
+				validVisits: 1,
+				invalidVisits: 0,
+				baseValidVisits: 0,
+				baseInvalidVisits: 0
+			},
+			{
+				scopeKind: 'link',
+				domain,
+				path: '/',
+				day: '2026-02-01',
+				validVisits: 1,
+				invalidVisits: 1,
+				baseValidVisits: 1,
+				baseInvalidVisits: 1
+			},
+			{
+				scopeKind: 'domain',
+				domain: otherDomain,
+				path: null,
+				day: '2026-02-01',
+				validVisits: 0,
+				invalidVisits: 1,
+				baseValidVisits: 0,
+				baseInvalidVisits: 0
+			},
+			{
+				scopeKind: 'link',
+				domain: otherDomain,
+				path: '/docs',
+				day: '2026-02-01',
+				validVisits: 0,
+				invalidVisits: 1,
+				baseValidVisits: 0,
+				baseInvalidVisits: 0
+			}
 		])
 	);
-	expect(result.browsers.filter(({ scope }) => scope === overview)).toEqual([
-		{ scope: overview, name: 'Firefox', total: 4, valid: 1, invalid: 3, base: 2 },
-		{ scope: overview, name: 'Other', total: 1, valid: 0, invalid: 1, base: 0 },
-		{ scope: overview, name: 'Safari', total: 1, valid: 1, invalid: 0, base: 1 }
+	expect(result.browsers.filter(({ scopeKind }) => scopeKind === 'overview')).toEqual([
+		{
+			scopeKind: 'overview',
+			domain: null,
+			path: null,
+			family: 'Firefox',
+			validVisits: 1,
+			invalidVisits: 3
+		},
+		{
+			scopeKind: 'overview',
+			domain: null,
+			path: null,
+			family: 'Other',
+			validVisits: 0,
+			invalidVisits: 1
+		},
+		{
+			scopeKind: 'overview',
+			domain: null,
+			path: null,
+			family: 'Safari',
+			validVisits: 1,
+			invalidVisits: 0
+		}
 	]);
-	expect(result.operatingSystems.filter(({ scope }) => scope === overview)).toEqual([
-		{ scope: overview, name: 'Linux', total: 3, valid: 1, invalid: 2, base: 2 },
-		{ scope: overview, name: 'Other', total: 1, valid: 0, invalid: 1, base: 0 },
-		{ scope: overview, name: 'Windows', total: 1, valid: 0, invalid: 1, base: 0 },
-		{ scope: overview, name: 'macOS', total: 1, valid: 1, invalid: 0, base: 1 }
+	expect(result.operatingSystems.filter(({ scopeKind }) => scopeKind === 'overview')).toEqual([
+		{
+			scopeKind: 'overview',
+			domain: null,
+			path: null,
+			family: 'Linux',
+			validVisits: 1,
+			invalidVisits: 2
+		},
+		{
+			scopeKind: 'overview',
+			domain: null,
+			path: null,
+			family: 'Other',
+			validVisits: 0,
+			invalidVisits: 1
+		},
+		{
+			scopeKind: 'overview',
+			domain: null,
+			path: null,
+			family: 'Windows',
+			validVisits: 0,
+			invalidVisits: 1
+		},
+		{
+			scopeKind: 'overview',
+			domain: null,
+			path: null,
+			family: 'macOS',
+			validVisits: 1,
+			invalidVisits: 0
+		}
 	]);
-	expect(result.browsers.filter(({ scope }) => scope === domainScope)).toEqual([
-		{ scope: domainScope, name: 'Firefox', total: 2, valid: 1, invalid: 1, base: 1 },
-		{ scope: domainScope, name: 'Other', total: 1, valid: 0, invalid: 1, base: 0 },
-		{ scope: domainScope, name: 'Safari', total: 1, valid: 1, invalid: 0, base: 1 }
+	expect(
+		result.browsers.filter(({ scopeKind, path }) => scopeKind === 'link' && path === '/')
+	).toEqual([
+		{ scopeKind: 'link', domain, path: '/', family: 'Firefox', validVisits: 0, invalidVisits: 1 },
+		{ scopeKind: 'link', domain, path: '/', family: 'Safari', validVisits: 1, invalidVisits: 0 }
 	]);
-	expect(result.browsers.filter(({ scope }) => scope === root)).toEqual([
-		{ scope: root, name: 'Firefox', total: 1, valid: 0, invalid: 1, base: 1 },
-		{ scope: root, name: 'Safari', total: 1, valid: 1, invalid: 0, base: 1 }
+	expect(
+		result.operatingSystems.filter(
+			({ scopeKind, domain: rowDomain }) => scopeKind === 'link' && rowDomain === otherDomain
+		)
+	).toEqual([
+		{
+			scopeKind: 'link',
+			domain: otherDomain,
+			path: '/docs',
+			family: 'Windows',
+			validVisits: 0,
+			invalidVisits: 1
+		}
 	]);
-	expect(result.operatingSystems.filter(({ scope }) => scope === otherDocs)).toEqual([
-		{ scope: otherDocs, name: 'Windows', total: 1, valid: 0, invalid: 1, base: 0 }
-	]);
-	const familyScopes = new Set(
-		[...result.browsers, ...result.operatingSystems].map(({ scope }) => scope)
-	);
-	expect(familyScopes).toEqual(
-		new Set([overview, domainScope, docs, root, otherDomainScope, otherDocs])
-	);
 });
 
-test('empty inventory still aggregates historical visits only under overview', async () => {
+test('empty inventory keeps historical overview traffic but no domain or link scopes', async () => {
 	await seedVisits();
 	const result = await aggregateVisitReports(db, since, asOf, []);
 
 	expect(result.daily).toEqual([
-		{ scope: 'overview', day: '2026-01-31', total: 1, valid: 1, invalid: 0, base: 0 },
-		{ scope: 'overview', day: '2026-02-01', total: 5, valid: 1, invalid: 4, base: 3 }
+		{
+			scopeKind: 'overview',
+			domain: null,
+			path: null,
+			day: '2026-01-31',
+			validVisits: 1,
+			invalidVisits: 0,
+			baseValidVisits: 0,
+			baseInvalidVisits: 0
+		},
+		{
+			scopeKind: 'overview',
+			domain: null,
+			path: null,
+			day: '2026-02-01',
+			validVisits: 1,
+			invalidVisits: 4,
+			baseValidVisits: 1,
+			baseInvalidVisits: 2
+		}
 	]);
-	expect(result.browsers.map(({ scope }) => scope)).toEqual(['overview', 'overview', 'overview']);
-	expect(result.operatingSystems.map(({ scope }) => scope)).toEqual([
-		'overview',
-		'overview',
-		'overview',
-		'overview'
-	]);
+	expect(
+		[...result.browsers, ...result.operatingSystems].every(
+			(row) => row.scopeKind === 'overview' && row.domain === null && row.path === null
+		)
+	).toBe(true);
+});
+
+test('paths remain exact bound identities, including punctuation and Unicode', async () => {
+	const path = '/café,"docs';
+	await db
+		.insertInto('visits')
+		.values({ ...visit, path })
+		.execute();
+	const result = await aggregateVisitReports(db, since, asOf, [{ domain, paths: [path] }]);
+
+	expect(result.daily.find((row) => row.scopeKind === 'link')).toEqual({
+		scopeKind: 'link',
+		domain,
+		path,
+		day: '2026-01-31',
+		validVisits: 1,
+		invalidVisits: 0,
+		baseValidVisits: 0,
+		baseInvalidVisits: 0
+	});
 });
 
 test('no visits produces no aggregate rows for configured scopes', async () => {

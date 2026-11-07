@@ -24,6 +24,7 @@
 		"test:e2e": "pnpm --filter @goto/worker... build && playwright test"
 	},
 	"dependencies": {
+		"@goto/analytics": "workspace:*",
 		"@goto/config": "workspace:*",
 		"@goto/db": "workspace:*",
 		"better-auth": "catalog:",

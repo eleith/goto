@@ -1,7 +1,7 @@
 import { error } from '@sveltejs/kit';
-import type { VisitCounts, StoredVisitReports } from '@goto/db/visit-reports';
+import type { DomainSummary, VisitTotals } from '@goto/analytics';
 import { currentLinkState } from '#lib/server/link-state.js';
-import { readVisitReport } from '#lib/server/visit-reports.js';
+import { readVisitSummary } from '#lib/server/visit-reports.js';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals, params }) => {
@@ -11,15 +11,14 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 	const prepared = snapshot.domains[domain]!;
 	const configuration = snapshot.configuration;
 	const collectionEnabled = configuration.analytics.retention_months !== 0;
-	let preparedReports: StoredVisitReports | null = null;
-	if (collectionEnabled) preparedReports = await readVisitReport(configuration, domain);
-	const report = preparedReports?.report;
-
-	const countsByPath = new Map<string, VisitCounts>();
-	for (const row of report?.linkCounts ?? []) countsByPath.set(row.path, row.counts);
-	const baseCounts = countsByPath.get('/') ?? null;
-	let invalidClicks: number | null = null;
-	if (report && baseCounts) invalidClicks = report.totals.invalid - baseCounts.invalid;
+	let domainSummary: DomainSummary | null = null;
+	if (collectionEnabled) {
+		const scope = { kind: 'domain' as const, domain };
+		const summary = await readVisitSummary(configuration, scope);
+		if (summary && 'links' in summary) domainSummary = summary;
+	}
+	const countsByPath = new Map<string, VisitTotals>();
+	for (const row of domainSummary?.links ?? []) countsByPath.set(row.path, row.totals);
 	const now = Date.now();
 	const links = Object.entries(prepared.links).map(([path, link]) => ({
 		path,
@@ -35,21 +34,25 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 		baseUrl = root.url;
 		baseState = 'Active';
 	}
+	let invalidClicks: number | null = null;
+	if (domainSummary) {
+		invalidClicks = domainSummary.totals.invalidVisits - domainSummary.base.invalidVisits;
+	}
 
+	const asOf = domainSummary ? Date.parse(domainSummary.period.asOf) : null;
 	return {
 		domain,
 		retentionMonths: configuration.analytics.retention_months,
 		collectionEnabled,
-		available: preparedReports !== null,
-		since: preparedReports?.period.since ?? null,
-		asOf: preparedReports?.period.asOf ?? null,
+		available: domainSummary !== null,
+		asOf,
 		linkCount: links.length,
-		totals: report?.totals ?? null,
+		totals: domainSummary?.totals ?? null,
 		invalidClicks,
 		base: {
 			url: baseUrl,
 			state: baseState,
-			counts: baseCounts,
+			counts: domainSummary?.base ?? null,
 			href: linkHref(domain, '/')
 		},
 		links

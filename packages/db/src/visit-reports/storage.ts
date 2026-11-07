@@ -1,59 +1,78 @@
+import {
+	parseVisitDetails,
+	parseVisitSummary,
+	type ReportScope,
+	type SerializedVisitReport,
+	type VisitDetails,
+	type VisitSummary
+} from '@goto/analytics';
 import type { Kysely } from 'kysely';
 import type { Database } from '../types.js';
-import {
-	visitReportKey,
-	type PreparedVisitReport,
-	type SerializedVisitReport,
-	type StoredVisitReports,
-	type VisitReportPeriod
-} from './types.js';
 
 export async function clearVisitReports(db: Kysely<Database>): Promise<void> {
-	await db.deleteFrom('visit_reports').execute();
+	await db.deleteFrom('analytics_reports').execute();
 }
 
 export async function publishVisitReports(
 	db: Kysely<Database>,
-	period: VisitReportPeriod,
 	reports: SerializedVisitReport[]
 ): Promise<void> {
-	const rows = [{ key: 'period', data: JSON.stringify(period) }, ...reports];
-
+	const rows = reports.map(({ scope, summaryJson, detailsJson }) => {
+		let domain: string | null = null;
+		let path: string | null = null;
+		if (scope.kind !== 'overview') domain = scope.domain;
+		if (scope.kind === 'link') path = scope.path;
+		return {
+			scope_kind: scope.kind,
+			domain,
+			path,
+			summary_json: summaryJson,
+			details_json: detailsJson
+		};
+	});
 	await db.transaction().execute(async (transaction) => {
-		await transaction.deleteFrom('visit_reports').execute();
-		await transaction.insertInto('visit_reports').values(rows).execute();
+		await transaction.deleteFrom('analytics_reports').execute();
+		if (rows.length > 0) await transaction.insertInto('analytics_reports').values(rows).execute();
 	});
 }
 
-export async function readPreparedVisitReports(
+export async function readVisitSummary(
 	db: Kysely<Database>,
-	domain?: string,
-	path?: string
-): Promise<StoredVisitReports | null> {
-	const reportKey = visitReportKey(domain);
-	const selectionKey = visitReportKey(domain, path);
-	const keys = [...new Set(['period', reportKey, selectionKey, 'empty'])];
-	const rows = await db.selectFrom('visit_reports').selectAll().where('key', 'in', keys).execute();
-	const dataByKey = new Map(rows.map(({ key, data }) => [key, data]));
-	const periodData = dataByKey.get('period');
-	const reportData = dataByKey.get(reportKey);
-	if (periodData === undefined || reportData === undefined) return null;
+	scope: ReportScope
+): Promise<VisitSummary | null> {
+	const row = await reportScopeQuery(db, scope).select('summary_json').executeTakeFirst();
+	return row ? parseVisitSummary(row.summary_json, scope) : null;
+}
 
-	const report = JSON.parse(reportData) as PreparedVisitReport;
-	let selection = report;
-	if (selectionKey !== reportKey) {
-		let selectionData = dataByKey.get(selectionKey);
-		if (selectionData === undefined) {
-			const linkCounts = report.linkCounts.find((link) => link.path === path)?.counts;
-			if (linkCounts?.total !== 0) return null;
-			selectionData = dataByKey.get('empty');
-		}
-		if (selectionData === undefined) return null;
-		selection = JSON.parse(selectionData) as PreparedVisitReport;
+export async function readVisitDetails(
+	db: Kysely<Database>,
+	scope: ReportScope
+): Promise<VisitDetails | null> {
+	const row = await reportScopeQuery(db, scope).select('details_json').executeTakeFirst();
+	return row ? parseVisitDetails(row.details_json, scope) : null;
+}
+
+function reportScopeQuery(db: Kysely<Database>, scope: ReportScope) {
+	if (scope.kind === 'overview') {
+		return db
+			.selectFrom('analytics_reports')
+			.where('scope_kind', '=', 'overview')
+			.where('domain', 'is', null)
+			.where('path', 'is', null);
 	}
-	return {
-		period: JSON.parse(periodData) as VisitReportPeriod,
-		report,
-		selection
-	};
+	if (scope.kind !== 'domain' && scope.kind !== 'link') {
+		throw new Error('Invalid analytics report');
+	}
+	if (typeof scope.domain !== 'string' || scope.domain.length === 0) {
+		throw new Error('Invalid analytics report');
+	}
+	const query = db
+		.selectFrom('analytics_reports')
+		.where('scope_kind', '=', scope.kind)
+		.where('domain', '=', scope.domain);
+	if (scope.kind === 'domain') return query.where('path', 'is', null);
+	if (typeof scope.path !== 'string' || !scope.path.startsWith('/')) {
+		throw new Error('Invalid analytics report');
+	}
+	return query.where('path', '=', scope.path);
 }

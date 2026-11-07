@@ -1,11 +1,11 @@
 import { validateConfig } from '@goto/config';
-import type { StoredVisitReports } from '@goto/db/visit-reports';
+import type { OverviewSummary } from '@goto/analytics';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { prepareSnapshot } from '#lib/server/snapshot.js';
-import { readVisitReport } from '#lib/server/visit-reports.js';
+import { readVisitSummary } from '#lib/server/visit-reports.js';
 import { load } from './+page.server.js';
 
-vi.mock('#lib/server/visit-reports.js', () => ({ readVisitReport: vi.fn() }));
+vi.mock('#lib/server/visit-reports.js', () => ({ readVisitSummary: vi.fn() }));
 beforeEach(() => vi.resetAllMocks());
 
 function request(retention_months = 3) {
@@ -27,39 +27,35 @@ function request(retention_months = 3) {
 	return { locals: { snapshot: prepareSnapshot(prepared) } } as Parameters<typeof load>[0];
 }
 
-test('shows current configuration and the worker-prepared snapshot without re-aggregating', async () => {
-	const counts = { total: 4, valid: 2, invalid: 2, base: 1 };
-	const report = {
-		totals: { ...counts, total: 9, valid: 7 },
-		daily: [],
-		weekly: [],
-		monthly: [],
-		browsers: [],
-		operatingSystems: [],
-		domainCounts: [{ domain: 'go.example.test', counts }],
-		linkCounts: []
-	};
-	const prepared: StoredVisitReports = {
+test('shows current configuration and the worker-prepared summary without re-aggregating', async () => {
+	const counts = { validVisits: 2, invalidVisits: 2 };
+	const summary: OverviewSummary = {
+		version: 1,
+		scope: { kind: 'overview' },
 		period: {
+			from: '2026-03-15T12:00:00.000Z',
+			asOf: '2026-06-15T12:00:00.000Z',
 			timezone: 'UTC',
-			retentionMonths: 3,
-			since: 100,
-			asOf: 200,
-			days: [],
-			weeks: [],
-			months: []
+			retentionMonths: 3
 		},
-		report,
-		selection: report
+		totals: { validVisits: 7, invalidVisits: 2 },
+		base: { validVisits: 0, invalidVisits: 1 },
+		domains: [{ domain: 'go.example.test', totals: counts }]
 	};
-	vi.mocked(readVisitReport).mockResolvedValue(prepared);
+	vi.mocked(readVisitSummary).mockResolvedValue(summary);
 	const data = await load(request());
 	if (!data) throw new Error('Missing page data');
+	expect(readVisitSummary).toHaveBeenCalledExactlyOnceWith(expect.any(Object), {
+		kind: 'overview'
+	});
 	expect(data.domainCount).toBe(1);
 	expect(data.linkCount).toBe(2);
-	expect(data.totals?.total).toBe(9);
-	expect(data.asOf).toBe(200);
-	expect(data.domains[0]?.href).toBe('/admin/domains/go.example.test');
+	expect(data.totals).toEqual(summary.totals);
+	expect(data.asOf).toBe(Date.parse(summary.period.asOf));
+	expect(data.domains[0]).toMatchObject({
+		href: '/admin/domains/go.example.test',
+		counts
+	});
 });
 
 test('disabled collection does not read a report; missing preparation is not zero', async () => {
@@ -67,8 +63,8 @@ test('disabled collection does not read a report; missing preparation is not zer
 	if (!disabled) throw new Error('Missing disabled page');
 	expect(disabled.collectionEnabled).toBe(false);
 	expect(disabled.totals).toBeNull();
-	expect(readVisitReport).not.toHaveBeenCalled();
-	vi.mocked(readVisitReport).mockResolvedValue(null);
+	expect(readVisitSummary).not.toHaveBeenCalled();
+	vi.mocked(readVisitSummary).mockResolvedValue(null);
 	const unavailable = await load(request());
 	if (!unavailable) throw new Error('Missing unavailable page');
 	expect(unavailable.available).toBe(false);

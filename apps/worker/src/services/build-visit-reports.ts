@@ -1,14 +1,20 @@
 import {
-	visitReportKey,
-	zeroVisitCounts,
-	type AggregatedVisitReports,
-	type DailyVisitCounts,
-	type ScopedFamilyCounts,
+	visitDays,
+	zeroVisitTotals,
+	type DomainSummary,
+	type LinkSummary,
+	type OverviewSummary,
 	type PreparedVisitReport,
-	type ReportInventory,
-	type SerializedVisitReport,
-	type VisitCounts,
-	type VisitReportPeriod
+	type ReportPeriod,
+	type ReportScope,
+	type VisitDetails,
+	type VisitTotals
+} from '@goto/analytics';
+import type {
+	AggregatedVisitReports,
+	DailyVisitCounts,
+	ReportInventory,
+	ScopedFamilyCounts
 } from '@goto/db/visit-reports';
 
 interface ScopeCounts {
@@ -17,117 +23,164 @@ interface ScopeCounts {
 	operatingSystems: ScopedFamilyCounts[];
 }
 
+interface DomainCounts {
+	counts: ScopeCounts;
+	links: Map<string, ScopeCounts>;
+}
+
+interface ReportCounts {
+	overview: ScopeCounts;
+	domains: Map<string, DomainCounts>;
+}
+
 export function buildVisitReports(
 	aggregates: AggregatedVisitReports,
 	inventory: ReportInventory,
-	period: VisitReportPeriod
-): SerializedVisitReport[] {
+	period: ReportPeriod
+): PreparedVisitReport[] {
 	const indexed = indexCounts(aggregates);
-	const empty = emptyReport(period);
-	const reports: SerializedVisitReport[] = [{ key: 'empty', data: JSON.stringify(empty) }];
-	const linkTotals = new Map<string, VisitCounts>();
-	const domainTotals = new Map<string, VisitCounts>();
+	const days = visitDays(period);
+	const reports: PreparedVisitReport[] = [];
+	const domains: OverviewSummary['domains'] = [];
 
 	for (const entry of inventory) {
-		const paths = [...new Set([...entry.paths, '/'])];
-		for (const path of paths) {
-			const key = visitReportKey(entry.domain, path);
-			const source = indexed.get(key);
-			if (!source) {
-				linkTotals.set(key, zeroVisitCounts());
-				continue;
-			}
-			const report = scopeReport(source, period);
-			linkTotals.set(key, report.totals);
-			reports.push({ key, data: JSON.stringify(report) });
+		const domain = indexed.domains.get(entry.domain);
+		const links: DomainSummary['links'] = [];
+		const configuredPaths = new Set(entry.paths);
+		const allPaths = new Set([...configuredPaths, '/']);
+		for (const path of allPaths) {
+			const counts = domain?.links.get(path) ?? emptyCounts();
+			const scope = { kind: 'link' as const, domain: entry.domain, path };
+			const summary = buildLinkSummary(scope, counts, period);
+			if (configuredPaths.has(path)) links.push({ path, totals: summary.totals });
+			reports.push({ summary, details: buildDetails(scope, counts, period, days) });
 		}
-		const key = visitReportKey(entry.domain);
-		const source = indexed.get(key);
-		const report = source ? scopeReport(source, period) : { ...empty };
-		report.linkCounts = paths.map((path) => {
-			const linkKey = visitReportKey(entry.domain, path);
-			return { path, counts: linkTotals.get(linkKey) ?? zeroVisitCounts() };
-		});
-		domainTotals.set(entry.domain, report.totals);
-		reports.push({ key, data: JSON.stringify(report) });
+		const scope = { kind: 'domain' as const, domain: entry.domain };
+		const counts = domain?.counts ?? emptyCounts();
+		const summary = buildDomainSummary(scope, counts, links, period);
+		domains.push({ domain: entry.domain, totals: summary.totals });
+		reports.push({ summary, details: buildDetails(scope, counts, period, days) });
 	}
-	const overviewSource = indexed.get('overview');
-	const overview = overviewSource ? scopeReport(overviewSource, period) : { ...empty };
-	overview.domainCounts = inventory.map((entry) => ({
-		domain: entry.domain,
-		counts: domainTotals.get(entry.domain) ?? zeroVisitCounts()
-	}));
-	reports.push({ key: 'overview', data: JSON.stringify(overview) });
+
+	const summary = buildOverviewSummary(indexed.overview, domains, period);
+	reports.push({
+		summary,
+		details: buildDetails(summary.scope, indexed.overview, period, days)
+	});
 	return reports;
 }
 
-function indexCounts(aggregates: AggregatedVisitReports): Map<string, ScopeCounts> {
-	const indexed = new Map<string, ScopeCounts>();
-	function scope(key: string): ScopeCounts {
-		let counts = indexed.get(key);
-		if (!counts) {
-			counts = { daily: [], browsers: [], operatingSystems: [] };
-			indexed.set(key, counts);
-		}
-		return counts;
-	}
-	for (const row of aggregates.daily) scope(row.scope).daily.push(row);
-	for (const row of aggregates.browsers) scope(row.scope).browsers.push(row);
-	for (const row of aggregates.operatingSystems) scope(row.scope).operatingSystems.push(row);
+function indexCounts(aggregates: AggregatedVisitReports): ReportCounts {
+	const indexed: ReportCounts = { overview: emptyCounts(), domains: new Map() };
+	for (const row of aggregates.daily) countsForScope(indexed, row).daily.push(row);
+	for (const row of aggregates.browsers) countsForScope(indexed, row).browsers.push(row);
+	for (const row of aggregates.operatingSystems)
+		countsForScope(indexed, row).operatingSystems.push(row);
 	return indexed;
 }
 
-function emptyReport(period: VisitReportPeriod): PreparedVisitReport {
+function countsForScope(
+	indexed: ReportCounts,
+	scope: DailyVisitCounts | ScopedFamilyCounts
+): ScopeCounts {
+	if (scope.scopeKind === 'overview') return indexed.overview;
+	let domain = indexed.domains.get(scope.domain);
+	if (!domain) {
+		domain = { counts: emptyCounts(), links: new Map() };
+		indexed.domains.set(scope.domain, domain);
+	}
+	if (scope.scopeKind === 'domain') return domain.counts;
+	let link = domain.links.get(scope.path);
+	if (!link) {
+		link = emptyCounts();
+		domain.links.set(scope.path, link);
+	}
+	return link;
+}
+
+function emptyCounts(): ScopeCounts {
+	return { daily: [], browsers: [], operatingSystems: [] };
+}
+
+function buildOverviewSummary(
+	counts: ScopeCounts,
+	domains: OverviewSummary['domains'],
+	period: ReportPeriod
+): OverviewSummary {
 	return {
-		totals: zeroVisitCounts(),
-		daily: period.days.map(() => zeroVisitCounts()),
-		weekly: period.weeks.map(() => zeroVisitCounts()),
-		monthly: period.months.map(() => zeroVisitCounts()),
-		browsers: [],
-		operatingSystems: [],
-		domainCounts: [],
-		linkCounts: []
+		version: 1,
+		scope: { kind: 'overview' },
+		period,
+		...summarizeDaily(counts.daily),
+		domains
 	};
 }
 
-function scopeReport(source: ScopeCounts, period: VisitReportPeriod): PreparedVisitReport {
-	const report = emptyReport(period);
-	const dayIndexes = new Map<number, number>();
-	period.days.forEach((bucket, index) => dayIndexes.set(bucket.start, index));
-	for (const row of source.daily) {
-		const start = Date.parse(`${row.day}T00:00:00Z`);
-		const index = dayIndexes.get(start);
-		if (index === undefined) continue;
-		addCounts(report.daily[index]!, row);
-		addCounts(report.totals, row);
+function buildDomainSummary(
+	scope: DomainSummary['scope'],
+	counts: ScopeCounts,
+	links: DomainSummary['links'],
+	period: ReportPeriod
+): DomainSummary {
+	return { version: 1, scope, period, ...summarizeDaily(counts.daily), links };
+}
+
+function buildLinkSummary(
+	scope: LinkSummary['scope'],
+	counts: ScopeCounts,
+	period: ReportPeriod
+): LinkSummary {
+	const { totals } = summarizeDaily(counts.daily);
+	return { version: 1, scope, period, totals };
+}
+
+function summarizeDaily(rows: DailyVisitCounts[]): { totals: VisitTotals; base: VisitTotals } {
+	const totals = zeroVisitTotals();
+	const base = zeroVisitTotals();
+	for (const row of rows) {
+		totals.validVisits += row.validVisits;
+		totals.invalidVisits += row.invalidVisits;
+		base.validVisits += row.baseValidVisits;
+		base.invalidVisits += row.baseInvalidVisits;
 	}
-	for (let index = 0; index < period.days.length; index++) {
-		const day = period.days[index]!;
-		const counts = report.daily[index]!;
-		const week = period.weeks.findIndex(
-			(bucket) => day.start >= bucket.start && day.start < bucket.end
-		);
-		const month = period.months.findIndex(
-			(bucket) => day.start >= bucket.start && day.start < bucket.end
-		);
-		if (week >= 0) addCounts(report.weekly[week]!, counts);
-		if (month >= 0) addCounts(report.monthly[month]!, counts);
-	}
-	report.browsers = source.browsers.map((row) => ({ name: row.name, counts: copyCounts(row) }));
-	report.operatingSystems = source.operatingSystems.map((row) => ({
-		name: row.name,
-		counts: copyCounts(row)
+	return { totals, base };
+}
+
+function buildDetails(
+	scope: ReportScope,
+	counts: ScopeCounts,
+	period: ReportPeriod,
+	days: ReturnType<typeof visitDays>
+): VisitDetails {
+	return {
+		version: 1,
+		scope,
+		period,
+		daily: buildDailyDetails(counts.daily, days),
+		browsers: buildFamilyDetails(counts.browsers),
+		operatingSystems: buildFamilyDetails(counts.operatingSystems)
+	};
+}
+
+function buildDailyDetails(
+	rows: DailyVisitCounts[],
+	days: ReturnType<typeof visitDays>
+): VisitDetails['daily'] {
+	const countsByDay = new Map(rows.map((row) => [row.day, row]));
+	return days.map((day) => {
+		const counts = countsByDay.get(day.start.slice(0, 10));
+		return {
+			...day,
+			validVisits: counts?.validVisits ?? 0,
+			invalidVisits: counts?.invalidVisits ?? 0
+		};
+	});
+}
+
+function buildFamilyDetails(rows: ScopedFamilyCounts[]): VisitDetails['browsers'] {
+	return rows.map(({ family, validVisits, invalidVisits }) => ({
+		family,
+		validVisits,
+		invalidVisits
 	}));
-	return report;
-}
-
-function copyCounts(counts: VisitCounts): VisitCounts {
-	return { total: counts.total, valid: counts.valid, invalid: counts.invalid, base: counts.base };
-}
-
-function addCounts(target: VisitCounts, counts: VisitCounts): void {
-	target.total += counts.total;
-	target.valid += counts.valid;
-	target.invalid += counts.invalid;
-	target.base += counts.base;
 }

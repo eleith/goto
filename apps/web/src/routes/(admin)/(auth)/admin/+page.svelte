@@ -12,7 +12,7 @@
 	<div class="admin-cards admin-cards-summary">
 		<StatCard label="Domains" value={data.domainCount} />
 		<StatCard label="Links" value={data.linkCount} />
-		<StatCard label="Valid visits" value={data.totals?.valid ?? null} />
+		<StatCard label="Valid visits" value={data.totals?.validVisits ?? null} />
 		<StatCard label="Retention" value={formatRetention(data.retentionMonths)} />
 	</div>
 	<section>
@@ -31,7 +31,7 @@
 							<tr>
 								<th scope="row"><a class="admin-row-link" href={row.href}>{row.domain}</a></th>
 								<td>{formatCount(row.linkCount)}</td>
-								<td>{formatCount(row.counts?.valid ?? null)}</td>
+								<td>{formatCount(row.counts?.validVisits ?? null)}</td>
 							</tr>
 						{/each}
 					</tbody>

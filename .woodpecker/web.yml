@@ -50,6 +50,7 @@ steps:
     commands:
       - npm install --global corepack@0.36.0
       - corepack enable
+      - pnpm --filter @goto/analytics check
       - pnpm --filter @goto/web check
       - pnpm lint
 
@@ -60,6 +61,7 @@ steps:
     commands:
       - npm install --global corepack@0.36.0
       - corepack enable
+      - pnpm --filter @goto/analytics test:coverage
       - pnpm --filter @goto/web test:coverage
 
   e2e:

@@ -28,6 +28,7 @@ services:
       - ./tsconfig.json:/m/apps/web/tsconfig.json:ro
       - ../../packages/config/src:/m/packages/config/src:ro
       - ../../packages/db/src:/m/packages/db/src:ro
+      - ../../packages/analytics/src:/m/packages/analytics/src:ro
     restart: unless-stopped
     healthcheck:
       test:
@@ -64,6 +65,7 @@ services:
       - ../worker/src:/m/apps/worker/src:ro
       - ../../packages/config/src:/m/packages/config/src:ro
       - ../../packages/db/src:/m/packages/db/src:ro
+      - ../../packages/analytics/src:/m/packages/analytics/src:ro
     restart: unless-stopped
     healthcheck:
       test:

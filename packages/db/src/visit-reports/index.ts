@@ -1,16 +1,13 @@
 export { aggregateVisitReports } from './queries.js';
-export { clearVisitReports, publishVisitReports, readPreparedVisitReports } from './storage.js';
-export { visitReportKey, zeroVisitCounts } from './types.js';
+export {
+	clearVisitReports,
+	publishVisitReports,
+	readVisitSummary,
+	readVisitDetails
+} from './storage.js';
 export type {
 	AggregatedVisitReports,
 	DailyVisitCounts,
-	FamilyVisitCounts,
-	PreparedVisitReport,
 	ReportInventory,
-	ScopedFamilyCounts,
-	SerializedVisitReport,
-	StoredVisitReports,
-	TimeBucket,
-	VisitCounts,
-	VisitReportPeriod
+	ScopedFamilyCounts
 } from './types.js';

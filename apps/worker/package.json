@@ -18,6 +18,7 @@
 		"test:smoke": "node e2e/startup.js"
 	},
 	"dependencies": {
+		"@goto/analytics": "workspace:*",
 		"@goto/config": "workspace:*",
 		"@goto/db": "workspace:*",
 		"openworkflow": "catalog:",

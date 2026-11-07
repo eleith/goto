@@ -16,7 +16,7 @@
 >
 	<ReportNotice collectionEnabled={data.collectionEnabled} available={data.available} />
 	<div class="admin-cards">
-		<StatCard label="Valid visits" value={data.totals?.valid ?? null} />
+		<StatCard label="Valid visits" value={data.totals?.validVisits ?? null} />
 		<StatCard label="Retention" value={formatRetention(data.retentionMonths)} />
 	</div>
 	<section class="admin-info" aria-label="Link details">

@@ -19,8 +19,8 @@ export async function requestReportRefresh(
 	if (context.config.analytics.retention_months === 0) {
 		const visit = await context.db.selectFrom('visits').select('id').limit(1).executeTakeFirst();
 		const output = await context.db
-			.selectFrom('visit_reports')
-			.select('key')
+			.selectFrom('analytics_reports')
+			.select('id')
 			.limit(1)
 			.executeTakeFirst();
 		if (!visit && !output) return;

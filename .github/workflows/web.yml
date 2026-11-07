@@ -55,6 +55,10 @@ jobs:
         run: pnpm --filter @goto/web check
       - name: Lint repository
         run: pnpm lint
+      - name: Check analytics dependency
+        run: |
+          pnpm --filter @goto/analytics check
+          pnpm --filter @goto/analytics test:coverage
       - name: Unit tests
         run: pnpm --filter @goto/web test:coverage
 

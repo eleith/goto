@@ -9,6 +9,7 @@ on:
       - .github/workflows/**
       - .woodpecker/**
       - packages/db/**
+      - packages/analytics/**
       - packages/config/**
       - scripts/**
       - tools/**
@@ -20,6 +21,7 @@ on:
       - .github/workflows/**
       - .woodpecker/**
       - packages/db/**
+      - packages/analytics/**
       - packages/config/**
       - scripts/**
       - tools/**
@@ -48,6 +50,11 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Build DB
         run: pnpm --filter '@goto/db...' build
+      - name: Check analytics dependency
+        run: |
+          pnpm --filter @goto/analytics check
+          pnpm --filter @goto/analytics lint
+          pnpm --filter @goto/analytics test:coverage
       - name: Check types
         run: pnpm --filter @goto/db check
       - name: Lint DB

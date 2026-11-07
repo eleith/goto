@@ -11,7 +11,7 @@
 	<ReportNotice collectionEnabled={data.collectionEnabled} available={data.available} />
 	<div class="admin-cards admin-cards-summary">
 		<StatCard label="Links" value={data.linkCount} />
-		<StatCard label="Valid visits" value={data.totals?.valid ?? null} />
+		<StatCard label="Valid visits" value={data.totals?.validVisits ?? null} />
 		<StatCard label="Invalid clicks" value={data.invalidClicks} />
 		<StatCard label="Retention" value={formatRetention(data.retentionMonths)} />
 	</div>
@@ -35,7 +35,7 @@
 								>{:else}404 Not found{/if}</td
 						>
 						<td>{data.base.state}</td>
-						<td>{formatCount(data.base.counts?.valid ?? null)}</td>
+						<td>{formatCount(data.base.counts?.validVisits ?? null)}</td>
 					</tr>
 				</tbody>
 			</table>
@@ -60,7 +60,7 @@
 									><a class="admin-row-link" href={link.href}><code>{link.path}</code></a></th
 								>
 								<td><a class="admin-destination" href={link.url}>{link.url}</a></td>
-								<td>{link.state}</td><td>{formatCount(link.counts?.valid ?? null)}</td>
+								<td>{link.state}</td><td>{formatCount(link.counts?.validVisits ?? null)}</td>
 							</tr>
 						{/each}
 					</tbody>

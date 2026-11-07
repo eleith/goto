@@ -1,11 +1,10 @@
 import { sql, type Kysely } from 'kysely';
 import type { Database } from '../types.js';
-import {
-	visitReportKey,
-	type AggregatedVisitReports,
-	type DailyVisitCounts,
-	type ReportInventory,
-	type ScopedFamilyCounts
+import type {
+	AggregatedVisitReports,
+	DailyVisitCounts,
+	ReportInventory,
+	ScopedFamilyCounts
 } from './types.js';
 
 export async function aggregateVisitReports(
@@ -15,31 +14,36 @@ export async function aggregateVisitReports(
 	inventory: ReportInventory
 ): Promise<AggregatedVisitReports> {
 	const scopes = scopedVisits(since, asOf, inventory);
-	const counts = visitCountColumns();
+	const identity = sql`scope_kind AS "scopeKind", domain, path`;
+	const counts = sql`
+		SUM(CASE WHEN outcome = 'valid' THEN 1 ELSE 0 END) AS "validVisits",
+		SUM(CASE WHEN outcome = 'invalid' THEN 1 ELSE 0 END) AS "invalidVisits"
+	`;
 
 	return db.transaction().execute(async (transaction) => {
 		const daily = await sql<DailyVisitCounts>`
 			${scopes}
-			SELECT scope, date(visited_at / 1000.0, 'unixepoch') AS day, ${counts}
+			SELECT ${identity}, date(visited_at / 1000.0, 'unixepoch') AS day, ${counts},
+				SUM(CASE WHEN visit_path = '/' AND outcome = 'valid' THEN 1 ELSE 0 END) AS "baseValidVisits",
+				SUM(CASE WHEN visit_path = '/' AND outcome = 'invalid' THEN 1 ELSE 0 END) AS "baseInvalidVisits"
 			FROM scoped_visits
-			GROUP BY scope, day
-			ORDER BY scope, day
+			GROUP BY scope_kind, domain, path, day
+			ORDER BY scope_kind, domain, path, day
 		`.execute(transaction);
 		const browsers = await sql<ScopedFamilyCounts>`
 			${scopes}
-			SELECT scope, browser AS name, ${counts}
+			SELECT ${identity}, browser AS family, ${counts}
 			FROM scoped_visits
-			GROUP BY scope, browser
-			ORDER BY scope, name
+			GROUP BY scope_kind, domain, path, browser
+			ORDER BY scope_kind, domain, path, family
 		`.execute(transaction);
 		const operatingSystems = await sql<ScopedFamilyCounts>`
 			${scopes}
-			SELECT scope, os AS name, ${counts}
+			SELECT ${identity}, os AS family, ${counts}
 			FROM scoped_visits
-			GROUP BY scope, os
-			ORDER BY scope, name
+			GROUP BY scope_kind, domain, path, os
+			ORDER BY scope_kind, domain, path, family
 		`.execute(transaction);
-
 		return {
 			daily: daily.rows,
 			browsers: browsers.rows,
@@ -56,32 +60,25 @@ function scopedVisits(since: number, asOf: number, inventory: ReportInventory) {
 		return sql`(domain = ${domain} AND path IN (${sql.join(currentPaths)}))`;
 	});
 	const currentLink = linkRules.length === 0 ? sql`0` : sql.join(linkRules, sql` OR `);
-
 	return sql`
 		WITH retained_visits AS (
 			SELECT domain, path, outcome, visited_at, browser, os
 			FROM visits
 			WHERE visited_at >= ${since} AND visited_at < ${asOf}
 		), scoped_visits AS (
-			SELECT ${visitReportKey()} AS scope, path, outcome, visited_at, browser, os
+			SELECT 'overview' AS scope_kind, NULL AS domain, NULL AS path,
+				path AS visit_path, outcome, visited_at, browser, os
 			FROM retained_visits
 			UNION ALL
-			SELECT json_array(domain) AS scope, path, outcome, visited_at, browser, os
+			SELECT 'domain' AS scope_kind, domain, NULL AS path,
+				path AS visit_path, outcome, visited_at, browser, os
 			FROM retained_visits
 			WHERE ${currentDomain}
 			UNION ALL
-			SELECT json_array(domain, path) AS scope, path, outcome, visited_at, browser, os
+			SELECT 'link' AS scope_kind, domain, path,
+				path AS visit_path, outcome, visited_at, browser, os
 			FROM retained_visits
 			WHERE ${currentLink}
 		)
-	`;
-}
-
-function visitCountColumns() {
-	return sql`
-		COUNT(*) AS total,
-		SUM(CASE WHEN outcome = ${'valid'} THEN 1 ELSE 0 END) AS valid,
-		SUM(CASE WHEN outcome = ${'invalid'} THEN 1 ELSE 0 END) AS invalid,
-		SUM(CASE WHEN path = ${'/'} THEN 1 ELSE 0 END) AS base
 	`;
 }

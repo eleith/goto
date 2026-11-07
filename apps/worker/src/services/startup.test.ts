@@ -3,10 +3,13 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { createVisitPeriod, encodeVisitReports } from '@goto/analytics';
 import { insertVisit, openDb, runMigrations } from '@goto/db';
+import { publishVisitReports } from '@goto/db/visit-reports';
 import { Worker } from 'openworkflow';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { startWorkerService } from './startup.js';
+import { buildVisitReports } from './build-visit-reports.js';
 
 let directory: string;
 
@@ -61,12 +64,19 @@ test('starts an idle zero-policy service, migrates visit storage, and exposes he
 	}
 });
 
-test('an existing zero-policy database is purged by a real startup workflow', async () => {
+test('a real zero-policy startup workflow purges raw history and prepared output', async () => {
 	await writeConfiguration();
 	const path = join(directory, 'data/visits.sqlite');
 	const db = await openDb(path);
 	try {
 		await runMigrations(db);
+		const period = createVisitPeriod(3, Date.now() - 1000);
+		const reports = buildVisitReports(
+			{ daily: [], browsers: [], operatingSystems: [] },
+			[],
+			period
+		);
+		await publishVisitReports(db, encodeVisitReports(reports));
 		await insertVisit(db, {
 			domain: 'go.example.test',
 			path: '/docs',
@@ -86,6 +96,7 @@ test('an existing zero-policy database is purged by a real startup workflow', as
 		const reader = await openDb(path, { readOnly: true });
 		try {
 			expect(await reader.selectFrom('visits').selectAll().execute()).toEqual([]);
+			expect(await reader.selectFrom('analytics_reports').select('id').execute()).toEqual([]);
 		} finally {
 			await reader.destroy();
 		}

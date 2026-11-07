@@ -15,14 +15,18 @@ export interface VisitTable {
 	os: string;
 }
 
-export interface VisitReportTable {
-	key: string;
-	data: string;
+export interface AnalyticsReportTable {
+	id: Generated<number>;
+	scope_kind: 'overview' | 'domain' | 'link';
+	domain: string | null;
+	path: string | null;
+	summary_json: string;
+	details_json: string;
 }
 
 export interface Database {
 	visits: VisitTable;
-	visit_reports: VisitReportTable;
+	analytics_reports: AnalyticsReportTable;
 }
 
 export type ClassifiedVisit = Omit<Insertable<VisitTable>, 'id'>;

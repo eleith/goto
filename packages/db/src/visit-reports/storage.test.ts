@@ -1,27 +1,30 @@
-import { afterEach, beforeEach, expect, test } from 'vitest';
-import { openDb, runMigrations } from '../index.js';
-import { clearVisitReports, publishVisitReports, readPreparedVisitReports } from './storage.js';
 import {
-	visitReportKey,
-	zeroVisitCounts,
+	createVisitPeriod,
+	encodeVisitReports,
+	visitDays,
+	zeroVisitTotals,
 	type PreparedVisitReport,
-	type SerializedVisitReport,
-	type VisitCounts,
-	type VisitReportPeriod
-} from './types.js';
+	type ReportScope,
+	type VisitSummary,
+	type VisitTotals
+} from '@goto/analytics';
+import { DatabaseSync } from 'node:sqlite';
+import { sql } from 'kysely';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import { openDb, runMigrations } from '../index.js';
+import {
+	clearVisitReports,
+	publishVisitReports,
+	readVisitDetails,
+	readVisitSummary
+} from './storage.js';
 
 let db: Awaited<ReturnType<typeof openDb>>;
-
 const domain = 'go.example.test';
-const period: VisitReportPeriod = {
-	timezone: 'UTC',
-	retentionMonths: 3,
-	since: Date.UTC(2026, 0, 1),
-	asOf: Date.UTC(2026, 0, 2),
-	days: [{ start: Date.UTC(2026, 0, 1), end: Date.UTC(2026, 0, 2), partial: false }],
-	weeks: [{ start: Date.UTC(2025, 11, 29), end: Date.UTC(2026, 0, 5), partial: true }],
-	months: [{ start: Date.UTC(2026, 0, 1), end: Date.UTC(2026, 1, 1), partial: true }]
-};
+const overviewScope = { kind: 'overview' } as const;
+const domainScope = { kind: 'domain', domain } as const;
+const rootScope = { kind: 'link', domain, path: '/' } as const;
+const asOf = Date.UTC(2026, 3, 1);
 
 beforeEach(async () => {
 	db = await openDb(':memory:');
@@ -32,132 +35,195 @@ afterEach(async () => {
 	await db.destroy();
 });
 
-function preparedReport(counts: VisitCounts = zeroVisitCounts()): PreparedVisitReport {
+function preparedReport(
+	scope: ReportScope,
+	cutoff = asOf,
+	totals: VisitTotals = zeroVisitTotals()
+): PreparedVisitReport {
+	const period = createVisitPeriod(3, cutoff);
+	let summary: VisitSummary;
+	if (scope.kind === 'overview') {
+		summary = { version: 1, scope, period, totals, base: zeroVisitTotals(), domains: [] };
+	} else if (scope.kind === 'domain') {
+		summary = { version: 1, scope, period, totals, base: zeroVisitTotals(), links: [] };
+	} else {
+		summary = { version: 1, scope, period, totals };
+	}
+	const populated = totals.validVisits + totals.invalidVisits > 0;
 	return {
-		totals: counts,
-		daily: [counts],
-		weekly: [counts],
-		monthly: [counts],
-		browsers: [],
-		operatingSystems: [],
-		domainCounts: [],
-		linkCounts: []
+		summary,
+		details: {
+			version: 1,
+			scope,
+			period,
+			daily: visitDays(period).map((day, index) => ({
+				...day,
+				...(index === 0 ? totals : zeroVisitTotals())
+			})),
+			browsers: populated ? [{ family: 'Firefox', ...totals }] : [],
+			operatingSystems: populated ? [{ family: 'Linux', ...totals }] : []
+		}
 	};
 }
 
-function serializedReport(key: string, report: PreparedVisitReport): SerializedVisitReport {
-	return { key, data: JSON.stringify(report) };
-}
+test('reads summary and details for each explicit SQL scope including root', async () => {
+	const reports = [
+		preparedReport(overviewScope, asOf, { validVisits: 2, invalidVisits: 1 }),
+		preparedReport(domainScope, asOf, { validVisits: 1, invalidVisits: 1 }),
+		preparedReport(rootScope)
+	];
+	await publishVisitReports(db, encodeVisitReports(reports));
 
-test('reads the shared period, scope report and selected path from prepared rows', async () => {
-	const selection = preparedReport({ total: 1, valid: 1, invalid: 0, base: 0 });
-	selection.browsers = [{ name: 'Firefox', counts: selection.totals }];
-	selection.operatingSystems = [{ name: 'Linux', counts: selection.totals }];
-	const domainReport = preparedReport({ total: 2, valid: 1, invalid: 1, base: 1 });
-	domainReport.linkCounts = [{ path: '/docs', counts: selection.totals }];
-	const overview = preparedReport({ total: 3, valid: 2, invalid: 1, base: 1 });
-	overview.domainCounts = [{ domain, counts: domainReport.totals }];
-	await publishVisitReports(db, period, [
-		serializedReport('empty', preparedReport()),
-		serializedReport(visitReportKey(), overview),
-		serializedReport(visitReportKey(domain), domainReport),
-		serializedReport(visitReportKey(domain, '/docs'), selection)
+	for (const report of reports) {
+		expect(await readVisitSummary(db, report.summary.scope)).toEqual(report.summary);
+		expect(await readVisitDetails(db, report.summary.scope)).toEqual(report.details);
+	}
+	expect(
+		await db
+			.selectFrom('analytics_reports')
+			.select(['scope_kind', 'domain', 'path'])
+			.orderBy('id')
+			.execute()
+	).toEqual([
+		{ scope_kind: 'overview', domain: null, path: null },
+		{ scope_kind: 'domain', domain, path: null },
+		{ scope_kind: 'link', domain, path: '/' }
 	]);
-
-	expect(await readPreparedVisitReports(db)).toEqual({
-		period,
-		report: overview,
-		selection: overview
-	});
-	expect(await readPreparedVisitReports(db, domain)).toEqual({
-		period,
-		report: domainReport,
-		selection: domainReport
-	});
-	expect(await readPreparedVisitReports(db, domain, '/docs')).toEqual({
-		period,
-		report: domainReport,
-		selection
-	});
 });
 
-test('publication replaces all output rows and a failed replacement preserves the previous set', async () => {
-	const oldReport = preparedReport({ total: 1, valid: 1, invalid: 0, base: 0 });
-	await publishVisitReports(db, period, [
-		serializedReport(visitReportKey(), oldReport),
-		serializedReport(visitReportKey(domain), oldReport)
-	]);
-	const replacementPeriod = { ...period, retentionMonths: 9 as const };
-	const replacementReport = preparedReport({ total: 2, valid: 1, invalid: 1, base: 0 });
-	const replacementRows = [serializedReport(visitReportKey(), replacementReport)];
-	await publishVisitReports(db, replacementPeriod, replacementRows);
+test('publication replaces the complete batch, including when the replacement is empty', async () => {
+	await publishVisitReports(
+		db,
+		encodeVisitReports([preparedReport(overviewScope), preparedReport(domainScope)])
+	);
+	const replacement = preparedReport(overviewScope, asOf + 86_400_000);
+	await publishVisitReports(db, encodeVisitReports([replacement]));
 
-	expect(await db.selectFrom('visit_reports').select('key').orderBy('key').execute()).toEqual([
-		{ key: 'overview' },
-		{ key: 'period' }
-	]);
-	expect(await readPreparedVisitReports(db, domain)).toBeNull();
-	await expect(
-		publishVisitReports(db, period, [
-			serializedReport(visitReportKey(), oldReport),
-			serializedReport(visitReportKey(), oldReport)
-		])
-	).rejects.toThrow();
-	expect(await readPreparedVisitReports(db)).toEqual({
-		period: replacementPeriod,
-		report: replacementReport,
-		selection: replacementReport
-	});
+	expect(await readVisitSummary(db, overviewScope)).toEqual(replacement.summary);
+	expect(await readVisitSummary(db, domainScope)).toBeNull();
+	await publishVisitReports(db, []);
+	expect(await db.selectFrom('analytics_reports').select('id').execute()).toEqual([]);
 });
 
-test('a published zero-count path uses the empty template but a missing domain stays unavailable', async () => {
-	const domainReport = preparedReport({ total: 1, valid: 1, invalid: 0, base: 1 });
-	domainReport.linkCounts = [{ path: '/new', counts: zeroVisitCounts() }];
-	const empty = preparedReport();
-	await publishVisitReports(db, period, [
-		serializedReport(visitReportKey(domain), domainReport),
-		serializedReport('empty', empty)
-	]);
+test('native uniqueness and JSON failures roll back publication deletion', async () => {
+	const original = preparedReport(overviewScope);
+	await publishVisitReports(db, encodeVisitReports([original]));
+	const [replacement] = encodeVisitReports([preparedReport(domainScope)]);
+	if (!replacement) throw new Error('Expected an encoded report fixture');
 
-	expect(await readPreparedVisitReports(db, domain, '/new')).toEqual({
-		period,
-		report: domainReport,
-		selection: empty
-	});
-	expect(await readPreparedVisitReports(db, 'new.example.test', '/new')).toBeNull();
+	for (const batch of [
+		[replacement, replacement],
+		[{ ...replacement, summaryJson: '{' }],
+		[{ ...replacement, detailsJson: '{' }]
+	]) {
+		await expect(publishVisitReports(db, batch)).rejects.toThrow();
+		expect(await readVisitSummary(db, overviewScope)).toEqual(original.summary);
+		expect(await readVisitDetails(db, overviewScope)).toEqual(original.details);
+		expect(await readVisitSummary(db, domainScope)).toBeNull();
+	}
 });
 
-test('missing link bodies stay unavailable for unpublished paths and populated links', async () => {
-	const domainReport = preparedReport({ total: 1, valid: 1, invalid: 0, base: 0 });
-	domainReport.linkCounts = [{ path: '/docs', counts: domainReport.totals }];
-	await publishVisitReports(db, period, [
-		serializedReport(visitReportKey(domain), domainReport),
-		serializedReport('empty', preparedReport())
-	]);
+test('missing scopes are null, not implicit empty reports or parent fallbacks', async () => {
+	const report = preparedReport(domainScope);
+	if (!('links' in report.summary)) throw new Error('Expected a domain fixture');
+	report.summary.links = [{ path: '/new', totals: zeroVisitTotals() }];
+	await publishVisitReports(db, encodeVisitReports([report]));
 
-	expect(await readPreparedVisitReports(db, domain, '/new')).toBeNull();
-	expect(await readPreparedVisitReports(db, domain, '/docs')).toBeNull();
-});
-
-test('missing metadata is unavailable and clearing deletes every output row', async () => {
-	expect(await readPreparedVisitReports(db)).toBeNull();
-	await db
-		.insertInto('visit_reports')
-		.values(serializedReport(visitReportKey(), preparedReport()))
-		.execute();
-	expect(await readPreparedVisitReports(db)).toBeNull();
-
-	await publishVisitReports(db, period, [
-		serializedReport(visitReportKey(), preparedReport()),
-		serializedReport('empty', preparedReport())
-	]);
+	expect(await readVisitSummary(db, overviewScope)).toBeNull();
+	expect(await readVisitSummary(db, { kind: 'link', domain, path: '/new' })).toBeNull();
+	expect(await readVisitDetails(db, rootScope)).toBeNull();
 	await clearVisitReports(db);
-	expect(await db.selectFrom('visit_reports').selectAll().execute()).toEqual([]);
-	expect(await readPreparedVisitReports(db)).toBeNull();
+	expect(await readVisitSummary(db, domainScope)).toBeNull();
+	expect(await db.selectFrom('analytics_reports').select('id').execute()).toEqual([]);
 });
 
-test('malformed stored JSON is left for the caller to handle', async () => {
-	await publishVisitReports(db, period, [{ key: visitReportKey(), data: '{' }]);
+test('summary and details readers select and decode only their own column', async () => {
+	const report = preparedReport(overviewScope);
+	const rows = encodeVisitReports([report]);
+	const [row] = rows;
+	if (!row) throw new Error('Expected an encoded report fixture');
+	await publishVisitReports(db, rows);
+	await db.updateTable('analytics_reports').set({ details_json: '{}' }).execute();
 
-	await expect(readPreparedVisitReports(db)).rejects.toThrow(SyntaxError);
+	const statements = vi.spyOn(DatabaseSync.prototype, 'prepare');
+	try {
+		expect(await readVisitSummary(db, overviewScope)).toEqual(report.summary);
+		expect(statements.mock.calls.map(([query]) => query)).toEqual([
+			expect.stringMatching(/^select\s+"summary_json"\s+from\s+/i)
+		]);
+		statements.mockClear();
+		await expect(readVisitDetails(db, overviewScope)).rejects.toThrow('Invalid analytics report');
+		expect(statements.mock.calls.map(([query]) => query)).toEqual([
+			expect.stringMatching(/^select\s+"details_json"\s+from\s+/i)
+		]);
+	} finally {
+		statements.mockRestore();
+	}
+	await db
+		.updateTable('analytics_reports')
+		.set({ summary_json: '{}', details_json: row.detailsJson })
+		.execute();
+	expect(await readVisitDetails(db, overviewScope)).toEqual(report.details);
+	await expect(readVisitSummary(db, overviewScope)).rejects.toThrow('Invalid analytics report');
+});
+
+test('database constraints reject invalid scope shapes, duplicate identities and malformed JSON', async () => {
+	const reports = encodeVisitReports(
+		[overviewScope, domainScope, rootScope].map((scope) => preparedReport(scope))
+	);
+	await publishVisitReports(db, reports);
+
+	for (const report of reports) {
+		const scope = report.scope;
+		await expect(
+			db
+				.insertInto('analytics_reports')
+				.values({
+					scope_kind: scope.kind,
+					domain: scope.kind === 'overview' ? null : scope.domain,
+					path: scope.kind === 'link' ? scope.path : null,
+					summary_json: report.summaryJson,
+					details_json: report.detailsJson
+				})
+				.execute()
+		).rejects.toThrow();
+	}
+	await expect(
+		sql`INSERT INTO analytics_reports (scope_kind, domain, path, summary_json, details_json)
+		VALUES ('overview', 'bad.example.test', NULL, '{}', '{}')`.execute(db)
+	).rejects.toThrow();
+	await expect(
+		sql`INSERT INTO analytics_reports (scope_kind, domain, path, summary_json, details_json)
+		VALUES ('domain', NULL, NULL, '{}', '{}')`.execute(db)
+	).rejects.toThrow();
+	await expect(
+		sql`INSERT INTO analytics_reports (scope_kind, domain, path, summary_json, details_json)
+		VALUES ('link', 'go.example.test', NULL, '{}', '{}')`.execute(db)
+	).rejects.toThrow();
+	await expect(
+		sql`INSERT INTO analytics_reports (scope_kind, domain, path, summary_json, details_json)
+		VALUES ('unknown', NULL, NULL, '{}', '{}')`.execute(db)
+	).rejects.toThrow();
+	await expect(
+		sql`INSERT INTO analytics_reports (scope_kind, domain, path, summary_json, details_json)
+		VALUES ('domain', '', NULL, '{}', '{}')`.execute(db)
+	).rejects.toThrow();
+	await expect(
+		sql`INSERT INTO analytics_reports (scope_kind, domain, path, summary_json, details_json)
+		VALUES ('link', '', '/docs', '{}', '{}')`.execute(db)
+	).rejects.toThrow();
+	await expect(
+		sql`INSERT INTO analytics_reports (scope_kind, domain, path, summary_json, details_json)
+		VALUES ('link', 'go.example.test', '', '{}', '{}')`.execute(db)
+	).rejects.toThrow();
+	await expect(
+		sql`INSERT INTO analytics_reports (scope_kind, domain, path, summary_json, details_json)
+		VALUES ('link', 'go.example.test', 'docs', '{}', '{}')`.execute(db)
+	).rejects.toThrow();
+	await expect(
+		db.updateTable('analytics_reports').set({ summary_json: '{' }).execute()
+	).rejects.toThrow();
+	await expect(
+		db.updateTable('analytics_reports').set({ details_json: '{' }).execute()
+	).rejects.toThrow();
 });

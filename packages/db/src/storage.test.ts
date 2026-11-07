@@ -55,11 +55,17 @@ test('opens a real WAL database and applies versioned migrations once', async ()
 			'0003_visit_retention',
 			'0004_remove_visit_collection',
 			'0005_visit_outcome',
-			'0006_visit_reports'
+			'0006_visit_reports',
+			'0007_analytics_reports'
 		]);
 		const tables = await db.introspection.getTables();
 		const names = tables.map((table) => table.name);
 		expect(names).not.toContain('visit_collection');
+		expect(names).not.toContain('visit_reports');
+		expect(names).toContain('analytics_reports');
+		expect(
+			tables.find((table) => table.name === 'analytics_reports')?.columns.map(({ name }) => name)
+		).toEqual(['id', 'scope_kind', 'domain', 'path', 'summary_json', 'details_json']);
 		expect(await runMigrations(db)).toEqual([]);
 	} finally {
 		await db.destroy();
@@ -109,7 +115,7 @@ test('persists request-time outcomes for the same logical path on different doma
 	}
 });
 
-test('adds request-time labels without changing existing visit data', async () => {
+test('upgrades legacy visits and discards only the obsolete report cache', async () => {
 	const db = await openDb(join(directory, 'legacy.sqlite'));
 	try {
 		const migrator = new Migrator({
@@ -127,13 +133,14 @@ test('adds request-time labels without changing existing visit data', async () =
 			VALUES (${visit.domain}, ${visit.path}, ${visit.visited_at}, ${visit.ip}, ${visit.user_agent}, ${visit.accept_language})
 		`.execute(db);
 
-		expect(await runMigrations(db)).toEqual([
-			'0002_visit_classification',
-			'0003_visit_retention',
-			'0004_remove_visit_collection',
-			'0005_visit_outcome',
-			'0006_visit_reports'
-		]);
+		const upgrade = await migrator.migrateTo('0006_visit_reports');
+		if (upgrade.error) throw upgrade.error;
+		await sql`INSERT INTO visit_reports (key, data) VALUES ('overview', 'obsolete cache')`.execute(
+			db
+		);
+
+		expect(await runMigrations(db)).toEqual(['0007_analytics_reports']);
+		expect(await db.selectFrom('analytics_reports').selectAll().execute()).toEqual([]);
 		expect(await db.selectFrom('visits').selectAll().executeTakeFirstOrThrow()).toEqual({
 			...visit,
 			id: 1,
@@ -171,7 +178,8 @@ test('a failed migration rolls back schema and bookkeeping so startup can retry'
 			'0003_visit_retention',
 			'0004_remove_visit_collection',
 			'0005_visit_outcome',
-			'0006_visit_reports'
+			'0006_visit_reports',
+			'0007_analytics_reports'
 		]);
 		expect(await runMigrations(db)).toEqual([]);
 	} finally {
