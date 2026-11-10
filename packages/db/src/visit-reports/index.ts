@@ -3,10 +3,11 @@ export {
 	clearVisitReports,
 	publishVisitReports,
 	readOverviewVisitDetails,
+	readDomainVisitDetails,
 	readVisitSummary,
 	readVisitDetails
 } from './storage.js';
-export type { OverviewVisitDetails } from './storage.js';
+export type { OverviewVisitDetails, DomainVisitDetails } from './storage.js';
 export type {
 	AggregatedVisitReports,
 	DailyVisitCounts,

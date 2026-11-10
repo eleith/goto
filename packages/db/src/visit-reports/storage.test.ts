@@ -17,6 +17,7 @@ import {
 	publishVisitReports,
 	readVisitDetails,
 	readOverviewVisitDetails,
+	readDomainVisitDetails,
 	readVisitSummary
 } from './storage.js';
 
@@ -175,6 +176,115 @@ test('overview details reject an invalid overview independently of summary JSON'
 			.execute();
 		await expect(readOverviewVisitDetails(db, [])).rejects.toThrow(/^Invalid analytics report$/);
 	}
+});
+
+test('domain details use one SQL snapshot with current paths and root, without summaries', async () => {
+	const current = preparedReport(domainScope, asOf, { validVisits: 3, invalidVisits: 1 });
+	const root = preparedReport(rootScope);
+	const docs = preparedReport({ kind: 'link', domain, path: '/docs' });
+	const removed = preparedReport({ kind: 'link', domain, path: '/removed' });
+	const otherDomain = preparedReport({ kind: 'domain', domain: 'other.example.test' });
+	const otherLink = preparedReport({ kind: 'link', domain: 'other.example.test', path: '/docs' });
+	await publishVisitReports(
+		db,
+		encodeVisitReports([
+			preparedReport(overviewScope),
+			current,
+			root,
+			docs,
+			removed,
+			otherDomain,
+			otherLink
+		])
+	);
+	await db.updateTable('analytics_reports').set({ summary_json: '{}' }).execute();
+	await db
+		.updateTable('analytics_reports')
+		.set({ details_json: '{}' })
+		.where(({ or, eb }) =>
+			or([
+				eb('scope_kind', '=', 'overview'),
+				eb('domain', '=', 'other.example.test'),
+				eb('path', '=', '/removed')
+			])
+		)
+		.execute();
+	const statements = vi.spyOn(DatabaseSync.prototype, 'prepare');
+	try {
+		expect(await readDomainVisitDetails(db, domain, ['/docs', '/docs', '/new'])).toEqual({
+			domain: current.details,
+			links: [
+				{ path: '/', details: root.details },
+				{ path: '/docs', details: docs.details }
+			]
+		});
+		expect(statements).toHaveBeenCalledTimes(1);
+		const query = statements.mock.calls[0]?.[0];
+		expect(query).toMatch(
+			/^select\s+"scope_kind",\s*"path",\s*"details_json"\s+from\s+"analytics_reports"/i
+		);
+		expect(query).not.toMatch(/summary_json|\bvisits\b|\bjoin\b/i);
+	} finally {
+		statements.mockRestore();
+	}
+});
+
+test('domain details require a domain report and preserve missing paths', async () => {
+	expect(await readDomainVisitDetails(db, domain, ['/docs'])).toBeNull();
+	await publishVisitReports(db, encodeVisitReports([preparedReport(rootScope)]));
+	expect(await readDomainVisitDetails(db, domain, [])).toBeNull();
+	const current = preparedReport(domainScope);
+	await publishVisitReports(db, encodeVisitReports([current]));
+	expect(await readDomainVisitDetails(db, domain, ['/docs'])).toEqual({
+		domain: current.details,
+		links: []
+	});
+});
+
+test('domain details validate the requested domain independently of summary JSON', async () => {
+	const current = preparedReport(domainScope);
+	await publishVisitReports(db, encodeVisitReports([current]));
+	await db
+		.updateTable('analytics_reports')
+		.set({
+			summary_json: '{}',
+			details_json: JSON.stringify({
+				...current.details,
+				scope: { kind: 'domain', domain: 'wrong.example.test' }
+			})
+		})
+		.execute();
+	await expect(readDomainVisitDetails(db, domain, [])).rejects.toThrow(
+		/^Invalid analytics report$/
+	);
+});
+
+test('domain details validate each selected path scope', async () => {
+	const root = preparedReport(rootScope);
+	await publishVisitReports(db, encodeVisitReports([preparedReport(domainScope), root]));
+	await db
+		.updateTable('analytics_reports')
+		.set({ details_json: JSON.stringify({ ...root.details, scope: domainScope }) })
+		.where('scope_kind', '=', 'link')
+		.execute();
+	await expect(readDomainVisitDetails(db, domain, [])).rejects.toThrow(
+		/^Invalid analytics report$/
+	);
+});
+
+test('domain details require selected paths to share the domain publication period', async () => {
+	await publishVisitReports(
+		db,
+		encodeVisitReports([preparedReport(domainScope), preparedReport(rootScope)])
+	);
+	await db
+		.updateTable('analytics_reports')
+		.set({ details_json: JSON.stringify(preparedReport(rootScope, asOf + 86_400_000).details) })
+		.where('scope_kind', '=', 'link')
+		.execute();
+	await expect(readDomainVisitDetails(db, domain, [])).rejects.toThrow(
+		/^Invalid analytics report$/
+	);
 });
 
 test('publication replaces the complete batch, including when the replacement is empty', async () => {

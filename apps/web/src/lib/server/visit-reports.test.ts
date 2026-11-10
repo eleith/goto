@@ -13,7 +13,7 @@ import type { GotoConfiguration } from '@goto/config';
 import { openDb, runMigrations } from '@goto/db';
 import { publishVisitReports } from '@goto/db/visit-reports';
 import { expect, test, vi } from 'vitest';
-import { readOverviewDetails, readVisitSummary } from './visit-reports.js';
+import { readOverviewDetails, readDomainDetails, readVisitSummary } from './visit-reports.js';
 
 test('reads prepared output and hides snapshots from a different retention policy', async () => {
 	const directory = await mkdtemp(join(tmpdir(), 'goto-page-reports-'));
@@ -50,11 +50,14 @@ test('reads prepared output and hides snapshots from a different retention polic
 	const domain = 'go.example.test';
 	const domainScope = { kind: 'domain', domain } as const;
 	const domainDetails: VisitDetails = { ...details, scope: domainScope };
+	const linkScope = { kind: 'link', domain, path: '/docs' } as const;
+	const linkDetails: VisitDetails = { ...details, scope: linkScope };
 	try {
 		const db = await openDb(configuration.database.path);
 		try {
 			await runMigrations(db);
 			expect(await readOverviewDetails(configuration, [domain])).toBeNull();
+			expect(await readDomainDetails(configuration, domain, ['/docs'])).toBeNull();
 			await publishVisitReports(
 				db,
 				encodeVisitReports([
@@ -69,6 +72,10 @@ test('reads prepared output and hides snapshots from a different retention polic
 							links: []
 						},
 						details: domainDetails
+					},
+					{
+						summary: { version: 1, scope: linkScope, period, totals },
+						details: linkDetails
 					}
 				])
 			);
@@ -83,9 +90,16 @@ test('reads prepared output and hides snapshots from a different retention polic
 				domains: [{ domain, details: domainDetails }]
 			});
 			expect(close).toHaveBeenCalledTimes(1);
+			expect(await readDomainDetails(configuration, domain, ['/docs', '/new'])).toEqual({
+				domain: domainDetails,
+				links: [{ path: '/docs', details: linkDetails }]
+			});
+			expect(close).toHaveBeenCalledTimes(2);
 			configuration.analytics.retention_months = 9;
 			expect(await readOverviewDetails(configuration, ['go.example.test'])).toBeNull();
-			expect(close).toHaveBeenCalledTimes(2);
+			expect(close).toHaveBeenCalledTimes(3);
+			expect(await readDomainDetails(configuration, domain, ['/docs'])).toBeNull();
+			expect(close).toHaveBeenCalledTimes(4);
 		} finally {
 			close.mockRestore();
 		}
@@ -111,13 +125,22 @@ test('invalid prepared output is unavailable, sanitized and closed', async () =>
 			await runMigrations(db);
 			await db
 				.insertInto('analytics_reports')
-				.values({
-					scope_kind: 'overview',
-					domain: null,
-					path: null,
-					summary_json: '{"private":"not-for-browser"}',
-					details_json: '{}'
-				})
+				.values([
+					{
+						scope_kind: 'overview',
+						domain: null,
+						path: null,
+						summary_json: '{"private":"not-for-browser"}',
+						details_json: '{}'
+					},
+					{
+						scope_kind: 'domain',
+						domain: 'go.example.test',
+						path: null,
+						summary_json: '{"private":"not-for-browser"}',
+						details_json: '{}'
+					}
+				])
 				.execute();
 		} finally {
 			await db.destroy();
@@ -127,6 +150,12 @@ test('invalid prepared output is unavailable, sanitized and closed', async () =>
 			expect(await readOverviewDetails(configuration, ['go.example.test'])).toBeNull();
 			expect(close).toHaveBeenCalledTimes(1);
 			expect(warning).toHaveBeenCalledExactlyOnceWith('Prepared visit reports unavailable');
+			expect(await readDomainDetails(configuration, 'go.example.test', ['/docs'])).toBeNull();
+			expect(close).toHaveBeenCalledTimes(2);
+			expect(warning.mock.calls).toEqual([
+				['Prepared visit reports unavailable'],
+				['Prepared visit reports unavailable']
+			]);
 		} finally {
 			close.mockRestore();
 		}
@@ -150,7 +179,9 @@ test('enabled collection fails safely without creating missing storage', async (
 		};
 		expect(await readVisitSummary(configuration, { kind: 'overview' })).toBeNull();
 		expect(await readOverviewDetails(configuration, ['go.example.test'])).toBeNull();
+		expect(await readDomainDetails(configuration, 'go.example.test', ['/docs'])).toBeNull();
 		expect(warning.mock.calls).toEqual([
+			['Prepared visit reports unavailable'],
 			['Prepared visit reports unavailable'],
 			['Prepared visit reports unavailable']
 		]);
@@ -170,6 +201,7 @@ test('disabled collection does not attempt to open missing storage', async () =>
 		};
 		expect(await readVisitSummary(configuration, { kind: 'overview' })).toBeNull();
 		expect(await readOverviewDetails(configuration, ['go.example.test'])).toBeNull();
+		expect(await readDomainDetails(configuration, 'go.example.test', ['/docs'])).toBeNull();
 		expect(warning).not.toHaveBeenCalled();
 	} finally {
 		warning.mockRestore();

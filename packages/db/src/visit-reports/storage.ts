@@ -76,6 +76,47 @@ export async function readOverviewVisitDetails(
 	return { overview, domains };
 }
 
+export interface DomainVisitDetails {
+	domain: VisitDetails;
+	links: Array<{ path: string; details: VisitDetails }>;
+}
+
+export async function readDomainVisitDetails(
+	db: Kysely<Database>,
+	domain: string,
+	currentPaths: string[]
+): Promise<DomainVisitDetails | null> {
+	const paths = [...new Set(['/', ...currentPaths])];
+	const rows = await db
+		.selectFrom('analytics_reports')
+		.select(['scope_kind', 'path', 'details_json'])
+		.where('domain', '=', domain)
+		.where(({ and, or, eb }) =>
+			or([
+				and([eb('scope_kind', '=', 'domain'), eb('path', 'is', null)]),
+				and([eb('scope_kind', '=', 'link'), eb('path', 'in', paths)])
+			])
+		)
+		.execute();
+	const domainRow = rows.find((row) => row.scope_kind === 'domain');
+	if (!domainRow) return null;
+	const details = parseVisitDetails(domainRow.details_json, { kind: 'domain', domain });
+	const links: DomainVisitDetails['links'] = [];
+	for (const row of rows) {
+		if (row.scope_kind === 'domain') continue;
+		if (row.scope_kind !== 'link' || row.path === null) {
+			throw new Error('Invalid analytics report');
+		}
+		const linkDetails = parseVisitDetails(
+			row.details_json,
+			{ kind: 'link', domain, path: row.path },
+			details.period
+		);
+		links.push({ path: row.path, details: linkDetails });
+	}
+	return { domain: details, links };
+}
+
 export async function readVisitSummary(
 	db: Kysely<Database>,
 	scope: ReportScope

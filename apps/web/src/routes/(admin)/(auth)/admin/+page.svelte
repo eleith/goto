@@ -1,61 +1,34 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { goto } from '$app/navigation';
-	import { visitGranularity, visitWindow, type VisitTimeframe } from '@goto/analytics/daily';
+	import { resolveVisitTimeframe, visitGranularity, visitWindow } from '@goto/analytics/daily';
 	import AdminPage from '#lib/components/admin/AdminPage.svelte';
 	import StatCard from '#lib/components/admin/StatCard.svelte';
 	import ReportNotice from '#lib/components/admin/ReportNotice.svelte';
 	import VisitsChart from '#lib/components/admin/VisitsChart.svelte';
+	import VisitTimeframes from '#lib/components/admin/VisitTimeframes.svelte';
 	import { formatCount, formatRetention } from '#lib/components/admin/format.js';
 	import type { PageData } from './$types';
 	let { data }: { data: PageData } = $props();
 
 	let currentUrl = $derived(page.shallow?.url ?? page.url);
 	let timeframe = $derived(
-		selectedTimeframe(data.timeframes, currentUrl.searchParams.get('period'))
+		resolveVisitTimeframe(data.timeframes, currentUrl.searchParams.get('period'))
 	);
 	let window = $derived(data.chart ? visitWindow(data.chart.period, timeframe) : null);
 	let granularity = $derived(
 		data.chart ? visitGranularity(timeframe, data.chart.period.retentionMonths) : 'day'
 	);
-	let validVisits = $derived(data.visitsByTimeframe[timeframe] ?? null);
-
-	function selectedTimeframe(
-		available: VisitTimeframe[],
-		requested: string | null
-	): VisitTimeframe {
-		return available.find((value) => value === requested) ?? '30d';
-	}
-
-	function timeframeLabel(value: VisitTimeframe): string {
-		if (value === '7d') return '7 days';
-		if (value === '30d') return '30 days';
-		if (value === '90d') return '90 days';
-		return `${data.retentionMonths} months`;
-	}
-
-	async function selectTimeframe(value: VisitTimeframe): Promise<void> {
-		if (value === timeframe) return;
-		const next = new URL(currentUrl.href);
-		if (value === '30d') next.searchParams.delete('period');
-		else next.searchParams.set('period', value);
-		await goto(next, { state: page.state, shallow: true });
-	}
+	let validVisits = $derived(data.countsByTimeframe[timeframe]?.validVisits ?? null);
 </script>
 
 <AdminPage siteTitle={data.title} title="Overview" updatedAt={data.asOf}>
 	{#snippet actions()}
 		{#if data.available && data.timeframes.length > 0}
-			<div class="overview-timeframes" role="group" aria-label="Timeframe">
-				{#each data.timeframes as option (option)}
-					<button
-						type="button"
-						class="ui-button"
-						aria-pressed={timeframe === option}
-						onclick={() => selectTimeframe(option)}>{timeframeLabel(option)}</button
-					>
-				{/each}
-			</div>
+			<VisitTimeframes
+				timeframes={data.timeframes}
+				retentionMonths={data.retentionMonths}
+				value={timeframe}
+			/>
 		{/if}
 	{/snippet}
 	<ReportNotice collectionEnabled={data.collectionEnabled} available={data.available} />
@@ -90,10 +63,14 @@
 					<tbody>
 						{#each data.domains as row (row.domain)}
 							<tr>
-								<th scope="row"><a class="admin-row-link" href={row.href}>{row.domain}</a></th>
+								<th scope="row"
+									><a class="admin-row-link" href={`${row.href}?period=${timeframe}`}
+										>{row.domain}</a
+									></th
+								>
 								<td>{formatCount(row.linkCount)}</td>
 								{#if data.collectionEnabled}<td
-										>{formatCount(row.visitsByTimeframe[timeframe] ?? null)}</td
+										>{formatCount(row.countsByTimeframe[timeframe]?.validVisits ?? null)}</td
 									>{/if}
 							</tr>
 						{/each}

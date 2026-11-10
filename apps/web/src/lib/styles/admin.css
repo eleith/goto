@@ -52,17 +52,6 @@
 .admin-cards-inventory {
 	grid-template-columns: repeat(2, minmax(0, 1fr));
 }
-.overview-timeframes {
-	margin-inline-start: auto;
-	display: flex;
-	flex-wrap: wrap;
-	gap: var(--space-1);
-}
-.overview-timeframes button[aria-pressed='true'] {
-	font-weight: 600;
-	background: var(--color-surface-muted);
-	box-shadow: inset 0 0 0 var(--border-width) var(--color-border-strong);
-}
 .admin-stat,
 .admin-info {
 	background: var(--color-surface-card);

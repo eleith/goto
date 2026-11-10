@@ -106,25 +106,37 @@ test('projects compact global window counts while inventory stays current and hi
 		domainCount: 3,
 		linkCount: 4,
 		timeframes: ['7d', '30d', 'all'],
-		visitsByTimeframe: { '7d': 3, '30d': 11, all: 42 },
+		countsByTimeframe: {
+			'7d': { validVisits: 3, invalidVisits: 7 },
+			'30d': { validVisits: 11, invalidVisits: 30 },
+			all: { validVisits: 42, invalidVisits: 93 }
+		},
 		chart: { daily: overview.daily, period },
 		domains: [
 			{
 				domain,
 				linkCount: 2,
-				visitsByTimeframe: { '7d': 2, '30d': 5, all: 12 },
+				countsByTimeframe: {
+					'7d': { validVisits: 2, invalidVisits: 7 },
+					'30d': { validVisits: 5, invalidVisits: 30 },
+					all: { validVisits: 12, invalidVisits: 93 }
+				},
 				href: '/admin/domains/go.example.test'
 			},
 			{
 				domain: emptyDomain,
 				linkCount: 1,
-				visitsByTimeframe: { '7d': 0, '30d': 0, all: 0 },
+				countsByTimeframe: {
+					'7d': { validVisits: 0, invalidVisits: 7 },
+					'30d': { validVisits: 0, invalidVisits: 30 },
+					all: { validVisits: 0, invalidVisits: 93 }
+				},
 				href: '/admin/domains/empty.example.test'
 			},
 			{
 				domain: newDomain,
 				linkCount: 1,
-				visitsByTimeframe: {},
+				countsByTimeframe: {},
 				href: '/admin/domains/new.example.test'
 			}
 		]
@@ -143,8 +155,13 @@ test.each([
 		const data = await load(request(months));
 		if (!data) throw new Error('Missing overview page');
 		expect(data.timeframes).toEqual(['7d', '30d', '90d', 'all']);
-		expect(data.visitsByTimeframe).toEqual({ '7d': 7, '30d': 30, '90d': 90, all: retainedDays });
-		expect(data.domains.every((row) => Object.keys(row.visitsByTimeframe).length === 0)).toBe(true);
+		expect(data.countsByTimeframe).toEqual({
+			'7d': { validVisits: 7, invalidVisits: 7 },
+			'30d': { validVisits: 30, invalidVisits: 30 },
+			'90d': { validVisits: 90, invalidVisits: 90 },
+			all: { validVisits: retainedDays, invalidVisits: retainedDays }
+		});
+		expect(data.domains.every((row) => Object.keys(row.countsByTimeframe).length === 0)).toBe(true);
 	}
 );
 
@@ -159,8 +176,8 @@ test('missing preparation keeps inventory usable without substituting zero count
 	expect(data.linkCount).toBe(4);
 	expect(data.asOf).toBeNull();
 	expect(data.chart).toBeNull();
-	expect(data.visitsByTimeframe).toEqual({});
-	expect(data.domains.map((row) => row.visitsByTimeframe)).toEqual([{}, {}, {}]);
+	expect(data.countsByTimeframe).toEqual({});
+	expect(data.domains.map((row) => row.countsByTimeframe)).toEqual([{}, {}, {}]);
 });
 
 test('disabled collection reads no analytics and exposes only inventory with empty counts', async () => {
@@ -171,8 +188,8 @@ test('disabled collection reads no analytics and exposes only inventory with emp
 	expect(data.domainCount).toBe(3);
 	expect(data.linkCount).toBe(4);
 	expect(data.timeframes).toEqual([]);
-	expect(data.visitsByTimeframe).toEqual({});
+	expect(data.countsByTimeframe).toEqual({});
 	expect(data.chart).toBeNull();
-	expect(data.domains.map((row) => row.visitsByTimeframe)).toEqual([{}, {}, {}]);
+	expect(data.domains.map((row) => row.countsByTimeframe)).toEqual([{}, {}, {}]);
 	expect(readOverviewDetails).not.toHaveBeenCalled();
 });

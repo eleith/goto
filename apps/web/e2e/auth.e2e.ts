@@ -101,7 +101,16 @@ test('shared credentials protect overview, domain and link pages and sign-out re
 	expect(navigationWarnings).toEqual([]);
 	await domainLink.click();
 	await expect(page.getByRole('heading', { name: 'go.example.org', exact: true })).toBeVisible();
-	await expect(page.getByRole('region', { name: 'Visits over time', exact: true })).toHaveCount(0);
+	const overviewBreadcrumb = page
+		.getByRole('navigation', { name: 'Breadcrumb', exact: true })
+		.getByRole('link', { name: 'Overview', exact: true });
+	await expect(overviewBreadcrumb).toHaveAttribute('href', '/admin?period=all');
+	await expect(trend).toHaveAttribute('aria-busy', 'false');
+	await expect(graph).toHaveAccessibleName(/^Valid visits by week\. Total: 2\./);
+	await expect(timeframe.getByRole('button', { name: '3 months', exact: true })).toHaveAttribute(
+		'aria-pressed',
+		'true'
+	);
 	await expect(visitsValue).toHaveText('2');
 	await expect(page.locator('.admin-cards .admin-stat-label')).toHaveText([
 		'Links',
@@ -116,6 +125,18 @@ test('shared credentials protect overview, domain and link pages and sign-out re
 	const baseTable = page.getByRole('region', { name: 'Base URL on go.example.org', exact: true });
 	const columns = ['Path', 'Destination', 'State', 'Visits'];
 	await expect(linksTable.getByRole('columnheader')).toHaveText(columns);
+	const retainedLink = linksTable
+		.getByRole('row')
+		.filter({ has: page.getByRole('link', { name: '/a%2Fb', exact: true }) });
+	await expect(retainedLink.getByRole('cell').last()).toHaveText('1');
+	await timeframe.getByRole('button', { name: '30 days', exact: true }).click();
+	await expect(visitsValue).toHaveText('1');
+	await expect(retainedLink.getByRole('cell').last()).toHaveText('0');
+	await expect(graph).toHaveAccessibleName(/^Valid visits by day\. Total: 1\./);
+	await timeframe.getByRole('button', { name: '3 months', exact: true }).click();
+	await expect(visitsValue).toHaveText('2');
+	await expect(retainedLink.getByRole('cell').last()).toHaveText('1');
+	await expect(graph).toHaveAccessibleName(/^Valid visits by week\. Total: 2\./);
 	const historicalInvalid = linksTable
 		.getByRole('row')
 		.filter({ has: page.getByRole('link', { name: '/a/b', exact: true }) });
@@ -133,6 +154,7 @@ test('shared credentials protect overview, domain and link pages and sign-out re
 	await page.getByRole('link', { name: '/docs', exact: true }).click();
 	await expect(page).toHaveURL(`${appServer.origin}${docsPath}`);
 	await expect(page.getByRole('heading', { name: '/docs', exact: true })).toBeVisible();
+	await expect(page.getByRole('region', { name: 'Visits over time', exact: true })).toHaveCount(0);
 	await expect(visitsValue).toHaveText('1');
 	await expect(
 		page.getByRole('region', { name: 'Links on go.example.org', exact: true })
@@ -155,7 +177,11 @@ test('shared credentials protect overview, domain and link pages and sign-out re
 	await expect(page.getByRole('heading', { name: '/', exact: true })).toBeVisible();
 	await expect(visitsValue).toHaveText('0');
 	await domainBreadcrumb.click();
-	await expect(visitsValue).toHaveText('2');
+	await expect(timeframe.getByRole('button', { name: '30 days', exact: true })).toHaveAttribute(
+		'aria-pressed',
+		'true'
+	);
+	await expect(visitsValue).toHaveText('1');
 
 	const html = await page.content();
 	await expect(html).not.toContain('e2e-only-password');
@@ -187,5 +213,21 @@ test.describe('analytics disabled', () => {
 			page.getByRole('region', { name: 'Domain inventory', exact: true }).getByRole('columnheader')
 		).toHaveText(['Domain', 'Links']);
 		await expect(page.getByRole('status')).toHaveText('Analytics disabled.');
+		await page.getByRole('link', { name: 'go.example.org', exact: true }).click();
+		await expect(page.locator('.admin-cards .admin-stat-label')).toHaveText(['Links']);
+		await expect(page.getByRole('group', { name: 'Timeframe', exact: true })).toHaveCount(0);
+		await expect(page.getByRole('region', { name: 'Visits over time', exact: true })).toHaveCount(
+			0
+		);
+		await expect(
+			page
+				.getByRole('region', { name: 'Links on go.example.org', exact: true })
+				.getByRole('columnheader')
+		).toHaveText(['Path', 'Destination', 'State']);
+		await expect(
+			page
+				.getByRole('region', { name: 'Base URL on go.example.org', exact: true })
+				.getByRole('columnheader')
+		).toHaveText(['Path', 'Destination', 'State']);
 	});
 });

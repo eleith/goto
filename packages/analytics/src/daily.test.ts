@@ -1,10 +1,13 @@
 import { expect, test } from 'vitest';
 import {
 	availableVisitTimeframes,
+	countVisitWindows,
 	groupVisitDays,
-	sumValidVisits,
+	resolveVisitTimeframe,
+	sumVisitTotals,
 	visitGranularity,
-	visitWindow
+	visitWindow,
+	type VisitTimeframe
 } from './daily.js';
 import { visitDays } from './period.js';
 import type { ReportPeriod, VisitDetails } from './reports.js';
@@ -32,6 +35,17 @@ test('timeframe choices and automatic granularity follow retention', () => {
 	expect(visitGranularity('all', 3)).toBe('week');
 	expect(visitGranularity('all', 9)).toBe('month');
 	expect(visitGranularity('all', 12)).toBe('month');
+});
+
+test('requested timeframes must be available and otherwise default to thirty days', () => {
+	const available = availableVisitTimeframes(3);
+
+	expect(resolveVisitTimeframe(available, '7d')).toBe('7d');
+	expect(resolveVisitTimeframe(available, 'all')).toBe('all');
+	expect(resolveVisitTimeframe(availableVisitTimeframes(9), '90d')).toBe('90d');
+	expect(resolveVisitTimeframe(available, '90d')).toBe('30d');
+	expect(resolveVisitTimeframe(available, 'unknown')).toBe('30d');
+	expect(resolveVisitTimeframe(available, null)).toBe('30d');
 });
 
 test('day presets include the latest UTC calendar day rather than rolling hours', () => {
@@ -71,7 +85,7 @@ test('full windows preserve partial retention boundaries and presets cannot prec
 
 	expect(window).toEqual({ from: period.from, asOf: period.asOf });
 	expect(visitWindow(period, '7d')).toEqual(window);
-	expect(sumValidVisits(daily, window)).toBe(9);
+	expect(sumVisitTotals(daily, window)).toEqual({ validVisits: 9, invalidVisits: 2 });
 	expect(groupVisitDays(daily, window, 'day')).toEqual(daily);
 	expect(period).toEqual(original);
 });
@@ -104,9 +118,46 @@ test('selected days are filtered before grouping and share the headline total wi
 			invalidVisits: 2
 		}
 	]);
-	expect(sumValidVisits(daily, window)).toBe(9);
+	expect(sumVisitTotals(daily, window)).toEqual({ validVisits: 9, invalidVisits: 53 });
 	expect(weeks.reduce((total, week) => total + week.validVisits, 0)).toBe(9);
 	expect(daily).toEqual(original);
+});
+
+test('window counts project both outcomes for each requested timeframe', () => {
+	const { period, daily } = dailyReport('2024-02-20T12:00:00.000Z', '2024-03-05T00:00:00.000Z', {
+		'2024-02-26': [100, 100],
+		'2024-02-27': [2, 50],
+		'2024-02-29': [3, 1],
+		'2024-03-04': [4, 2]
+	});
+	const timeframes: VisitTimeframe[] = ['7d', 'all'];
+	const windows = timeframes.map((timeframe) => ({
+		timeframe,
+		window: visitWindow(period, timeframe)
+	}));
+
+	expect(countVisitWindows(daily, windows)).toEqual({
+		'7d': { validVisits: 9, invalidVisits: 53 },
+		all: { validVisits: 109, invalidVisits: 153 }
+	});
+});
+
+test('missing daily reports stay absent while empty and zero-filled reports give window zeros', () => {
+	const { period, daily } = dailyReport('2024-02-01T00:00:00.000Z', '2024-03-01T00:00:00.000Z');
+	const timeframes = availableVisitTimeframes(3);
+	const windows = timeframes.map((timeframe) => ({
+		timeframe,
+		window: visitWindow(period, timeframe)
+	}));
+	const zeros = {
+		'7d': { validVisits: 0, invalidVisits: 0 },
+		'30d': { validVisits: 0, invalidVisits: 0 },
+		all: { validVisits: 0, invalidVisits: 0 }
+	};
+
+	expect(countVisitWindows(undefined, windows)).toEqual({});
+	expect(countVisitWindows([], windows)).toEqual(zeros);
+	expect(countVisitWindows(daily, windows)).toEqual(zeros);
 });
 
 test('days touching but outside the view are excluded from groups and totals', () => {
@@ -118,7 +169,7 @@ test('days touching but outside the view are excluded from groups and totals', (
 	});
 	const window = { from: '2024-02-28T00:00:00.000Z', asOf: '2024-03-01T00:00:00.000Z' };
 
-	expect(sumValidVisits(daily, window)).toBe(5);
+	expect(sumVisitTotals(daily, window)).toEqual({ validVisits: 5, invalidVisits: 3 });
 	expect(groupVisitDays(daily, window, 'day')).toEqual(daily.slice(1, 3));
 });
 
@@ -239,7 +290,7 @@ test('exact calendar boundaries are complete and do not add a following bucket',
 			invalidVisits: 0
 		}
 	]);
-	expect(sumValidVisits(daily, period)).toBe(0);
-	expect(sumValidVisits([], period)).toBe(0);
+	expect(sumVisitTotals(daily, period)).toEqual({ validVisits: 0, invalidVisits: 0 });
+	expect(sumVisitTotals([], period)).toEqual({ validVisits: 0, invalidVisits: 0 });
 	expect(groupVisitDays([], period, 'month')).toEqual([]);
 });
