@@ -34,6 +34,7 @@ export function createAuthentication(cfg: Immutable<GotoConfiguration>) {
 			accountLinking: { enabled: false }
 		},
 		advanced: {
+			cookiePrefix: 'goto',
 			disableOriginCheck: false,
 			ipAddress: { ipAddressHeaders: ['x-real-ip'] }
 		},
