@@ -18,7 +18,7 @@ services:
       NODE_ENV: development
       PORT: 5173
     ports:
-      - '127.0.0.1:5173:5173'
+      - '127.0.0.1:${GOTO_DEV_PORT:-5173}:5173'
     volumes:
       - ./config:/m/apps/web/config:ro
       - ./data:/m/apps/web/data
