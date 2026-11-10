@@ -3,24 +3,26 @@ FROM node:26.5.0-alpine AS base
 WORKDIR /m
 
 ENV CI=true \
-    HOME=/home/app \
-    PNPM_HOME=/home/app/.pnpm \
-    XDG_DATA_HOME=/home/app/.local/share \
-    XDG_CACHE_HOME=/home/app/.cache \
-    XDG_CONFIG_HOME=/home/app/.config
+    HOME=/root
 RUN npm install -g pnpm@11.9.0 \
-    && mkdir -p /home/app/store \
-    && printf 'store-dir=/home/app/store\n' > /home/app/.npmrc
+    && mkdir -p /pnpm/store \
+    && printf 'store-dir=/pnpm/store\n' > /root/.npmrc
 
 FROM base AS dev
 ARG LOCAL_UID=1000
 ARG LOCAL_GID=1000
 
 COPY pnpm-lock.yaml pnpm-workspace.yaml ./
-RUN --mount=type=cache,id=pnpm-store,target=/home/app/store pnpm fetch --frozen-lockfile
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm fetch --frozen-lockfile
 COPY . .
-RUN --mount=type=cache,id=pnpm-store,target=/home/app/store pnpm install --offline --frozen-lockfile
-RUN mkdir -p /m/apps/worker/config /m/apps/worker/data /m/packages/config/dist \
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm install --offline --frozen-lockfile
+ENV HOME=/home/app \
+    PNPM_HOME=/home/app/.pnpm \
+    XDG_DATA_HOME=/home/app/.local/share \
+    XDG_CACHE_HOME=/home/app/.cache \
+    XDG_CONFIG_HOME=/home/app/.config
+RUN mkdir -p /home/app/store /m/apps/worker/config /m/apps/worker/data /m/packages/config/dist \
+    && printf 'store-dir=/home/app/store\n' > /home/app/.npmrc \
     && chown -R ${LOCAL_UID}:${LOCAL_GID} /home/app /m/apps/worker/data /m/packages/config/dist
 USER ${LOCAL_UID}:${LOCAL_GID}
 WORKDIR /m/apps/worker
@@ -29,13 +31,13 @@ CMD ["pnpm", "run", "dev"]
 
 FROM base AS builder
 COPY pnpm-lock.yaml pnpm-workspace.yaml ./
-RUN --mount=type=cache,id=pnpm-store,target=/home/app/store pnpm fetch --frozen-lockfile
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm fetch --frozen-lockfile
 COPY . .
-RUN --mount=type=cache,id=pnpm-store,target=/home/app/store pnpm install --offline --frozen-lockfile
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm install --offline --frozen-lockfile
 RUN pnpm --filter "@goto/worker..." build
 
 FROM builder AS pruner
-RUN --mount=type=cache,id=pnpm-store,target=/home/app/store \
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     pnpm --config.hoist-workspace-packages=false --filter @goto/worker --prod deploy --legacy /pruned
 
 FROM node:26.5.0-alpine AS prod
