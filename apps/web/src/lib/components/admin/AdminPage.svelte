@@ -10,6 +10,7 @@
 		updatedAt = null,
 		backHref = '',
 		backLabel = 'Overview',
+		actions,
 		children
 	}: {
 		siteTitle: string;
@@ -17,6 +18,7 @@
 		updatedAt?: number | null;
 		backHref?: string;
 		backLabel?: string;
+		actions?: Snippet;
 		children: Snippet;
 	} = $props();
 </script>
@@ -27,12 +29,15 @@
 	<header class="admin-heading">
 		{#if backHref}<nav aria-label="Breadcrumb"><a href={backHref}>{backLabel}</a></nav>{/if}
 		<div class="admin-title-row">
-			<h1>{title}</h1>
-			{#if updatedAt !== null}
-				<time class="admin-updated" datetime={new Date(updatedAt).toISOString()}
-					>{formatUpdated(updatedAt)}</time
-				>
-			{/if}
+			<div class="admin-title">
+				<h1>{title}</h1>
+				{#if updatedAt !== null}
+					<time class="admin-updated" datetime={new Date(updatedAt).toISOString()}
+						>{formatUpdated(updatedAt)}</time
+					>
+				{/if}
+			</div>
+			{@render actions?.()}
 		</div>
 	</header>
 	{@render children()}

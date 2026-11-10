@@ -1,12 +1,22 @@
 import { validateConfig } from '@goto/config';
-import type { OverviewSummary } from '@goto/analytics';
+import {
+	createVisitPeriod,
+	visitDays,
+	type ReportPeriod,
+	type ReportScope,
+	type VisitDetails
+} from '@goto/analytics';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { prepareSnapshot } from '#lib/server/snapshot.js';
-import { readVisitSummary } from '#lib/server/visit-reports.js';
+import { readOverviewDetails } from '#lib/server/visit-reports.js';
 import { load } from './+page.server.js';
 
-vi.mock('#lib/server/visit-reports.js', () => ({ readVisitSummary: vi.fn() }));
+vi.mock('#lib/server/visit-reports.js', () => ({ readOverviewDetails: vi.fn() }));
 beforeEach(() => vi.resetAllMocks());
+
+const domain = 'go.example.test';
+const emptyDomain = 'empty.example.test';
+const newDomain = 'new.example.test';
 
 function request(retention_months = 3) {
 	const prepared = validateConfig(
@@ -14,12 +24,14 @@ function request(retention_months = 3) {
 			auth: { credentials: { username: 'test', password: 'overview-test-password' } },
 			analytics: { retention_months },
 			domains: {
-				'go.example.test': {
+				[domain]: {
 					links: {
 						'/docs': { url: 'https://example.test/docs' },
 						'/disabled': { url: 'https://example.test/disabled', enabled: false }
 					}
-				}
+				},
+				[emptyDomain]: { links: { '/': { url: 'https://example.test/' } } },
+				[newDomain]: { links: { '/new': { url: 'https://example.test/new' } } }
 			}
 		},
 		{ env: {} }
@@ -27,46 +39,140 @@ function request(retention_months = 3) {
 	return { locals: { snapshot: prepareSnapshot(prepared) } } as Parameters<typeof load>[0];
 }
 
-test('shows current configuration and the worker-prepared summary without re-aggregating', async () => {
-	const counts = { validVisits: 2, invalidVisits: 2 };
-	const summary: OverviewSummary = {
-		version: 1,
-		scope: { kind: 'overview' },
-		period: {
-			from: '2026-03-15T12:00:00.000Z',
-			asOf: '2026-06-15T12:00:00.000Z',
-			timezone: 'UTC',
-			retentionMonths: 3
-		},
-		totals: { validVisits: 7, invalidVisits: 2 },
-		base: { validVisits: 0, invalidVisits: 1 },
-		domains: [{ domain: 'go.example.test', totals: counts }]
+function details(
+	scope: ReportScope,
+	period: ReportPeriod,
+	validVisits: (day: string) => number
+): VisitDetails {
+	const daily = visitDays(period).map((day) => ({
+		...day,
+		validVisits: validVisits(day.start.slice(0, 10)),
+		invalidVisits: 1
+	}));
+	const totals = {
+		validVisits: daily.reduce((sum, day) => sum + day.validVisits, 0),
+		invalidVisits: daily.length
 	};
-	vi.mocked(readVisitSummary).mockResolvedValue(summary);
-	const data = await load(request());
-	if (!data) throw new Error('Missing page data');
-	expect(readVisitSummary).toHaveBeenCalledExactlyOnceWith(expect.any(Object), {
-		kind: 'overview'
+	return {
+		version: 1,
+		scope,
+		period,
+		daily,
+		browsers: [{ family: 'Other', ...totals }],
+		operatingSystems: [{ family: 'Other', ...totals }]
+	};
+}
+
+test('projects compact global window counts while inventory stays current and history stays retained', async () => {
+	const period = createVisitPeriod(3, Date.parse('2026-06-15T12:00:00.000Z'));
+	const overviewCounts: Record<string, number> = {
+		'2026-03-15': 13,
+		'2026-04-01': 11,
+		'2026-05-16': 7,
+		'2026-05-17': 5,
+		'2026-06-08': 3,
+		'2026-06-09': 2,
+		'2026-06-15': 1
+	};
+	const domainCounts: Record<string, number> = {
+		'2026-03-15': 4,
+		'2026-05-16': 3,
+		'2026-05-17': 2,
+		'2026-06-08': 1,
+		'2026-06-09': 1,
+		'2026-06-15': 1
+	};
+	const overview = details({ kind: 'overview' }, period, (day) => overviewCounts[day] ?? 0);
+	const current = details({ kind: 'domain', domain }, period, (day) => domainCounts[day] ?? 0);
+	const empty = details({ kind: 'domain', domain: emptyDomain }, period, () => 0);
+	vi.mocked(readOverviewDetails).mockResolvedValue({
+		overview,
+		domains: [
+			{ domain, details: current },
+			{ domain: emptyDomain, details: empty }
+		]
 	});
-	expect(data.domainCount).toBe(1);
-	expect(data.linkCount).toBe(2);
-	expect(data.totals).toEqual(summary.totals);
-	expect(data.asOf).toBe(Date.parse(summary.period.asOf));
-	expect(data.domains[0]).toMatchObject({
-		href: '/admin/domains/go.example.test',
-		counts
+	const data = await load(request());
+	expect(readOverviewDetails).toHaveBeenCalledExactlyOnceWith(expect.any(Object), [
+		domain,
+		emptyDomain,
+		newDomain
+	]);
+	expect(data).toEqual({
+		collectionEnabled: true,
+		available: true,
+		retentionMonths: 3,
+		asOf: Date.parse(period.asOf),
+		domainCount: 3,
+		linkCount: 4,
+		timeframes: ['7d', '30d', 'all'],
+		visitsByTimeframe: { '7d': 3, '30d': 11, all: 42 },
+		chart: { daily: overview.daily, period },
+		domains: [
+			{
+				domain,
+				linkCount: 2,
+				visitsByTimeframe: { '7d': 2, '30d': 5, all: 12 },
+				href: '/admin/domains/go.example.test'
+			},
+			{
+				domain: emptyDomain,
+				linkCount: 1,
+				visitsByTimeframe: { '7d': 0, '30d': 0, all: 0 },
+				href: '/admin/domains/empty.example.test'
+			},
+			{
+				domain: newDomain,
+				linkCount: 1,
+				visitsByTimeframe: {},
+				href: '/admin/domains/new.example.test'
+			}
+		]
 	});
 });
 
-test('disabled collection does not read a report; missing preparation is not zero', async () => {
-	const disabled = await load(request(0));
-	if (!disabled) throw new Error('Missing disabled page');
-	expect(disabled.collectionEnabled).toBe(false);
-	expect(disabled.totals).toBeNull();
-	expect(readVisitSummary).not.toHaveBeenCalled();
-	vi.mocked(readVisitSummary).mockResolvedValue(null);
-	const unavailable = await load(request());
-	if (!unavailable) throw new Error('Missing unavailable page');
-	expect(unavailable.available).toBe(false);
-	expect(unavailable.domains[0]?.counts).toBeNull();
+test.each([
+	{ months: 9 as const, retainedDays: 273 },
+	{ months: 12 as const, retainedDays: 365 }
+])(
+	'offers four windows for $months months anchored to the latest included day',
+	async ({ months, retainedDays }) => {
+		const period = createVisitPeriod(months, Date.parse('2026-03-01T00:00:00.000Z'));
+		const overview = details({ kind: 'overview' }, period, () => 1);
+		vi.mocked(readOverviewDetails).mockResolvedValue({ overview, domains: [] });
+		const data = await load(request(months));
+		if (!data) throw new Error('Missing overview page');
+		expect(data.timeframes).toEqual(['7d', '30d', '90d', 'all']);
+		expect(data.visitsByTimeframe).toEqual({ '7d': 7, '30d': 30, '90d': 90, all: retainedDays });
+		expect(data.domains.every((row) => Object.keys(row.visitsByTimeframe).length === 0)).toBe(true);
+	}
+);
+
+test('missing preparation keeps inventory usable without substituting zero counts', async () => {
+	vi.mocked(readOverviewDetails).mockResolvedValue(null);
+	const data = await load(request());
+	if (!data) throw new Error('Missing unavailable page');
+	expect(data.available).toBe(false);
+	expect(data.collectionEnabled).toBe(true);
+	expect(data.retentionMonths).toBe(3);
+	expect(data.domainCount).toBe(3);
+	expect(data.linkCount).toBe(4);
+	expect(data.asOf).toBeNull();
+	expect(data.chart).toBeNull();
+	expect(data.visitsByTimeframe).toEqual({});
+	expect(data.domains.map((row) => row.visitsByTimeframe)).toEqual([{}, {}, {}]);
+});
+
+test('disabled collection reads no analytics and exposes only inventory with empty counts', async () => {
+	const data = await load(request(0));
+	if (!data) throw new Error('Missing disabled page');
+	expect(data.collectionEnabled).toBe(false);
+	expect(data.available).toBe(false);
+	expect(data.domainCount).toBe(3);
+	expect(data.linkCount).toBe(4);
+	expect(data.timeframes).toEqual([]);
+	expect(data.visitsByTimeframe).toEqual({});
+	expect(data.chart).toBeNull();
+	expect(data.domains.map((row) => row.visitsByTimeframe)).toEqual([{}, {}, {}]);
+	expect(readOverviewDetails).not.toHaveBeenCalled();
 });

@@ -26,6 +26,7 @@ process.env.PORT = String(address.port);
 const configuration = {
 	site: { url: `http://localhost:${address.port}` },
 	auth: { credentials: { username: 'example', password: 'e2e-only-password' } },
+	analytics: { retention_months: Number(process.env.GOTO_E2E_RETENTION_MONTHS ?? '3') },
 	domains: {
 		'go.example.org': {
 			links: {
@@ -60,10 +61,20 @@ async function seedVisits() {
 			os: 'Other'
 		};
 		const visits = [
-			{ domain: 'go.example.org', path: '/docs', outcome: 'valid' },
+			{
+				domain: 'go.example.org',
+				path: '/docs',
+				outcome: 'valid',
+				visited_at: Date.now() - 14 * 86_400_000
+			},
 			{ domain: 'go.example.org', path: '/a/b', outcome: 'invalid' },
 			{ domain: 'go.example.org', path: '/', outcome: 'invalid' },
-			{ domain: 'go.example.org', path: '/a%2Fb', outcome: 'valid' },
+			{
+				domain: 'go.example.org',
+				path: '/a%2Fb',
+				outcome: 'valid',
+				visited_at: Date.now() - 45 * 86_400_000
+			},
 			{ domain: 'tiny.example.org', path: '/docs', outcome: 'valid' }
 		];
 		for (const visit of visits) await insertVisit(db, { ...common, ...visit });

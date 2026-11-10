@@ -36,6 +36,46 @@ export async function publishVisitReports(
 	});
 }
 
+export interface OverviewVisitDetails {
+	overview: VisitDetails;
+	domains: Array<{ domain: string; details: VisitDetails }>;
+}
+
+export async function readOverviewVisitDetails(
+	db: Kysely<Database>,
+	currentDomains: string[]
+): Promise<OverviewVisitDetails | null> {
+	const rows = await db
+		.selectFrom('analytics_reports')
+		.select(['scope_kind', 'domain', 'details_json'])
+		.where(({ and, or, eb }) => {
+			const overview = eb('scope_kind', '=', 'overview');
+			if (currentDomains.length === 0) return overview;
+			return or([
+				overview,
+				and([eb('scope_kind', '=', 'domain'), eb('domain', 'in', currentDomains)])
+			]);
+		})
+		.execute();
+	const overviewRow = rows.find((row) => row.scope_kind === 'overview');
+	if (!overviewRow) return null;
+	const overview = parseVisitDetails(overviewRow.details_json, { kind: 'overview' });
+	const domains: OverviewVisitDetails['domains'] = [];
+	for (const row of rows) {
+		if (row.scope_kind === 'overview') continue;
+		if (row.scope_kind !== 'domain' || row.domain === null) {
+			throw new Error('Invalid analytics report');
+		}
+		const details = parseVisitDetails(
+			row.details_json,
+			{ kind: 'domain', domain: row.domain },
+			overview.period
+		);
+		domains.push({ domain: row.domain, details });
+	}
+	return { overview, domains };
+}
+
 export async function readVisitSummary(
 	db: Kysely<Database>,
 	scope: ReportScope

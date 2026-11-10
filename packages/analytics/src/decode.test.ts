@@ -30,6 +30,26 @@ test('readers decode their self-contained document independently', () => {
 	expect(parseVisitDetails(JSON.stringify(details), scope)).toEqual(details);
 });
 
+test('details reader can require the same reporting policy and window', () => {
+	expect(parseVisitDetails(JSON.stringify(details), scope, period)).toEqual(details);
+	const nextPeriod = createVisitPeriod(3, Date.UTC(2026, 3, 2, 12));
+	const nextDetails = {
+		...details,
+		period: nextPeriod,
+		daily: visitDays(nextPeriod).map((day) => ({ ...day, ...zeroVisitTotals() })),
+		browsers: [],
+		operatingSystems: []
+	};
+	expect(parseVisitDetails(JSON.stringify(nextDetails), scope)).toEqual(nextDetails);
+	expect(() => parseVisitDetails(JSON.stringify(nextDetails), scope, period)).toThrow(
+		'Invalid analytics report'
+	);
+	const otherPolicy = createVisitPeriod(9, Date.parse(period.asOf));
+	expect(() => parseVisitDetails(JSON.stringify(details), scope, otherPolicy)).toThrow(
+		'Invalid analytics report'
+	);
+});
+
 test('summary reader rejects unsupported versions, unsafe counts and wrong identities safely', () => {
 	for (const invalid of [
 		{ ...summary, version: 2 },

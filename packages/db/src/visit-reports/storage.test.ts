@@ -16,6 +16,7 @@ import {
 	clearVisitReports,
 	publishVisitReports,
 	readVisitDetails,
+	readOverviewVisitDetails,
 	readVisitSummary
 } from './storage.js';
 
@@ -38,9 +39,10 @@ afterEach(async () => {
 function preparedReport(
 	scope: ReportScope,
 	cutoff = asOf,
-	totals: VisitTotals = zeroVisitTotals()
+	totals: VisitTotals = zeroVisitTotals(),
+	retentionMonths: 3 | 9 | 12 = 3
 ): PreparedVisitReport {
-	const period = createVisitPeriod(3, cutoff);
+	const period = createVisitPeriod(retentionMonths, cutoff);
 	let summary: VisitSummary;
 	if (scope.kind === 'overview') {
 		summary = { version: 1, scope, period, totals, base: zeroVisitTotals(), domains: [] };
@@ -89,6 +91,90 @@ test('reads summary and details for each explicit SQL scope including root', asy
 		{ scope_kind: 'domain', domain, path: null },
 		{ scope_kind: 'link', domain, path: '/' }
 	]);
+});
+
+test('overview details use one SQL snapshot with only current domain details and no summaries', async () => {
+	const overview = preparedReport(overviewScope, asOf, { validVisits: 8, invalidVisits: 2 });
+	const current = preparedReport(domainScope, asOf, { validVisits: 3, invalidVisits: 1 });
+	const historical = preparedReport({ kind: 'domain', domain: 'removed.example.test' });
+	await publishVisitReports(
+		db,
+		encodeVisitReports([overview, current, historical, preparedReport(rootScope)])
+	);
+	await db.updateTable('analytics_reports').set({ summary_json: '{}' }).execute();
+	await db
+		.updateTable('analytics_reports')
+		.set({ details_json: '{}' })
+		.where(({ or, eb }) =>
+			or([eb('scope_kind', '=', 'link'), eb('domain', '=', 'removed.example.test')])
+		)
+		.execute();
+	const statements = vi.spyOn(DatabaseSync.prototype, 'prepare');
+	try {
+		expect(await readOverviewVisitDetails(db, [domain, 'new.example.test'])).toEqual({
+			overview: overview.details,
+			domains: [{ domain, details: current.details }]
+		});
+		expect(statements).toHaveBeenCalledTimes(1);
+		const query = statements.mock.calls[0]?.[0];
+		expect(query).toMatch(
+			/^select\s+"scope_kind",\s*"domain",\s*"details_json"\s+from\s+"analytics_reports"/i
+		);
+		expect(query).not.toMatch(/summary_json|\bvisits\b|\bjoin\b/i);
+	} finally {
+		statements.mockRestore();
+	}
+});
+
+test('overview details preserve missing reports rather than inventing zero domains', async () => {
+	expect(await readOverviewVisitDetails(db, [domain])).toBeNull();
+	const current = preparedReport(domainScope);
+	await publishVisitReports(db, encodeVisitReports([current]));
+	expect(await readOverviewVisitDetails(db, [domain])).toBeNull();
+	const overview = preparedReport(overviewScope);
+	await publishVisitReports(db, encodeVisitReports([overview, current]));
+	expect(await readOverviewVisitDetails(db, [])).toEqual({
+		overview: overview.details,
+		domains: []
+	});
+	expect(await readOverviewVisitDetails(db, ['new.example.test'])).toEqual({
+		overview: overview.details,
+		domains: []
+	});
+});
+
+test('overview details reject malformed or mismatched domain scope, policy and window', async () => {
+	const overview = preparedReport(overviewScope);
+	const current = preparedReport(domainScope);
+	await publishVisitReports(db, encodeVisitReports([overview, current]));
+	for (const details of [
+		{},
+		{ ...current.details, version: 2 },
+		overview.details,
+		{ ...current.details, scope: { kind: 'domain', domain: 'wrong.example.test' } },
+		preparedReport(domainScope, asOf + 86_400_000).details,
+		preparedReport(domainScope, asOf, zeroVisitTotals(), 9).details
+	]) {
+		await db
+			.updateTable('analytics_reports')
+			.set({ details_json: JSON.stringify(details) })
+			.where('scope_kind', '=', 'domain')
+			.execute();
+		await expect(readOverviewVisitDetails(db, [domain])).rejects.toThrow(
+			/^Invalid analytics report$/
+		);
+	}
+});
+
+test('overview details reject an invalid overview independently of summary JSON', async () => {
+	await publishVisitReports(db, encodeVisitReports([preparedReport(overviewScope)]));
+	for (const details of [{}, preparedReport(domainScope).details]) {
+		await db
+			.updateTable('analytics_reports')
+			.set({ details_json: JSON.stringify(details) })
+			.execute();
+		await expect(readOverviewVisitDetails(db, [])).rejects.toThrow(/^Invalid analytics report$/);
+	}
 });
 
 test('publication replaces the complete batch, including when the replacement is empty', async () => {

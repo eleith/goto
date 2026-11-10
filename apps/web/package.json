@@ -28,6 +28,7 @@
 		"@goto/config": "workspace:*",
 		"@goto/db": "workspace:*",
 		"better-auth": "catalog:",
+		"chart.js": "catalog:",
 		"piscina": "catalog:"
 	},
 	"devDependencies": {

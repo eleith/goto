@@ -53,16 +53,22 @@ async function stopServer(child: ChildProcess): Promise<void> {
 	}
 }
 
-export const test = base.extend<{ appServer: AppServer; withWorker: boolean }>({
+export const test = base.extend<{
+	appServer: AppServer;
+	withWorker: boolean;
+	retentionMonths: 0 | 3 | 9 | 12;
+}>({
 	withWorker: [false, { option: true }],
-	appServer: async ({ withWorker }, use, testInfo) => {
+	retentionMonths: [3, { option: true }],
+	appServer: async ({ withWorker, retentionMonths }, use, testInfo) => {
 		const directory = process.env.GOTO_E2E_BUILD_DIR;
 		if (!directory) throw new Error('Missing E2E build directory');
 		const child = fork(new URL('../server.mjs', import.meta.url), [], {
 			env: {
 				...serverEnvironment(),
 				GOTO_E2E_BUILD_DIR: directory,
-				GOTO_E2E_WORKER: withWorker ? '1' : '0'
+				GOTO_E2E_WORKER: withWorker ? '1' : '0',
+				GOTO_E2E_RETENTION_MONTHS: String(retentionMonths)
 			},
 			execArgv: [],
 			stdio: ['ignore', 'pipe', 'pipe', 'ipc']

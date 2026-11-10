@@ -8,6 +8,11 @@
 			"development": "./src/index.ts",
 			"types": "./dist/index.d.ts",
 			"import": "./dist/index.js"
+		},
+		"./daily": {
+			"development": "./src/daily.ts",
+			"types": "./dist/daily.d.ts",
+			"import": "./dist/daily.js"
 		}
 	},
 	"files": [
