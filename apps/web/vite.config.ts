@@ -1,6 +1,7 @@
 import adapter from './server/adapter.ts';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vitest/config';
+import Icons from 'unplugin-icons/vite';
 
 const allowedHosts = (process.env.GOTO_ALLOWED_HOSTS ?? '')
 	.split(',')
@@ -36,7 +37,8 @@ export default defineConfig(({ command }) => {
 						'frame-ancestors': ['none']
 					}
 				}
-			})
+			}),
+			Icons({ compiler: 'svelte' })
 		],
 		server: { allowedHosts },
 		test: {

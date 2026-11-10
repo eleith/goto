@@ -1,5 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import IconMoon from 'virtual:icons/ph/moon';
+	import IconSunDim from 'virtual:icons/ph/sun-dim';
+	import IconFaders from 'virtual:icons/ph/faders';
 
 	type Preference = 'system' | 'dark' | 'light';
 	let preference = $state<Preference>('system');
@@ -42,10 +45,33 @@
 
 <button type="button" class="ui-button" disabled={!ready} onclick={cycleTheme}>
 	{#if preference === 'system'}
-		Switch to dark theme
+		<span class="visually-hidden">Switch to dark theme</span>
+		<IconMoon aria-hidden="true" focusable="false" />
 	{:else if preference === 'dark'}
-		Switch to light theme
+		<span class="visually-hidden">Switch to light theme</span>
+		<IconSunDim aria-hidden="true" focusable="false" />
 	{:else}
-		Use system theme
+		<span class="visually-hidden">Use system theme</span>
+		<IconFaders aria-hidden="true" focusable="false" />
 	{/if}
 </button>
+
+<style>
+	button {
+		flex-shrink: 0;
+		width: var(--control-min-height);
+		padding: 0;
+		font-size: 1.25rem;
+	}
+
+	.visually-hidden {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		padding: 0;
+		margin: -1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+		white-space: nowrap;
+	}
+</style>

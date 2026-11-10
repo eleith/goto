@@ -5,6 +5,7 @@ packages:
 catalog:
   '@changesets/cli': 3.0.1
   '@eslint/js': 10.0.1
+  '@iconify-json/ph': 1.2.2
   '@playwright/test': 1.61.1
   '@sinclair/typebox': 0.34.49
   '@sveltejs/adapter-node': 6.0.1
@@ -31,6 +32,7 @@ catalog:
   tslog: 5.2.0
   typescript: 6.0.3
   typescript-eslint: 8.60.0
+  unplugin-icons: 23.0.1
   vite: 8.0.16
   vitest: 4.1.7
   yaml: 2.9.1

@@ -2,7 +2,6 @@
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
 	import { authClient } from '#lib/auth-client.js';
-	import ThemeToggle from '#lib/components/ThemeToggle.svelte';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -130,7 +129,6 @@
 				{pending ? 'Signing in…' : 'Sign in'}
 			</button>
 		</form>
-		<ThemeToggle />
 	</main>
 </div>
 
