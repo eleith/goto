@@ -51,31 +51,40 @@
 		<h2>Domains</h2>
 		{#if data.domains.length === 0}<p>No domains configured.</p>
 		{:else}
-			<div class="admin-table-scroll" role="region" aria-label="Domain inventory">
-				<table class="admin-table">
-					<thead
-						><tr
-							><th scope="col">Domain</th><th scope="col">Links</th>{#if data.collectionEnabled}<th
-									scope="col">Visits</th
-								>{/if}</tr
-						></thead
-					>
-					<tbody>
-						{#each data.domains as row (row.domain)}
-							<tr>
-								<th scope="row"
-									><a class="admin-row-link" href={`${row.href}?period=${timeframe}`}
-										>{row.domain}</a
-									></th
-								>
-								<td>{formatCount(row.linkCount)}</td>
-								{#if data.collectionEnabled}<td
-										>{formatCount(row.countsByTimeframe[timeframe]?.validVisits ?? null)}</td
-									>{/if}
-							</tr>
-						{/each}
-					</tbody>
-				</table>
+			<div
+				class="admin-inventory admin-domain-inventory"
+				class:with-visits={data.collectionEnabled}
+				role="region"
+				aria-label="Domain inventory"
+			>
+				<div class="admin-inventory-heading" aria-hidden="true">
+					<span>Domain</span><span>Links</span>{#if data.collectionEnabled}<span>Visits</span>{/if}
+				</div>
+				<ul class="admin-inventory-list">
+					{#each data.domains as row (row.domain)}
+						<li>
+							<a
+								class="admin-inventory-row admin-inventory-link"
+								href={`${row.href}?period=${timeframe}`}
+								aria-label={row.domain}
+							>
+								<span class="admin-inventory-primary">{row.domain}</span>
+								<span class="admin-inventory-secondary">
+									<span class="admin-inventory-label">Links</span>
+									<span class="admin-inventory-number">{formatCount(row.linkCount)}</span>
+								</span>
+								{#if data.collectionEnabled}
+									<span class="admin-inventory-count">
+										<span class="admin-inventory-label">Visits</span>
+										<span class="admin-inventory-number"
+											>{formatCount(row.countsByTimeframe[timeframe]?.validVisits ?? null)}</span
+										>
+									</span>
+								{/if}
+							</a>
+						</li>
+					{/each}
+				</ul>
 			</div>
 		{/if}
 	</section>

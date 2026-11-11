@@ -24,9 +24,21 @@
 	flex-direction: column;
 	gap: var(--space-1);
 }
+.admin-context {
+	font-size: var(--font-size-base);
+	overflow-wrap: anywhere;
+}
+.admin-context nav {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-1);
+}
 .admin-updated {
 	color: var(--color-text-muted);
 	font-size: var(--font-size-sm);
+}
+.admin-updated-compact {
+	display: none;
 }
 .admin-heading h1 {
 	font-size: var(--font-size-heading);
@@ -76,62 +88,76 @@
 	border: var(--border-width) solid var(--color-border-strong);
 	border-radius: var(--radius-card);
 }
-.admin-table-scroll {
-	overflow-x: auto;
+.admin-inventory {
+	overflow: hidden;
 	border: var(--border-width) solid var(--color-border-subtle);
 	border-radius: var(--radius-card);
 	background: var(--color-surface-card);
-}
-.admin-table {
-	width: 100%;
-	border-collapse: collapse;
 	font-size: var(--font-size-sm);
 }
-.admin-table th,
-.admin-table td {
+.admin-domain-inventory {
+	--inventory-columns: minmax(0, 1fr) auto;
+}
+.admin-domain-inventory.with-visits {
+	--inventory-columns: minmax(0, 1fr) auto auto;
+}
+.admin-link-inventory {
+	--inventory-columns: minmax(0, 1.2fr) minmax(0, 3fr) minmax(0, 1fr);
+}
+.admin-link-inventory.with-visits {
+	--inventory-columns: minmax(0, 1.2fr) minmax(0, 3fr) minmax(0, 1fr) minmax(5rem, 0.8fr);
+}
+.admin-inventory-heading,
+.admin-inventory-row {
+	display: grid;
+	grid-template-columns: var(--inventory-columns);
+	align-items: center;
+	gap: var(--space-4);
 	padding: var(--space-4);
-	text-align: start;
-	vertical-align: top;
+}
+.admin-inventory-heading {
+	background: var(--color-surface-muted);
+	font-weight: 600;
+}
+.admin-inventory-heading > :last-child {
+	text-align: end;
+}
+.admin-inventory-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+.admin-inventory-row {
+	position: relative;
 	border-top: var(--border-width) solid var(--color-border-subtle);
+}
+.admin-inventory-row > * {
+	min-width: 0;
 	overflow-wrap: anywhere;
 }
-.admin-table thead {
+.admin-inventory-row:hover,
+.admin-inventory-row:focus-within {
 	background: var(--color-surface-muted);
 }
-.admin-link-table {
-	table-layout: fixed;
-	min-width: 42rem;
+.admin-domain-inventory .admin-inventory-secondary,
+.admin-inventory-count {
+	display: inline-flex;
+	gap: var(--space-1);
+	justify-self: end;
 }
-.admin-link-table thead th:nth-child(1) {
-	width: 18%;
+.admin-inventory-state {
+	justify-self: end;
 }
-.admin-link-table thead th:nth-child(2) {
-	width: 46%;
+.admin-inventory-label {
+	color: var(--color-text-muted);
 }
-.admin-link-table thead th:nth-child(3) {
-	width: 20%;
+.admin-inventory .admin-inventory-link {
+	color: var(--color-text);
+	text-decoration: none;
 }
-.admin-link-table thead th:nth-child(4) {
-	width: 16%;
-}
-.admin-table tbody tr {
-	position: relative;
-}
-.admin-table tbody tr:hover,
-.admin-table tbody tr:focus-within {
-	background: var(--color-surface-muted);
-}
-.admin-row-link::after {
-	content: '';
-	position: absolute;
-	inset: 0;
-}
-.admin-row-link:focus-visible {
-	outline: none;
-}
-.admin-row-link:focus-visible::after {
+.admin-inventory-link:focus-visible {
 	outline: var(--outline-focus);
-	outline-offset: -2px;
+	outline-offset: calc(-1 * var(--space-1));
 }
 .admin-destination {
 	position: relative;
@@ -150,6 +176,54 @@
 	overflow-wrap: anywhere;
 }
 @media (max-width: 640px) {
+	.admin-title-row {
+		align-items: flex-start;
+	}
+	.admin-inventory-heading {
+		display: none;
+	}
+	.admin-inventory-row {
+		grid-template-columns: minmax(0, 1fr) auto;
+		align-items: start;
+		gap: var(--space-1) var(--space-4);
+	}
+	.admin-inventory-primary {
+		grid-column: 1;
+		grid-row: 1;
+	}
+	.admin-inventory-secondary {
+		grid-column: 1;
+		grid-row: 2;
+	}
+	.admin-domain-inventory .admin-inventory-secondary {
+		justify-self: start;
+	}
+	.admin-inventory-count {
+		grid-column: 2;
+		grid-row: 1;
+	}
+	.admin-inventory-state {
+		grid-column: 2;
+		grid-row: 2;
+	}
+	.admin-link-inventory:not(.with-visits) .admin-inventory-state {
+		grid-row: 1;
+	}
+	.admin-updated-full {
+		display: none;
+	}
+	.admin-updated-compact {
+		display: inline;
+	}
+	.admin-title {
+		flex: 1 1 10rem;
+	}
+	.admin-stat-value {
+		font-size: 1.5rem;
+	}
+	.admin-stat-label {
+		font-size: var(--font-size-sm);
+	}
 	.admin-cards-summary {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
 	}

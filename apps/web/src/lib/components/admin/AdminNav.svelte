@@ -4,7 +4,7 @@
 	import { authClient } from '#lib/auth-client.js';
 	import ThemeToggle from '../ThemeToggle.svelte';
 
-	let { title }: { title: string } = $props();
+	let { title, overviewHref }: { title: string; overviewHref: string } = $props();
 
 	let currentPath = $derived(page.url.pathname + page.url.search);
 	let pending = $state(false);
@@ -49,7 +49,8 @@
 <header class="admin-nav">
 	<div class="nav-container">
 		<nav aria-label="Administration">
-			<a href="/admin" aria-current={page.url.pathname === '/admin' ? 'page' : undefined}>{title}</a
+			<a href={overviewHref} aria-current={page.url.pathname === '/admin' ? 'page' : undefined}
+				>{title}</a
 			>
 		</nav>
 		<div class="nav-actions">

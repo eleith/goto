@@ -12,6 +12,17 @@ export function formatUpdated(value: number | null): string {
 	return `Updated ${formatter.format(value)} UTC`;
 }
 
+export function formatUpdatedCompact(value: number | null): string {
+	if (value === null) return '';
+	const formatter = new Intl.DateTimeFormat('en', {
+		dateStyle: 'short',
+		timeStyle: 'short',
+		hourCycle: 'h23',
+		timeZone: 'UTC'
+	});
+	return `Updated ${formatter.format(value)} UTC`;
+}
+
 export function formatRetention(months: number): string {
 	return months === 0 ? 'Off' : `${months} months`;
 }

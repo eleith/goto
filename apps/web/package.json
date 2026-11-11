@@ -28,6 +28,7 @@
 		"@goto/config": "workspace:*",
 		"@goto/db": "workspace:*",
 		"better-auth": "catalog:",
+		"bits-ui": "catalog:",
 		"chart.js": "catalog:",
 		"piscina": "catalog:"
 	},

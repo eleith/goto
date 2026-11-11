@@ -9,11 +9,15 @@
 
 <AdminPage
 	siteTitle={data.title}
-	title={data.path}
+	title="Link"
+	documentTitle={`Link — ${data.domain}${data.path}`}
 	updatedAt={data.asOf}
-	backHref={data.domainHref}
-	backLabel={data.domain}
 >
+	{#snippet context()}
+		<nav aria-label="Breadcrumb">
+			<a href={data.domainHref}>{data.domain}</a> <span>{data.path}</span>
+		</nav>
+	{/snippet}
 	<ReportNotice collectionEnabled={data.collectionEnabled} available={data.available} />
 	<div class="admin-cards">
 		<StatCard label="Valid visits" value={data.totals?.validVisits ?? null} />
