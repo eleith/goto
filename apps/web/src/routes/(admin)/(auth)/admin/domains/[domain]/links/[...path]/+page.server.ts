@@ -1,10 +1,10 @@
 import { error } from '@sveltejs/kit';
-import type { VisitSummary } from '@goto/analytics';
+import { availableVisitTimeframes, countVisitWindows, visitWindow } from '@goto/analytics/daily';
 import { currentLinkState } from '#lib/server/link-state.js';
-import { readVisitSummary } from '#lib/server/visit-reports.js';
+import { readVisitDetails } from '#lib/server/visit-reports.js';
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ locals, params }) => {
+export const load = (async ({ locals, params }) => {
 	const snapshot = locals.snapshot;
 	const domain = params.domain;
 	if (!Object.hasOwn(snapshot.domains, domain)) throw error(404, 'Domain not configured');
@@ -14,14 +14,18 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 	if (path !== '/' && !Object.hasOwn(prepared.links, path)) throw error(404, 'Link not configured');
 	const link = prepared.links[path];
 	const configuration = snapshot.configuration;
-	const collectionEnabled = configuration.analytics.retention_months !== 0;
-	let linkSummary: VisitSummary | null = null;
-	if (collectionEnabled) {
-		const scope = { kind: 'link' as const, domain, path };
-		linkSummary = await readVisitSummary(configuration, scope);
-	}
+	const retentionMonths = configuration.analytics.retention_months;
+	const collectionEnabled = retentionMonths !== 0;
+	const scope = { kind: 'link' as const, domain, path };
+	const details = collectionEnabled ? await readVisitDetails(configuration, scope) : null;
+	const timeframes = retentionMonths === 0 ? [] : availableVisitTimeframes(retentionMonths);
+	const windows = details
+		? timeframes.map((timeframe) => ({ timeframe, window: visitWindow(details.period, timeframe) }))
+		: [];
+	const countsByTimeframe = countVisitWindows(details?.daily, windows);
 	const state = link ? currentLinkState(link, Date.now()) : 'Fallback';
-	const asOf = linkSummary ? Date.parse(linkSummary.period.asOf) : null;
+	const asOf = details ? Date.parse(details.period.asOf) : null;
+	const chart = details ? { daily: details.daily, period: details.period } : null;
 
 	return {
 		domain,
@@ -30,10 +34,12 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 		url: link?.url ?? null,
 		fallback: prepared.fallback,
 		state,
-		retentionMonths: configuration.analytics.retention_months,
+		retentionMonths,
 		collectionEnabled,
-		available: linkSummary !== null,
+		available: details !== null,
 		asOf,
-		totals: linkSummary?.totals ?? null
+		timeframes,
+		countsByTimeframe,
+		chart
 	};
-};
+}) satisfies PageServerLoad;

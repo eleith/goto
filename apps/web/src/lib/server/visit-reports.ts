@@ -1,10 +1,10 @@
-import type { ReportScope, VisitSummary } from '@goto/analytics';
+import type { ReportScope, VisitDetails } from '@goto/analytics';
 import type { GotoConfiguration } from '@goto/config';
 import { openDb } from '@goto/db';
 import {
 	readOverviewVisitDetails,
 	readDomainVisitDetails,
-	readVisitSummary as readPreparedSummary,
+	readVisitDetails as readPreparedDetails,
 	type OverviewVisitDetails,
 	type DomainVisitDetails
 } from '@goto/db/visit-reports';
@@ -53,18 +53,18 @@ export async function readDomainDetails(
 	}
 }
 
-export async function readVisitSummary(
+export async function readVisitDetails(
 	configuration: ReportConfiguration,
 	scope: ReportScope
-): Promise<VisitSummary | null> {
+): Promise<VisitDetails | null> {
 	const months = configuration.analytics.retention_months;
 	if (months === 0) return null;
 	let db: Awaited<ReturnType<typeof openDb>> | undefined;
 	try {
 		db = await openDb(configuration.database.path, { readOnly: true });
-		const summary = await readPreparedSummary(db, scope);
-		if (!summary || summary.period.retentionMonths !== months) return null;
-		return summary;
+		const details = await readPreparedDetails(db, scope);
+		if (!details || details.period.retentionMonths !== months) return null;
+		return details;
 	} catch {
 		warnUnavailable();
 		return null;

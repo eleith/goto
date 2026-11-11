@@ -52,12 +52,12 @@
 		return (grouping === 'month' ? monthFormat : dateFormat).format(new Date(start));
 	}
 
-	function bucketTitle(bucket: VisitDetails['daily'][number]): string {
+	function bucketPeriod(bucket: VisitDetails['daily'][number]): string {
 		const startTime = Math.max(Date.parse(bucket.start), Date.parse(viewWindow.from));
 		const endTime = Math.min(Date.parse(bucket.end), Date.parse(viewWindow.asOf)) - 1;
 		const from = new Date(startTime);
 		const end = new Date(endTime);
-		return `${dateFormat.formatRange(from, end)} UTC`;
+		return dateFormat.formatRange(from, end);
 	}
 
 	function chartOptions(points: VisitDetails['daily']): ChartOptions<'line'> {
@@ -98,7 +98,7 @@
 					callbacks: {
 						title: (items) => {
 							const bucket = points[items[0]?.dataIndex ?? -1];
-							return bucket ? bucketTitle(bucket) : '';
+							return bucket ? `${bucketPeriod(bucket)} UTC` : '';
 						},
 						label: (item) => `Valid visits: ${formatCount(item.parsed.y)}`,
 						footer: (items) => (points[items[0]?.dataIndex ?? -1]?.partial ? 'Partial period' : '')
@@ -192,7 +192,7 @@
 	});
 </script>
 
-<section class="visits-chart" aria-label="Visits over time" aria-busy={!ready && !unavailable}>
+<section class="visits-chart" aria-label="Visits over time">
 	<header>
 		<h2>Visits</h2>
 		<span class="grouping">{groupingLabels[granularity]}</span>
@@ -201,10 +201,29 @@
 	{#if unavailable}
 		<p role="status">Chart unavailable.</p>
 	{:else}
-		<div class="plot" role="img" aria-label={summary}>
+		<div class="plot" role="img" aria-label={summary} aria-busy={!ready}>
 			<canvas bind:this={canvas} aria-hidden="true">{summary}</canvas>
 		</div>
 	{/if}
+	<!-- svelte-ignore a11y_no_noninteractive_tabindex (Keyboard scrolling needs a focusable region.) -->
+	<div class="table-scroll" role="region" aria-label="Visit data" tabindex="0">
+		<table aria-label="Valid visits">
+			<thead>
+				<tr><th scope="col">Period (UTC)</th><th scope="col">Valid visits</th></tr>
+			</thead>
+			<tbody>
+				{#each buckets as bucket (bucket.start)}
+					<tr>
+						<th scope="row">{bucketPeriod(bucket)}</th>
+						<td>{formatCount(bucket.validVisits)}</td>
+					</tr>
+				{/each}
+			</tbody>
+			<tfoot>
+				<tr><th scope="row">Total</th><td>{formatCount(total)}</td></tr>
+			</tfoot>
+		</table>
+	</div>
 </section>
 
 <style>
@@ -238,6 +257,63 @@
 		position: relative;
 		height: clamp(15rem, 32vw, 22rem);
 		min-width: 0;
+	}
+
+	.table-scroll {
+		max-block-size: 18rem;
+		overflow: auto;
+		margin-top: var(--space-5);
+		margin-inline: calc(-1 * var(--space-5));
+		margin-bottom: calc(-1 * var(--space-5));
+		border-radius: 0 0 var(--radius-card) var(--radius-card);
+	}
+
+	.table-scroll:focus-visible {
+		outline: var(--outline-focus);
+		outline-offset: calc(-1 * var(--space-1));
+	}
+
+	table {
+		width: 100%;
+		table-layout: fixed;
+		border-collapse: collapse;
+		font-size: var(--font-size-sm);
+	}
+
+	th,
+	td {
+		padding: var(--space-4) var(--space-5);
+		border-top: var(--border-width) solid var(--color-border-subtle);
+		text-align: start;
+		vertical-align: top;
+		overflow-wrap: anywhere;
+	}
+
+	thead th {
+		position: sticky;
+		top: 0;
+		z-index: 1;
+		border-top: 0;
+		background: var(--color-surface-muted);
+	}
+
+	tbody tr:nth-child(even) {
+		background: var(--color-surface-muted);
+	}
+
+	tbody th,
+	tfoot th {
+		font-weight: 400;
+	}
+
+	thead th:last-child {
+		width: 7rem;
+		text-align: end;
+	}
+
+	td {
+		text-align: end;
+		font-variant-numeric: tabular-nums;
 	}
 
 	.chart-palette {

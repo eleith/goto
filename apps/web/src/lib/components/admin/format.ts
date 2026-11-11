@@ -22,7 +22,3 @@ export function formatUpdatedCompact(value: number | null): string {
 	});
 	return `Updated ${formatter.format(value)} UTC`;
 }
-
-export function formatRetention(months: number): string {
-	return months === 0 ? 'Off' : `${months} months`;
-}

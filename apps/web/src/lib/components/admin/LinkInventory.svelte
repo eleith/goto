@@ -34,7 +34,11 @@
 	<ul class="admin-inventory-list">
 		{#each links as link (link.path)}
 			<li>
-				<a class="admin-inventory-row admin-inventory-link" href={link.href} aria-label={link.path}>
+				<a
+					class="admin-inventory-row admin-inventory-link"
+					href={`${link.href}?period=${timeframe}`}
+					aria-label={link.path}
+				>
 					<span class="admin-inventory-primary"><code>{link.path}</code></span>
 					<span class="admin-inventory-secondary">{link.url ?? '404 Not found'}</span>
 					<span class="admin-inventory-state">{link.state}</span>

@@ -6,7 +6,7 @@
 	import ReportNotice from '#lib/components/admin/ReportNotice.svelte';
 	import VisitsChart from '#lib/components/admin/VisitsChart.svelte';
 	import VisitTimeframes from '#lib/components/admin/VisitTimeframes.svelte';
-	import { formatCount, formatRetention } from '#lib/components/admin/format.js';
+	import { formatCount } from '#lib/components/admin/format.js';
 	import type { PageData } from './$types';
 	let { data }: { data: PageData } = $props();
 
@@ -32,16 +32,11 @@
 		{/if}
 	{/snippet}
 	<ReportNotice collectionEnabled={data.collectionEnabled} available={data.available} />
-	<div
-		class="admin-cards"
-		class:admin-cards-summary={data.collectionEnabled}
-		class:admin-cards-inventory={!data.collectionEnabled}
-	>
+	<div class="admin-cards">
 		<StatCard label="Domains" value={data.domainCount} />
 		<StatCard label="Links" value={data.linkCount} />
 		{#if data.collectionEnabled}
 			<StatCard label="Valid visits" value={validVisits} />
-			<StatCard label="Retention" value={formatRetention(data.retentionMonths)} />
 		{/if}
 	</div>
 	{#if data.chart && window}
