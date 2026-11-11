@@ -18,9 +18,9 @@
 	let granularity = $derived(
 		data.chart ? visitGranularity(timeframe, data.chart.period.retentionMonths) : 'day'
 	);
-	let validVisits = $derived(data.countsByTimeframe[timeframe]?.validVisits ?? null);
+	let visits = $derived(data.countsByTimeframe[timeframe]?.validVisits ?? null);
+	let baseVisits = $derived(data.base.countsByTimeframe[timeframe]?.validVisits ?? null);
 	let invalidClicks = $derived(data.invalidClicksByTimeframe[timeframe] ?? null);
-	let baseLinks = $derived([{ path: '/', ...data.base }]);
 </script>
 
 <AdminPage
@@ -30,7 +30,6 @@
 	updatedAt={data.asOf}
 	overviewHref={`/admin?period=${timeframe}`}
 >
-	{#snippet context()}{data.domain}{/snippet}
 	{#snippet actions()}
 		{#if data.available && data.timeframes.length > 0}
 			<VisitTimeframes
@@ -44,22 +43,34 @@
 	<div class="admin-cards">
 		<StatCard label="Links" value={data.linkCount} />
 		{#if data.collectionEnabled}
-			<StatCard label="Valid visits" value={validVisits} />
+			<StatCard label="Visits" value={visits} />
 			<StatCard label="Invalid clicks" value={invalidClicks} />
+			<a
+				class="base-visits-link"
+				href={`${data.base.href}?period=${timeframe}`}
+				aria-label="Base visits"
+			>
+				<StatCard label="Base visits" value={baseVisits} />
+			</a>
 		{/if}
 	</div>
+	<section class="admin-info" aria-labelledby="domain-details-heading">
+		<h2 id="domain-details-heading">Domain details</h2>
+		<dl>
+			<dt>Domain</dt>
+			<dd>{data.domain}</dd>
+			<dt>Base destination</dt>
+			<dd>
+				{#if data.base.url}<a class="admin-destination" href={data.base.url}>{data.base.url}</a>
+				{:else}404 Not found{/if}
+			</dd>
+			<dt>Base status</dt>
+			<dd>{data.base.state}</dd>
+		</dl>
+	</section>
 	{#if data.chart && window}
 		<VisitsChart daily={data.chart.daily} {window} {granularity} />
 	{/if}
-	<section>
-		<h2>Base URL</h2>
-		<LinkInventory
-			label={`Base URL on ${data.domain}`}
-			links={baseLinks}
-			{timeframe}
-			collectionEnabled={data.collectionEnabled}
-		/>
-	</section>
 	<section>
 		<h2>Links</h2>
 		{#if data.links.length === 0}<p>No links configured.</p>
@@ -73,3 +84,11 @@
 		{/if}
 	</section>
 </AdminPage>
+
+<style>
+	.base-visits-link {
+		color: inherit;
+		text-decoration: none;
+		border-radius: var(--radius-card);
+	}
+</style>

@@ -31,14 +31,15 @@ test('shared credentials protect overview, domain and link pages and sign-out re
 	await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 	await expect(page.getByRole('heading', { name: 'Overview', exact: true })).toBeVisible();
 	const visitsValue = page
-		.getByRole('region', { name: 'Valid visits', exact: true })
+		.getByRole('region', { name: 'Visits', exact: true })
 		.locator('.admin-stat-value');
 	await expect(page.getByRole('region', { name: 'Domains', exact: true })).toContainText('2');
 	await expect(visitsValue).toHaveText('2');
 	await expect(page.locator('.admin-cards .admin-stat-label')).toHaveText([
 		'Domains',
 		'Links',
-		'Valid visits'
+		'Visits',
+		'Retention'
 	]);
 	const overviewCardSizes = await cardSizes();
 	const heading = page.locator('.admin-heading');
@@ -54,8 +55,8 @@ test('shared credentials protect overview, domain and link pages and sign-out re
 	await expect(graph).toHaveAttribute('aria-busy', 'false');
 	const chartTable = trend.getByRole('table');
 	await expect(chartTable).toBeVisible();
-	await expect(chartTable).toHaveAccessibleName('Valid visits');
-	await expect(chartTable.getByRole('columnheader')).toHaveText(['Period (UTC)', 'Valid visits']);
+	await expect(chartTable).toHaveAccessibleName('Visits');
+	await expect(chartTable.getByRole('columnheader')).toHaveText(['Period (UTC)', 'Visits']);
 	await expect(chartTable.getByRole('row', { name: 'Total 2', exact: true })).toBeVisible();
 	await expect(chartTable).not.toContainText('(partial)');
 	await expect(trend.getByRole('region', { name: 'Visit data', exact: true })).toHaveAttribute(
@@ -63,11 +64,15 @@ test('shared credentials protect overview, domain and link pages and sign-out re
 		'0'
 	);
 	await expect(graph).toBeVisible();
-	await expect(graph).toHaveAccessibleName(/^Valid visits by day\. Total: 2\./);
+	await expect(graph).toHaveAccessibleName(/^Visits by day\. Total: 2\./);
 	const domainLink = page.getByRole('link', { name: 'go.example.org', exact: true });
 	const domainRow = page.getByRole('listitem').filter({ has: domainLink });
 	const domainCounts = domainRow.locator('.admin-inventory-number');
 	await expect(domainCounts).toHaveText(['6', '1']);
+	await expect(domainRow.locator('.admin-inventory-label').first()).toHaveCSS(
+		'clip-path',
+		'inset(50%)'
+	);
 	const selectionRequests: string[] = [];
 	const recordSelectionRequest = (request: Request) => {
 		const type = request.resourceType();
@@ -84,7 +89,7 @@ test('shared credentials protect overview, domain and link pages and sign-out re
 	);
 	await expect(visitsValue).toHaveText('1');
 	await expect(domainCounts).toHaveText(['6', '0']);
-	await expect(graph).toHaveAccessibleName(/^Valid visits by day\. Total: 1\./);
+	await expect(graph).toHaveAccessibleName(/^Visits by day\. Total: 1\./);
 	await timeframe.getByRole('button', { name: '3 months', exact: true }).click();
 	await expect(timeframe.getByRole('button', { name: '3 months', exact: true })).toHaveAttribute(
 		'aria-pressed',
@@ -92,7 +97,7 @@ test('shared credentials protect overview, domain and link pages and sign-out re
 	);
 	await expect(visitsValue).toHaveText('3');
 	await expect(domainCounts).toHaveText(['6', '2']);
-	await expect(graph).toHaveAccessibleName(/^Valid visits by week\. Total: 3\./);
+	await expect(graph).toHaveAccessibleName(/^Visits by week\. Total: 3\./);
 	await page.goBack();
 	await expect(timeframe.getByRole('button', { name: '7 days', exact: true })).toHaveAttribute(
 		'aria-pressed',
@@ -100,7 +105,7 @@ test('shared credentials protect overview, domain and link pages and sign-out re
 	);
 	await expect(visitsValue).toHaveText('1');
 	await expect(domainCounts).toHaveText(['6', '0']);
-	await expect(graph).toHaveAccessibleName(/^Valid visits by day\. Total: 1\./);
+	await expect(graph).toHaveAccessibleName(/^Visits by day\. Total: 1\./);
 	await page.goForward();
 	await expect(timeframe.getByRole('button', { name: '3 months', exact: true })).toHaveAttribute(
 		'aria-pressed',
@@ -108,7 +113,7 @@ test('shared credentials protect overview, domain and link pages and sign-out re
 	);
 	await expect(visitsValue).toHaveText('3');
 	await expect(domainCounts).toHaveText(['6', '2']);
-	await expect(graph).toHaveAccessibleName(/^Valid visits by week\. Total: 3\./);
+	await expect(graph).toHaveAccessibleName(/^Visits by week\. Total: 3\./);
 	page.off('request', recordSelectionRequest);
 	expect(selectionRequests).toEqual([]);
 	await page.reload();
@@ -117,12 +122,12 @@ test('shared credentials protect overview, domain and link pages and sign-out re
 		'true'
 	);
 	await expect(visitsValue).toHaveText('3');
-	await expect(graph).toHaveAccessibleName(/^Valid visits by week\. Total: 3\./);
+	await expect(graph).toHaveAccessibleName(/^Visits by week\. Total: 3\./);
 	expect(navigationWarnings).toEqual([]);
 	await domainLink.click();
 	await expect(page.getByRole('heading', { name: 'Domain', exact: true })).toBeVisible();
 	const context = page.locator('.admin-context');
-	await expect(context).toHaveText('go.example.org');
+	await expect(context).toHaveCount(0);
 	await expect(page).toHaveTitle('Domain — go.example.org — Goto');
 	const overviewLink = page
 		.getByRole('navigation', { name: 'Administration', exact: true })
@@ -130,7 +135,7 @@ test('shared credentials protect overview, domain and link pages and sign-out re
 	await expect(overviewLink).toHaveAttribute('href', '/admin?period=all');
 	await expect(page.getByRole('link', { name: 'Overview', exact: true })).toHaveCount(0);
 	await expect(graph).toHaveAttribute('aria-busy', 'false');
-	await expect(graph).toHaveAccessibleName(/^Valid visits by week\. Total: 2\./);
+	await expect(graph).toHaveAccessibleName(/^Visits by week\. Total: 2\./);
 	await expect(timeframe.getByRole('button', { name: '3 months', exact: true })).toHaveAttribute(
 		'aria-pressed',
 		'true'
@@ -138,17 +143,16 @@ test('shared credentials protect overview, domain and link pages and sign-out re
 	await expect(visitsValue).toHaveText('2');
 	await expect(page.locator('.admin-cards .admin-stat-label')).toHaveText([
 		'Links',
-		'Valid visits',
-		'Invalid clicks'
+		'Visits',
+		'Invalid clicks',
+		'Base visits'
 	]);
 	await expect(
 		page.getByRole('region', { name: 'Invalid clicks', exact: true }).locator('.admin-stat-value')
 	).toHaveText('1');
 	const linksInventory = page.getByRole('region', { name: 'Links on go.example.org', exact: true });
-	const baseInventory = page.getByRole('region', {
-		name: 'Base URL on go.example.org',
-		exact: true
-	});
+	const domainDetails = page.getByRole('region', { name: 'Domain details', exact: true });
+	const baseVisitsLink = page.getByRole('link', { name: 'Base visits', exact: true });
 	const columns = ['Path', 'Destination', 'State', 'Visits'];
 	await expect(linksInventory.locator('.admin-inventory-heading > span')).toHaveText(columns);
 	const retainedLink = linksInventory
@@ -157,7 +161,9 @@ test('shared credentials protect overview, domain and link pages and sign-out re
 	await expect(retainedLink.getByRole('link')).toHaveCount(1);
 	const retainedVisits = retainedLink.locator('.admin-inventory-number');
 	await expect(retainedVisits).toHaveText('1');
+	await expect(retainedLink.locator('.admin-inventory-label')).toHaveCSS('clip-path', 'inset(50%)');
 	await page.setViewportSize({ width: 390, height: 844 });
+	await expect(retainedLink.locator('.admin-inventory-label')).toHaveCSS('clip-path', 'none');
 	const mobileTimeframe = page.getByRole('button', { name: /^Timeframe: / });
 	await expect(mobileTimeframe).toContainText('3 months');
 	await mobileTimeframe.click();
@@ -167,7 +173,7 @@ test('shared credentials protect overview, domain and link pages and sign-out re
 		.click();
 	await expect(visitsValue).toHaveText('1');
 	await expect(retainedVisits).toHaveText('0');
-	await expect(graph).toHaveAccessibleName(/^Valid visits by day\. Total: 1\./);
+	await expect(graph).toHaveAccessibleName(/^Visits by day\. Total: 1\./);
 	expect(
 		await linksInventory.evaluate((element) => element.scrollWidth <= element.clientWidth)
 	).toBe(true);
@@ -175,25 +181,38 @@ test('shared credentials protect overview, domain and link pages and sign-out re
 	await timeframe.getByRole('button', { name: '3 months', exact: true }).click();
 	await expect(visitsValue).toHaveText('2');
 	await expect(retainedVisits).toHaveText('1');
-	await expect(graph).toHaveAccessibleName(/^Valid visits by week\. Total: 2\./);
+	await expect(graph).toHaveAccessibleName(/^Visits by week\. Total: 2\./);
 	expect(await cardSizes()).toEqual(overviewCardSizes);
 	const historicalInvalid = linksInventory
 		.getByRole('listitem')
 		.filter({ has: page.getByRole('link', { name: '/a/b', exact: true }) });
 	await expect(historicalInvalid.locator('.admin-inventory-number')).toHaveText('0');
-	await expect(baseInventory.locator('.admin-inventory-heading > span')).toHaveText(columns);
 	await expect(
-		baseInventory.locator(
-			'.admin-inventory-secondary, .admin-inventory-state, .admin-inventory-number'
-		)
-	).toHaveText(['404 Not found', 'Fallback', '0']);
+		domainDetails.getByRole('heading', { name: 'Domain details', exact: true })
+	).toBeVisible();
+	await expect(domainDetails.locator('dt')).toHaveText([
+		'Domain',
+		'Base destination',
+		'Base status'
+	]);
+	await expect(domainDetails.locator('dd')).toHaveText([
+		'go.example.org',
+		'404 Not found',
+		'Fallback'
+	]);
+	await expect(
+		page.getByRole('region', { name: 'Base visits', exact: true }).locator('.admin-stat-value')
+	).toHaveText('0');
 	await expect(
 		linksInventory.getByText('https://example.org/first-domain', { exact: true })
 	).toBeVisible();
 	await expect(
 		linksInventory.getByRole('link', { name: 'https://example.org/first-domain', exact: true })
 	).toHaveCount(0);
-	await expect(baseInventory.getByRole('link')).toHaveCount(1);
+	await expect(baseVisitsLink).toHaveAttribute(
+		'href',
+		'/admin/domains/go.example.org/links?period=all'
+	);
 
 	const linkDetails = page.getByRole('region', { name: 'Link details', exact: true });
 	const domainDetailsLink = linkDetails.getByRole('link', { name: 'go.example.org', exact: true });
@@ -207,20 +226,17 @@ test('shared credentials protect overview, domain and link pages and sign-out re
 	).toBeVisible();
 	await expect(linkDetails.locator('dt')).toHaveText(['Domain', 'Path', 'Destination']);
 	await expect(linkDetails.locator('dd').nth(1)).toHaveText('/docs');
-	await expect(page.locator('.admin-cards .admin-stat-label')).toHaveText([
-		'Valid visits',
-		'Status'
-	]);
+	await expect(page.locator('.admin-cards .admin-stat-label')).toHaveText(['Visits', 'Status']);
 	await expect(page.getByRole('region', { name: 'Status', exact: true })).toContainText('Active');
 	expect(await cardSizes()).toEqual(overviewCardSizes.slice(0, 2));
 	await expect(page).toHaveTitle('Link — go.example.org/docs — Goto');
 	await expect(graph).toHaveAttribute('aria-busy', 'false');
-	await expect(chartTable).toHaveAccessibleName('Valid visits');
-	await expect(graph).toHaveAccessibleName(/^Valid visits by week\. Total: 1\./);
+	await expect(chartTable).toHaveAccessibleName('Visits');
+	await expect(graph).toHaveAccessibleName(/^Visits by week\. Total: 1\./);
 	await expect(visitsValue).toHaveText('1');
 	await timeframe.getByRole('button', { name: '7 days', exact: true }).click();
 	await expect(visitsValue).toHaveText('0');
-	await expect(graph).toHaveAccessibleName(/^Valid visits by day\. Total: 0\./);
+	await expect(graph).toHaveAccessibleName(/^Visits by day\. Total: 0\./);
 	await expect(chartTable.getByRole('row', { name: 'Total 0', exact: true })).toBeVisible();
 	await timeframe.getByRole('button', { name: '3 months', exact: true }).click();
 	await expect(visitsValue).toHaveText('1');
@@ -250,7 +266,7 @@ test('shared credentials protect overview, domain and link pages and sign-out re
 	await expect(visitsValue).toHaveText('0');
 
 	await domainDetailsLink.click();
-	await baseInventory.getByRole('link', { name: '/', exact: true }).click();
+	await baseVisitsLink.click();
 	await expect(page).toHaveURL(`${appServer.origin}/admin/domains/go.example.org/links?period=all`);
 	await expect(page.getByRole('heading', { name: 'Link', exact: true })).toBeVisible();
 	await expect(page).toHaveTitle('Link — go.example.org/ — Goto');
@@ -306,10 +322,8 @@ test.describe('analytics disabled', () => {
 				.locator('.admin-inventory-heading > span')
 		).toHaveText(['Path', 'Destination', 'State']);
 		await expect(
-			page
-				.getByRole('region', { name: 'Base URL on go.example.org', exact: true })
-				.locator('.admin-inventory-heading > span')
-		).toHaveText(['Path', 'Destination', 'State']);
+			page.getByRole('region', { name: 'Domain details', exact: true }).locator('dt')
+		).toHaveText(['Domain', 'Base destination', 'Base status']);
 		await page.getByRole('link', { name: '/docs', exact: true }).click();
 		await expect(page.getByRole('region', { name: 'Link details', exact: true })).toBeVisible();
 		await expect(page.locator('.admin-cards .admin-stat-label')).toHaveText(['Status']);

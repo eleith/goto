@@ -18,7 +18,7 @@
 	let granularity = $derived(
 		data.chart ? visitGranularity(timeframe, data.chart.period.retentionMonths) : 'day'
 	);
-	let validVisits = $derived(data.countsByTimeframe[timeframe]?.validVisits ?? null);
+	let visits = $derived(data.countsByTimeframe[timeframe]?.validVisits ?? null);
 </script>
 
 <AdminPage siteTitle={data.title} title="Overview" updatedAt={data.asOf}>
@@ -36,7 +36,8 @@
 		<StatCard label="Domains" value={data.domainCount} />
 		<StatCard label="Links" value={data.linkCount} />
 		{#if data.collectionEnabled}
-			<StatCard label="Valid visits" value={validVisits} />
+			<StatCard label="Visits" value={visits} />
+			<StatCard label="Retention" value={`${data.retentionMonths} months`} />
 		{/if}
 	</div>
 	{#if data.chart && window}
@@ -53,7 +54,8 @@
 				aria-label="Domain inventory"
 			>
 				<div class="admin-inventory-heading" aria-hidden="true">
-					<span>Domain</span><span>Links</span>{#if data.collectionEnabled}<span>Visits</span>{/if}
+					<span>Domain</span><span class="admin-inventory-count">Links</span
+					>{#if data.collectionEnabled}<span class="admin-inventory-count">Visits</span>{/if}
 				</div>
 				<ul class="admin-inventory-list">
 					{#each data.domains as row (row.domain)}

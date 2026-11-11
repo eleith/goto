@@ -39,7 +39,7 @@
 	let buckets = $derived(groupVisitDays(daily, viewWindow, granularity));
 	let total = $derived(buckets.reduce((sum, bucket) => sum + bucket.validVisits, 0));
 	let summary = $derived(
-		`Valid visits by ${granularity}. Total: ${formatCount(total)}. ${windowLabel(viewWindow)}.`
+		`Visits by ${granularity}. Total: ${formatCount(total)}. ${windowLabel(viewWindow)}.`
 	);
 
 	function windowLabel(window: VisitWindow): string {
@@ -100,7 +100,7 @@
 							const bucket = points[items[0]?.dataIndex ?? -1];
 							return bucket ? `${bucketPeriod(bucket)} UTC` : '';
 						},
-						label: (item) => `Valid visits: ${formatCount(item.parsed.y)}`,
+						label: (item) => `Visits: ${formatCount(item.parsed.y)}`,
 						footer: (items) => (points[items[0]?.dataIndex ?? -1]?.partial ? 'Partial period' : '')
 					}
 				}
@@ -114,7 +114,7 @@
 		chart.data.labels = points.map((point) => bucketLabel(point.start, grouping));
 		chart.data.datasets = [
 			{
-				label: 'Valid visits',
+				label: 'Visits',
 				data: points.map((point) => point.validVisits),
 				borderColor: color,
 				borderWidth: 2,
@@ -207,9 +207,9 @@
 	{/if}
 	<!-- svelte-ignore a11y_no_noninteractive_tabindex (Keyboard scrolling needs a focusable region.) -->
 	<div class="table-scroll" role="region" aria-label="Visit data" tabindex="0">
-		<table aria-label="Valid visits">
+		<table aria-label="Visits">
 			<thead>
-				<tr><th scope="col">Period (UTC)</th><th scope="col">Valid visits</th></tr>
+				<tr><th scope="col">Period (UTC)</th><th scope="col">Visits</th></tr>
 			</thead>
 			<tbody>
 				{#each buckets as bucket (bucket.start)}

@@ -29,7 +29,7 @@
 >
 	<div class="admin-inventory-heading" aria-hidden="true">
 		<span>Path</span><span>Destination</span><span>State</span>
-		{#if collectionEnabled}<span>Visits</span>{/if}
+		{#if collectionEnabled}<span class="admin-inventory-count">Visits</span>{/if}
 	</div>
 	<ul class="admin-inventory-list">
 		{#each links as link (link.path)}

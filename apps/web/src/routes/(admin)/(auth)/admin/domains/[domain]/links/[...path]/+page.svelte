@@ -17,7 +17,7 @@
 	let granularity = $derived(
 		data.chart ? visitGranularity(timeframe, data.chart.period.retentionMonths) : 'day'
 	);
-	let validVisits = $derived(data.countsByTimeframe[timeframe]?.validVisits ?? null);
+	let visits = $derived(data.countsByTimeframe[timeframe]?.validVisits ?? null);
 </script>
 
 <AdminPage
@@ -39,7 +39,7 @@
 	<ReportNotice collectionEnabled={data.collectionEnabled} available={data.available} />
 	<div class="admin-cards">
 		{#if data.collectionEnabled}
-			<StatCard label="Valid visits" value={validVisits} />
+			<StatCard label="Visits" value={visits} />
 		{/if}
 		<StatCard label="Status" value={data.state} />
 	</div>
