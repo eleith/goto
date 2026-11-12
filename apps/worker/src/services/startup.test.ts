@@ -25,7 +25,7 @@ afterEach(async () => {
 
 async function writeConfiguration(worker_path = './state/worker.sqlite'): Promise<void> {
 	const configuration = {
-		site: { url: 'http://admin.example.test' },
+		url: { app: 'http://admin.example.test' },
 		auth: { credentials: { username: 'test', password: 'worker-test-only-password' } },
 		database: { path: './data/visits.sqlite', worker_path },
 		analytics: { retention_months: 0 },

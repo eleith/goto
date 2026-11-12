@@ -8,7 +8,7 @@ import { prepareSnapshot } from './snapshot.js';
 
 const prepared = validateConfig(
 	{
-		site: { url: 'https://admin.example.test' },
+		url: { app: 'https://admin.example.test' },
 		auth: { credentials: { username: 'example', password: 'unit-only-password' } },
 		domains: {
 			'go.example.test': {

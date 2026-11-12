@@ -15,7 +15,7 @@ export interface GotoSession {
 }
 
 export function createAuthentication(cfg: Immutable<GotoConfiguration>) {
-	const origin = cfg.site.url;
+	const origin = cfg.url.app;
 	const secret = resolveAuthSecret(cfg.auth.secret);
 	return betterAuth<BetterAuthOptions & { baseURL: string }>({
 		secret,
@@ -58,7 +58,7 @@ export const authHandle: Handle = async ({ event, resolve }) => {
 	const adminRoute = event.route.id?.startsWith('/(admin)');
 	const authPath = event.url.pathname === '/auth' || event.url.pathname.startsWith('/auth/');
 	if (
-		event.url.origin !== event.locals.snapshot?.configuration.site.url ||
+		event.url.origin !== event.locals.snapshot?.configuration.url.app ||
 		(!adminRoute && !authPath)
 	) {
 		return resolve(event);

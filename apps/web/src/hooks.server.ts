@@ -34,7 +34,7 @@ export const applicationContext: Handle = ({ event, resolve }) => {
 export const adminOriginGate: Handle = ({ event, resolve }) => {
 	if (
 		event.route.id?.startsWith('/(admin)') &&
-		event.url.origin !== event.locals.snapshot?.configuration.site.url
+		event.url.origin !== event.locals.snapshot?.configuration.url.app
 	) {
 		return new Response('Not found', { status: 404, headers: { 'cache-control': 'no-store' } });
 	}

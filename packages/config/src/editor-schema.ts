@@ -115,7 +115,8 @@ function adaptSchemaForEditor(
 	if (
 		node.format === 'goto-http-url' ||
 		node.format === 'goto-link-url' ||
-		node.format === 'goto-site-url'
+		node.format === 'goto-app-url' ||
+		node.format === 'goto-base-url'
 	) {
 		node.format = 'uri';
 	} else if (node.format === 'goto-instant') {

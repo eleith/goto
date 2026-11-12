@@ -33,7 +33,18 @@ FormatRegistry.Set('goto-link-url', (value) => {
 	return url !== undefined && url.username === '' && url.password === '';
 });
 
-FormatRegistry.Set('goto-site-url', (value) => {
+FormatRegistry.Set('goto-base-url', (value) => {
+	const url = parseHttpUrl(value);
+	return (
+		url !== undefined &&
+		url.username === '' &&
+		url.password === '' &&
+		!value.includes('?') &&
+		!value.includes('#')
+	);
+});
+
+FormatRegistry.Set('goto-app-url', (value) => {
 	const url = parseHttpUrl(value);
 	return url !== undefined && url.port !== '0' && value === url.origin;
 });
@@ -44,7 +55,7 @@ const ipv6Pattern = '\\[[0-9a-f:.]+\\]';
 const hostPattern = `(?:${hostnamePattern}|${ipv6Pattern})`;
 const httpsPortPattern = `(?::(?!443${end})[1-9][0-9]*)?`;
 const httpPortPattern = `(?::(?!80${end})[1-9][0-9]*)?`;
-const siteOriginPattern = `^(?:https://${hostPattern}${httpsPortPattern}|http://${hostPattern}${httpPortPattern})${end}`;
+const appOriginPattern = `^(?:https://${hostPattern}${httpsPortPattern}|http://${hostPattern}${httpPortPattern})${end}`;
 const instantPattern = `^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})${end}`;
 
 FormatRegistry.Set('goto-instant', (value) => {
@@ -71,10 +82,18 @@ const LinkUrlSchema = Type.String({
 	description: 'An absolute HTTP or HTTPS destination without embedded credentials.'
 });
 
-const SiteUrlSchema = Type.String({
-	$id: 'SiteUrl',
-	format: 'goto-site-url',
-	pattern: siteOriginPattern,
+const BaseUrlSchema = Type.String({
+	$id: 'BaseUrl',
+	format: 'goto-base-url',
+	pattern: `^[Hh][Tt][Tt][Pp][Ss]?://[^\\s/@?#]+(?:/[^\\s?#]*)?${end}`,
+	description:
+		'An absolute HTTP or HTTPS base URL without embedded credentials, query or fragment. A base path and trailing slash are allowed.'
+});
+
+const AppUrlSchema = Type.String({
+	$id: 'AppUrl',
+	format: 'goto-app-url',
+	pattern: appOriginPattern,
 	description:
 		'The canonical admin HTTP(S) origin, without credentials, path, trailing slash, query or fragment.'
 });
@@ -118,9 +137,16 @@ const FallbackSchema = Type.Union([Type.Literal(404), ref(LinkUrlSchema)], {
 	$id: 'Fallback'
 });
 
+const UrlSchema = Type.Object(
+	{
+		app: ref(AppUrlSchema, { default: 'http://localhost:3000' }),
+		worker: ref(BaseUrlSchema, { default: 'http://goto-worker:9000' })
+	},
+	{ $id: 'Url', additionalProperties: false }
+);
+
 const SiteSchema = Type.Object(
 	{
-		url: ref(SiteUrlSchema, { default: 'http://localhost:3000' }),
 		title: Type.String({ ...nonBlankText, default: 'Goto' }),
 		logo_path: Type.Optional(ref(LocalImagePathSchema)),
 		favicon_path: Type.Optional(ref(LocalImagePathSchema))
@@ -255,6 +281,7 @@ const DomainConfigurationSchema = Type.Object(
 export const GotoConfigurationSchema = Type.Object(
 	{
 		version: Type.Literal(1, { default: 1 }),
+		url: ref(UrlSchema, { default: {} }),
 		site: ref(SiteSchema, { default: {} }),
 		appearance: ref(AppearanceSchema, { default: {} }),
 		auth: ref(AuthSchema),
@@ -271,7 +298,8 @@ export const GotoConfigurationSchema = Type.Object(
 export const configurationReferences: TSchema[] = [
 	HttpUrlSchema,
 	LinkUrlSchema,
-	SiteUrlSchema,
+	BaseUrlSchema,
+	AppUrlSchema,
 	InstantSchema,
 	AuthSecretSchema,
 	LocalImagePathSchema,
@@ -279,6 +307,7 @@ export const configurationReferences: TSchema[] = [
 	TagsSchema,
 	RedirectStatusSchema,
 	FallbackSchema,
+	UrlSchema,
 	SiteSchema,
 	AppearanceSchema,
 	OidcAuthSchema,

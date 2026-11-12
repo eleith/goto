@@ -204,7 +204,7 @@ describe('effective domains', () => {
 	it('rejects the admin host, noncanonical paths and reversed or empty validity windows', () => {
 		const input = configurationInput();
 		expect(() =>
-			validateConfig({ ...input, site: { url: 'https://go.example.com' } }, options)
+			validateConfig({ ...input, url: { app: 'https://go.example.com' } }, options)
 		).toThrow(ConfigError);
 		expect(() =>
 			validateConfig(configurationInput({ '/docs/': { url: 'https://example.com' } }), options)

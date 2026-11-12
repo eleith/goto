@@ -24,7 +24,7 @@ await new Promise((resolve, reject) =>
 );
 process.env.PORT = String(address.port);
 const configuration = {
-	site: { url: `http://localhost:${address.port}` },
+	url: { app: `http://localhost:${address.port}` },
 	auth: { credentials: { username: 'example', password: 'e2e-only-password' } },
 	analytics: { retention_months: Number(process.env.GOTO_E2E_RETENTION_MONTHS ?? '3') },
 	domains: {

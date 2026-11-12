@@ -49,7 +49,7 @@ export function prepareDomains(
 	authoredDefaults: object
 ): Record<string, PreparedDomain> {
 	const domains: Record<string, PreparedDomain> = Object.create(null);
-	const adminHost = normalizeHost(new URL(configuration.site.url).host);
+	const adminHost = normalizeHost(new URL(configuration.url.app).host);
 	for (const [key, domain] of Object.entries(configuration.domains)) {
 		const host = normalizeHost(key);
 		if (!host || host === adminHost || Object.hasOwn(domains, host)) {

@@ -9,8 +9,8 @@ const env = {
 	DUMMY_SECRET: 'dummy-session-secret-with-at-least-thirty-two-characters-do-not-print',
 	DUMMY_DESTINATION: 'https://destination.example.test/private-do-not-print'
 };
-const validYaml = `site:
-  url: https://admin.example.test
+const validYaml = `url:
+  app: https://admin.example.test
 auth:
   secret: \${DUMMY_SECRET}
   credentials:

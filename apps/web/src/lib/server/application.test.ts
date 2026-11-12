@@ -32,7 +32,7 @@ function prepared(
 ) {
 	return validateConfig(
 		{
-			site: { url: 'https://admin.example.test' },
+			url: { app: 'https://admin.example.test' },
 			auth: { credentials: { username: 'example', password: 'test-only-password' } },
 			domains: { 'go.example.test': { links: { '/docs': { url: destination } } } },
 			...changes
@@ -96,7 +96,7 @@ test('publishes valid changes, ignores equivalent data, and retains last good da
 });
 
 test.each([
-	{ site: { url: 'https://different-admin.example.test' } },
+	{ url: { app: 'https://different-admin.example.test' } },
 	{ auth: { credentials: { username: 'changed', password: 'private-changed-password' } } },
 	{ database: { path: './data/different.sqlite' } }
 ])('rejects the whole candidate when startup settings change: %j', async (changes) => {

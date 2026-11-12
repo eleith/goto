@@ -139,7 +139,7 @@ async function start() {
 	await writeFile(
 		join(directory, 'config/goto.yaml'),
 		JSON.stringify({
-			site: { url: origin },
+			url: { app: origin },
 			auth: { credentials: { username: 'hmr-test', password: 'hmr-test-only-password' } },
 			domains: {
 				[`go.localhost:${address.port}`]: {

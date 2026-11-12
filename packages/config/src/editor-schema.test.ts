@@ -22,13 +22,19 @@ describe('Goto editor schema', () => {
 	it('relaxes defaulted fields while keeping authentication, domain links and destinations required', () => {
 		const editor = createEditorSchema();
 		expect(editor.required).toEqual(['auth', 'domains']);
-		for (const name of ['Site', 'Appearance', 'Database', 'Analytics', 'Defaults']) {
+		for (const name of ['Url', 'Site', 'Appearance', 'Database', 'Analytics', 'Defaults']) {
 			expect(definition(editor, name).required).toBeUndefined();
 		}
 		expect(property(editor, 'site')).toEqual({ $ref: '#/$defs/Site', default: {} });
-		expect(property(definition(editor, 'Site'), 'url')).toEqual({
-			$ref: '#/$defs/SiteUrl',
+		expect(object(definition(editor, 'Site').properties)).not.toHaveProperty('url');
+		expect(property(editor, 'url')).toEqual({ $ref: '#/$defs/Url', default: {} });
+		expect(property(definition(editor, 'Url'), 'app')).toEqual({
+			$ref: '#/$defs/AppUrl',
 			default: 'http://localhost:3000'
+		});
+		expect(property(definition(editor, 'Url'), 'worker')).toEqual({
+			$ref: '#/$defs/BaseUrl',
+			default: 'http://goto-worker:9000'
 		});
 		expect(definition(editor, 'DomainConfiguration').required).toEqual(['links']);
 		expect(definition(editor, 'LinkConfiguration').required).toEqual(['url']);
@@ -88,7 +94,7 @@ describe('Goto editor schema', () => {
 
 	it('maps runtime formats to editor formats and keeps literal constraints separate from tokens', () => {
 		const editor = createEditorSchema();
-		for (const name of ['HttpUrl', 'LinkUrl', 'SiteUrl', 'Instant']) {
+		for (const name of ['HttpUrl', 'LinkUrl', 'AppUrl', 'BaseUrl', 'Instant']) {
 			const canonical = configurationReferences.find((schema) => schema.$id === name)!;
 			const adapted = definition(editor, name);
 			expect(branches(adapted)[0]).toEqual({
@@ -271,7 +277,7 @@ describe('Goto editor schema', () => {
 		const first = JSON.stringify(createEditorSchema());
 		expect(JSON.stringify(createEditorSchema())).toBe(first);
 		expect(JSON.stringify([GotoConfigurationSchema, configurationReferences])).toBe(before);
-		for (const name of ['HttpUrl', 'LinkUrl', 'SiteUrl', 'Instant', 'AuthSecret']) {
+		for (const name of ['HttpUrl', 'LinkUrl', 'AppUrl', 'BaseUrl', 'Instant', 'AuthSecret']) {
 			const canonical = configurationReferences.find((schema) => schema.$id === name)!;
 			for (const value of ['${VALUE}', false, 1]) {
 				expect(Value.Check(canonical, value)).toBe(false);

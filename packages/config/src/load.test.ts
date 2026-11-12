@@ -21,7 +21,8 @@ describe('configuration loading', () => {
 		const { configuration } = validateConfig(input, options);
 		expect(configuration).toMatchObject({
 			version: 1,
-			site: { url: 'http://localhost:3000', title: 'Goto' },
+			url: { app: 'http://localhost:3000', worker: 'http://goto-worker:9000' },
+			site: { title: 'Goto' },
 			database: { path: './data/goto.sqlite', worker_path: './data/worker.sqlite' },
 			analytics: { retention_months: 3 },
 			defaults: { status_code: 302, forward_query: false, fallback: 404 }
@@ -64,24 +65,28 @@ describe('configuration loading', () => {
 		[{ PORT: '4321' }, 'http://localhost:4321'],
 		[{ PORT: '80' }, 'http://localhost']
 	])('derives an omitted origin from injected environment %j', (env, url) => {
-		expect(validateConfig(configurationInput(), { env }).configuration.site.url).toBe(url);
+		expect(validateConfig(configurationInput(), { env }).configuration.url.app).toBe(url);
 	});
 
 	it('validates interpolated values and preserves an explicit canonical origin', () => {
 		const input = {
 			...configurationInput({ '/docs': { url: '${DESTINATION}' } }),
-			site: { url: '${ADMIN_ORIGIN}' },
+			url: { app: '${ADMIN_ORIGIN}', worker: '${WORKER_BASE}' },
 			auth: { ...configurationInput().auth, secret: '${SECRET}' }
 		};
 		const env = {
 			ADMIN_ORIGIN: 'https://admin.example.com',
+			WORKER_BASE: 'http://worker.example.com:9100/private/',
 			DESTINATION: 'https://example.com',
 			SECRET: 's'.repeat(32),
 			PORT: 'invalid'
 		};
 		const { configuration } = validateConfig(input, { env });
-		expect(configuration.site.url).toBe(env.ADMIN_ORIGIN);
+		expect(configuration.url).toEqual({ app: env.ADMIN_ORIGIN, worker: env.WORKER_BASE });
 		expect(configuration.auth.secret).toBe(env.SECRET);
+		expect(() =>
+			validateConfig(input, { env: { ...env, WORKER_BASE: 'http://worker.example.com?secret' } })
+		).toThrowError(new ConfigError());
 		for (const destination of [
 			'https://private:secret@example.com',
 			'https://example.com/\r\nsecret'
@@ -93,6 +98,54 @@ describe('configuration loading', () => {
 		expect(() =>
 			validateConfig({ ...input, auth: { ...input.auth, secret: '${MISSING}' } }, { env })
 		).toThrowError(new ConfigError());
+	});
+
+	it('defaults omitted URL fields independently', () => {
+		const input = configurationInput();
+		expect(validateConfig({ ...input, url: {} }, options).configuration.url).toEqual({
+			app: 'http://localhost:3000',
+			worker: 'http://goto-worker:9000'
+		});
+		expect(
+			validateConfig({ ...input, url: { app: 'https://admin.example.com' } }, options).configuration
+				.url.worker
+		).toBe('http://goto-worker:9000');
+		expect(
+			validateConfig(
+				{ ...input, url: { worker: 'https://worker.example.com/private/' } },
+				{ env: { NODE_ENV: 'development' } }
+			).configuration.url
+		).toEqual({ app: 'http://localhost:5173', worker: 'https://worker.example.com/private/' });
+	});
+
+	it.each([
+		'ftp://worker.example.com',
+		'http://user:password@worker.example.com',
+		'http://@worker.example.com',
+		'http://worker.example.com?token=secret',
+		'http://worker.example.com?',
+		'http://worker.example.com#fragment',
+		'http://worker.example.com#',
+		'http://worker.example.com/private path'
+	])('rejects invalid worker base URLs %j', (worker) => {
+		expect(() => validateConfig({ ...configurationInput(), url: { worker } }, options)).toThrow(
+			ConfigError
+		);
+	});
+
+	it('rejects the old site URL key without accepting it as an app URL', () => {
+		for (const url of [undefined, { app: 'https://admin.example.com' }]) {
+			expect(() =>
+				validateConfig(
+					{
+						...configurationInput(),
+						...(url === undefined ? {} : { url }),
+						site: { url: 'https://old.example.com', title: 'Custom title' }
+					},
+					options
+				)
+			).toThrow(ConfigError);
+		}
 	});
 
 	it('defaults the OIDC name after resolving authentication placeholders', () => {
@@ -137,6 +190,8 @@ describe('configuration loading', () => {
 		{ unknown: 'private-value' },
 		{ site: null },
 		{ site: [] },
+		{ url: null },
+		{ url: [] },
 		{ version: Infinity },
 		{ auth: {} },
 		{
@@ -146,7 +201,7 @@ describe('configuration loading', () => {
 			}
 		},
 		{ auth: { ...configurationInput().auth, secret: 'too-short-private-secret' } },
-		{ site: { url: 'https://ADMIN.example.com/' } },
+		{ url: { app: 'https://ADMIN.example.com/' } },
 		{ defaults: { forward_query: null } },
 		{ domains: [] },
 		{ domains: { 'go.example.com': { links: [] } } },

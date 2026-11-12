@@ -29,7 +29,7 @@ function reportReloadIssue(message: string): void {
 
 function startupSettings({ configuration }: PreparedConfiguration) {
 	return {
-		siteUrl: configuration.site.url,
+		appUrl: configuration.url.app,
 		auth: configuration.auth,
 		databasePath: configuration.database.path,
 		collectionEnabled: configuration.analytics.retention_months !== 0

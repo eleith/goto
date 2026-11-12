@@ -30,7 +30,7 @@ function event(
 function application(): Application {
 	const prepared = validateConfig(
 		{
-			site: { url: 'https://admin.example.org' },
+			url: { app: 'https://admin.example.org' },
 			auth: { credentials: { username: 'example', password: 'test-password' } },
 			domains: { 'go.example.org': { links: {} } }
 		},

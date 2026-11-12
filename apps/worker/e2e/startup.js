@@ -68,7 +68,7 @@ async function checkStartup(mode, port = 0) {
 		await writeFile(
 			join(directory, 'config/goto.yaml'),
 			JSON.stringify({
-				site: { url: 'http://admin.example.test' },
+				url: { app: 'http://admin.example.test' },
 				auth: { credentials: { username: 'smoke', password: 'private-worker-smoke-password' } },
 				analytics: { retention_months: mode === 'retention-change' ? 9 : 0 },
 				domains: {}

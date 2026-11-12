@@ -30,7 +30,7 @@ export function handleIngress(
 		}
 		return redirect.response;
 	}
-	if (ingress.url.origin === snapshot.configuration.site.url) {
+	if (ingress.url.origin === snapshot.configuration.url.app) {
 		bindApplication(request, application, ingress.url.origin, snapshot);
 		return;
 	}

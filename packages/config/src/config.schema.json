@@ -5,6 +5,7 @@
 	"required": ["auth", "domains"],
 	"properties": {
 		"version": { "default": 1, "const": 1, "type": "number" },
+		"url": { "default": {}, "$ref": "#/$defs/Url" },
 		"site": { "default": {}, "$ref": "#/$defs/Site" },
 		"appearance": { "default": {}, "$ref": "#/$defs/Appearance" },
 		"auth": { "$ref": "#/$defs/Auth" },
@@ -49,7 +50,22 @@
 				}
 			]
 		},
-		"SiteUrl": {
+		"BaseUrl": {
+			"description": "An absolute HTTP or HTTPS base URL without embedded credentials, query or fragment. A base path and trailing slash are allowed.",
+			"type": "string",
+			"anyOf": [
+				{
+					"type": "string",
+					"format": "uri",
+					"pattern": "^[Hh][Tt][Tt][Pp][Ss]?://[^\\s/@?#]+(?:/[^\\s?#]*)?(?![\\s\\S])"
+				},
+				{
+					"type": "string",
+					"pattern": "(?:^|[^$])(?:\\$\\$)*\\$\\{[A-Z_][A-Z0-9_]*(?::-[^}]*)?\\}"
+				}
+			]
+		},
+		"AppUrl": {
 			"description": "The canonical admin HTTP(S) origin, without credentials, path, trailing slash, query or fragment.",
 			"type": "string",
 			"anyOf": [
@@ -135,11 +151,18 @@
 			]
 		},
 		"Fallback": { "anyOf": [{ "const": 404, "type": "number" }, { "$ref": "#/$defs/LinkUrl" }] },
+		"Url": {
+			"additionalProperties": false,
+			"type": "object",
+			"properties": {
+				"app": { "default": "http://localhost:3000", "$ref": "#/$defs/AppUrl" },
+				"worker": { "default": "http://goto-worker:9000", "$ref": "#/$defs/BaseUrl" }
+			}
+		},
 		"Site": {
 			"additionalProperties": false,
 			"type": "object",
 			"properties": {
-				"url": { "default": "http://localhost:3000", "$ref": "#/$defs/SiteUrl" },
 				"title": {
 					"default": "Goto",
 					"type": "string",

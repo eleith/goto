@@ -12,7 +12,7 @@ const foreignCookies =
 function authentication(origin: string) {
 	const { configuration } = validateConfig(
 		{
-			site: { url: origin },
+			url: { app: origin },
 			auth: { secret: 'cookie-test-secret-with-at-least-thirty-two-characters', credentials },
 			domains: { 'go.example.test': { links: {} } }
 		},

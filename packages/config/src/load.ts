@@ -64,7 +64,7 @@ export function validateConfig(raw: unknown, options: ConfigOptions = {}): Prepa
 		assertSafeInput(raw);
 		const copy = structuredClone(raw);
 		const env = options.env ?? process.env;
-		defaultSiteUrl(copy, env);
+		defaultAppUrl(copy, env);
 		const expanded = interpolate(copy, env);
 		const defaulted = Value.Default(GotoConfigurationSchema, configurationReferences, expanded);
 		assertArrayShapesPreserved(raw, defaulted);
@@ -81,11 +81,11 @@ export function validateConfig(raw: unknown, options: ConfigOptions = {}): Prepa
 	}
 }
 
-function defaultSiteUrl(raw: Record<string, unknown>, env: ConfigEnvironment): void {
-	if (!Object.hasOwn(raw, 'site')) raw.site = {};
-	const site = raw.site;
-	if (typeof site !== 'object' || site === null || Array.isArray(site)) return;
-	if (Object.hasOwn(site, 'url')) return;
+function defaultAppUrl(raw: Record<string, unknown>, env: ConfigEnvironment): void {
+	if (!Object.hasOwn(raw, 'url')) raw.url = {};
+	const url = raw.url;
+	if (typeof url !== 'object' || url === null || Array.isArray(url)) return;
+	if (Object.hasOwn(url, 'app')) return;
 	const port = env.PORT ?? (env.NODE_ENV === 'development' ? '5173' : '3000');
 	const number = Number(port);
 	if (
@@ -99,6 +99,6 @@ function defaultSiteUrl(raw: Record<string, unknown>, env: ConfigEnvironment): v
 	) {
 		throw new ConfigError();
 	}
-	(site as Record<string, unknown>).url =
+	(url as Record<string, unknown>).app =
 		number === 80 ? 'http://localhost' : `http://localhost:${number}`;
 }

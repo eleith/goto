@@ -14,7 +14,7 @@ import { prepareSnapshot } from './snapshot.js';
 function application(): Application {
 	const prepared = validateConfig(
 		{
-			site: { url: 'https://admin.example.org' },
+			url: { app: 'https://admin.example.org' },
 			auth: { credentials: { username: 'example', password: 'test-password' } },
 			domains: {}
 		},
@@ -97,7 +97,7 @@ test('carries the trusted request origin separately from the configured admin or
 	bindApplication(incoming, captured, 'http://localhost:5173');
 
 	expect(requestOrigin(incoming)).toBe('http://localhost:5173');
-	expect(requestApplication(incoming)?.currentSnapshot().configuration.site.url).toBe(
+	expect(requestApplication(incoming)?.currentSnapshot().configuration.url.app).toBe(
 		'https://admin.example.org'
 	);
 });
@@ -111,7 +111,8 @@ test('an existing request retains its snapshot when the application publishes an
 	current = prepareSnapshot(
 		validateConfig(
 			{
-				site: { url: 'https://admin.example.org', title: 'Updated' },
+				url: { app: 'https://admin.example.org' },
+				site: { title: 'Updated' },
 				auth: { credentials: { username: 'example', password: 'test-password' } },
 				domains: {}
 			},

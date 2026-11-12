@@ -1,8 +1,11 @@
 # yaml-language-server: $schema=https://goto.example.net/schema.json
 version: 1
 
+url:
+  app: https://goto.example.net
+  worker: http://goto-worker:9000
+
 site:
-  url: https://goto.example.net
   title: Goto
 
 appearance:

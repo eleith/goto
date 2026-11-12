@@ -14,7 +14,7 @@ import { generateVisits, seedWindowStart } from './seed-visits-data.js';
 const script = fileURLToPath(new URL('./seed-visits.js', import.meta.url));
 const loader = fileURLToPath(new URL('../tools/register.mjs', import.meta.url));
 const fixture = {
-	site: { url: 'https://admin.example.test' },
+	url: { app: 'https://admin.example.test' },
 	auth: { credentials: { username: 'test', password: 'seed-test-only-password' } },
 	domains: {
 		'one.example.test': { links: { '/docs': { url: 'https://example.org/docs' } } },

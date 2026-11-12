@@ -12,7 +12,7 @@ type AuthOptions = Pick<BetterAuthOptions, 'plugins' | 'onAPIError'>;
 
 export function buildAuthOptions(cfg: Immutable<GotoConfiguration>): AuthOptions {
 	if (cfg.auth.credentials) return credentialsAuth(cfg.auth.credentials, 'admin@goto.invalid');
-	if (cfg.auth.oidc) return oidcAuth(cfg.auth.oidc, cfg.site.url);
+	if (cfg.auth.oidc) return oidcAuth(cfg.auth.oidc, cfg.url.app);
 	throw new Error('an authentication strategy is required');
 }
 
