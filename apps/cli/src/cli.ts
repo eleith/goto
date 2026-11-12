@@ -1,4 +1,4 @@
-import { ConfigError, loadConfigFile, type ConfigOptions } from '@goto/config';
+import { ConfigError, formatConfigError, loadConfigFile, type ConfigOptions } from '@goto/config';
 import { cli, define, type CommandContext } from 'gunshi';
 
 interface CliOutput {
@@ -57,7 +57,7 @@ export async function runCli(
 	} catch (error) {
 		const message =
 			error instanceof ConfigError
-				? 'Configuration validation failed.\n'
+				? `${formatConfigError(error, 'Configuration validation failed.')}\n`
 				: 'Command failed. Run goto-cli --help for usage.\n';
 		output.stderr(message);
 		return 1;

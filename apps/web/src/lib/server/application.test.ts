@@ -44,6 +44,7 @@ function prepared(
 beforeEach(() => {
 	vi.clearAllMocks();
 	vi.spyOn(console, 'warn').mockImplementation(() => {});
+	vi.spyOn(console, 'error').mockImplementation(() => {});
 	vi.mocked(loadConfigFile).mockResolvedValue(prepared());
 	vi.mocked(createVisitRecorder).mockReturnValue({ recordVisit, stop: stopRecorder });
 	vi.mocked(startConfigReloading).mockImplementation(async (options) => {
@@ -157,6 +158,30 @@ test('invalid startup fails before registering a monitor', async () => {
 	vi.mocked(loadConfigFile).mockRejectedValue(new ConfigError());
 
 	await expect(createApplication(options)).rejects.toThrow('Invalid configuration');
+	expect(console.error).toHaveBeenCalledExactlyOnceWith('Invalid configuration');
 	expect(startConfigReloading).not.toHaveBeenCalled();
 	expect(createVisitRecorder).not.toHaveBeenCalled();
+});
+
+test('reports only curated configuration issues during startup', async () => {
+	const failure = new ConfigError([
+		{ path: '/url/app', message: 'Expected a canonical app origin' }
+	]);
+	failure.cause = new Error('private startup detail');
+	vi.mocked(loadConfigFile).mockRejectedValue(failure);
+
+	await expect(createApplication(options)).rejects.toBe(failure);
+	expect(console.error).toHaveBeenCalledExactlyOnceWith(
+		'Invalid configuration\n  /url/app: Expected a canonical app origin'
+	);
+	expect(startConfigReloading).not.toHaveBeenCalled();
+	expect(createVisitRecorder).not.toHaveBeenCalled();
+});
+
+test('does not expose arbitrary startup errors as configuration diagnostics', async () => {
+	const failure = new Error('private connection detail');
+	vi.mocked(loadConfigFile).mockRejectedValue(failure);
+
+	await expect(createApplication(options)).rejects.toBe(failure);
+	expect(console.error).not.toHaveBeenCalled();
 });

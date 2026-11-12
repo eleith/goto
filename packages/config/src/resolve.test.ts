@@ -185,7 +185,9 @@ describe('effective domains', () => {
 						configurationInput({ '/docs': { url: 'https://example.com', [field]: instant } }),
 						options
 					)
-				).toThrowError(new ConfigError());
+				).toThrowError(
+					expect.objectContaining({ constructor: ConfigError, message: 'Invalid configuration' })
+				);
 			}
 		}
 	);

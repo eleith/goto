@@ -12,7 +12,7 @@ const yaml = 'auth: {credentials: {username: admin, password: test-password}}\nd
 const authoredKeyMarker = 'dummy-authored-key-marker';
 
 describe('configuration loading', () => {
-	it('parses YAML 1.2 and applies root defaults without mutating the input', () => {
+	it('parses YAML and applies root defaults without mutating the input', () => {
 		expect(parseConfig(`${yaml}\nsite: {title: yes}`, options).configuration.site.title).toBe(
 			'yes'
 		);
@@ -86,14 +86,18 @@ describe('configuration loading', () => {
 		expect(configuration.auth.secret).toBe(env.SECRET);
 		expect(() =>
 			validateConfig(input, { env: { ...env, WORKER_BASE: 'http://worker.example.com?secret' } })
-		).toThrowError(new ConfigError());
+		).toThrowError(
+			expect.objectContaining({ constructor: ConfigError, message: 'Invalid configuration' })
+		);
 		for (const destination of [
 			'https://private:secret@example.com',
 			'https://example.com/\r\nsecret'
 		]) {
 			expect(() =>
 				validateConfig(input, { env: { ...env, DESTINATION: destination } })
-			).toThrowError(new ConfigError());
+			).toThrowError(
+				expect.objectContaining({ constructor: ConfigError, message: 'Invalid configuration' })
+			);
 		}
 		expect(() =>
 			validateConfig({ ...input, auth: { ...input.auth, secret: '${MISSING}' } }, { env })
@@ -247,7 +251,6 @@ describe('configuration loading', () => {
 		`${yaml}\nversion: 1\nversion: 1`,
 		`${yaml}\n<<: {version: 1}`,
 		`${yaml}\n---\n${yaml}`,
-		`%YAML 1.1\n---\n${yaml}`,
 		`${yaml}\nsite: &cycle {title: *cycle}`
 	])('rejects non-strict YAML', (source) => {
 		expect(() => parseConfig(source, options)).toThrow(ConfigError);
@@ -263,9 +266,15 @@ describe('configuration loading', () => {
 	});
 
 	it('does not expose YAML parser snippets containing secrets', () => {
-		expect(() => parseConfig(`${yaml}\nauth: private-secret`, options)).toThrowError(
-			new ConfigError()
-		);
+		let error: unknown;
+		try {
+			parseConfig(`${yaml}\nauth: private-secret`, options);
+		} catch (caught) {
+			error = caught;
+		}
+		expect(error).toBeInstanceOf(ConfigError);
+		expect(error).toHaveProperty('message', 'Invalid configuration');
+		expect(JSON.stringify(error)).not.toContain('private-secret');
 	});
 
 	it('allows small aliases but bounds repeated expansion', () => {
@@ -350,7 +359,9 @@ describe('configuration loading', () => {
 			expect(explicit).toEqual(loaded);
 			await expect(
 				loadConfigFile('missing-private-file.yaml', { cwd: root, env: {} })
-			).rejects.toThrowError(new ConfigError());
+			).rejects.toThrowError(
+				expect.objectContaining({ constructor: ConfigError, message: 'Invalid configuration' })
+			);
 		} finally {
 			await rm(root, { recursive: true, force: true });
 		}

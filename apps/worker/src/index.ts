@@ -1,4 +1,5 @@
 import process from 'node:process';
+import { ConfigError, formatConfigError } from '@goto/config';
 import { startWorkerService, type WorkerService } from './services/startup.js';
 import { logger } from './services/logger.js';
 
@@ -48,8 +49,12 @@ try {
 			});
 		}
 	}
-} catch {
+} catch (error) {
 	process.exitCode = 1;
-	logger.error('Unable to start worker service');
+	const message =
+		error instanceof ConfigError
+			? formatConfigError(error, 'Unable to start worker service')
+			: 'Unable to start worker service';
+	logger.error(message);
 	await shutdown();
 }

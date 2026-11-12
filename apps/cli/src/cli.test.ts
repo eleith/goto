@@ -134,7 +134,29 @@ describe('goto-cli config validate', () => {
 
 		expect(await runCli(['config', 'validate'], output, { cwd, env: environment })).toBe(1);
 		expect(output.stdout).not.toHaveBeenCalled();
-		expect(output.stderr).toHaveBeenCalledExactlyOnceWith('Configuration validation failed.\n');
+		expect(output.stderr).toHaveBeenCalledExactlyOnceWith(
+			expect.stringMatching(/^Configuration validation failed\.\n/)
+		);
+		const diagnostic = output.stderr.mock.calls[0]?.[0];
+		for (const sensitive of [...Object.values(env), ...Object.values(environment)]) {
+			if (sensitive !== undefined) expect(diagnostic).not.toContain(sensitive);
+		}
+		expect(diagnostic).not.toContain(source);
+		expect(diagnostic).not.toContain(cwd);
+		expect(diagnostic).not.toContain('config/goto.yaml');
+	});
+
+	it('reports the site section for an unsupported site.url without printing its value', async () => {
+		const oldSiteUrl = 'https://old.example.test/private-do-not-print';
+		await writeConfiguration('config/goto.yaml', `${validYaml}site:\n  url: ${oldSiteUrl}\n`);
+		const output = createOutput();
+
+		expect(await runCli(['config', 'validate'], output, { cwd, env })).toBe(1);
+		expect(output.stdout).not.toHaveBeenCalled();
+		expect(output.stderr).toHaveBeenCalledExactlyOnceWith(
+			expect.stringMatching(/^Configuration validation failed\.\n {2}\/site: \S[^\n]*\n$/)
+		);
+		expect(output.stderr.mock.calls[0]?.[0]).not.toContain(oldSiteUrl);
 	});
 
 	it('reports a missing file without disclosing the path', async () => {
@@ -144,7 +166,12 @@ describe('goto-cli config validate', () => {
 			await runCli(['config', 'validate', 'missing-private-path.yaml'], output, { cwd, env })
 		).toBe(1);
 		expect(output.stdout).not.toHaveBeenCalled();
-		expect(output.stderr).toHaveBeenCalledExactlyOnceWith('Configuration validation failed.\n');
+		expect(output.stderr).toHaveBeenCalledExactlyOnceWith(
+			'Configuration validation failed.\n  /: Unable to read configuration file\n'
+		);
+		const diagnostic = output.stderr.mock.calls[0]?.[0];
+		expect(diagnostic).not.toContain('missing-private-path.yaml');
+		expect(diagnostic).not.toContain(cwd);
 	});
 
 	it.each([

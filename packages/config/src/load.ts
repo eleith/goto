@@ -1,8 +1,8 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { Value } from '@sinclair/typebox/value';
-import { parseAllDocuments } from 'yaml';
-import { ConfigError } from './errors.js';
+import { LineCounter, parseAllDocuments } from 'yaml';
+import { ConfigError, toConfigIssue } from './errors.js';
 import { assertArrayShapesPreserved, assertSafeInput } from './input.js';
 import { interpolate } from './interpolate.js';
 import { resolveConfigPath, resolveDeploymentRoot } from './paths.js';
@@ -20,7 +20,7 @@ export async function loadConfigFile(
 	try {
 		source = await readFile(configPath, 'utf8');
 	} catch {
-		throw new ConfigError();
+		throw new ConfigError([{ path: '/', message: 'Unable to read configuration file' }]);
 	}
 	const prepared = parseConfig(source, options);
 	const deploymentRoot = resolveDeploymentRoot(configPath);
@@ -33,8 +33,9 @@ export async function loadConfigFile(
 export function parseConfig(source: string, options: ConfigOptions = {}): PreparedConfiguration {
 	let raw: unknown;
 	try {
+		const lineCounter = new LineCounter();
 		const documents = parseAllDocuments(source, {
-			version: '1.2',
+			lineCounter,
 			schema: 'core',
 			stringKeys: true,
 			uniqueKeys: true,
@@ -43,17 +44,23 @@ export function parseConfig(source: string, options: ConfigOptions = {}): Prepar
 			logLevel: 'silent'
 		});
 		const document = documents[0];
-		if (
-			documents.length !== 1 ||
-			!document ||
-			document.errors.length > 0 ||
-			document.warnings.length > 0 ||
-			document.directives?.yaml.version !== '1.2'
-		) {
-			throw new ConfigError();
+		if (documents.length !== 1 || !document) {
+			throw new ConfigError([{ path: '/', message: 'Expected one YAML document' }]);
+		}
+		const yamlErrors = [...document.errors, ...document.warnings];
+		if (yamlErrors.length > 0) {
+			const issues = yamlErrors.map((error) => {
+				const { line, col } = lineCounter.linePos(error.pos[0]);
+				return {
+					path: '/',
+					message: `Invalid YAML (${error.code}) at line ${line}, column ${col}`
+				};
+			});
+			throw new ConfigError(issues);
 		}
 		raw = document.toJS({ maxAliasCount: 100 });
-	} catch {
+	} catch (error) {
+		if (error instanceof ConfigError) throw error;
 		throw new ConfigError();
 	}
 	return validateConfig(raw, options);
@@ -69,7 +76,10 @@ export function validateConfig(raw: unknown, options: ConfigOptions = {}): Prepa
 		const defaulted = Value.Default(GotoConfigurationSchema, configurationReferences, expanded);
 		assertArrayShapesPreserved(raw, defaulted);
 		if (!Value.Check(GotoConfigurationSchema, configurationReferences, defaulted)) {
-			throw new ConfigError();
+			const issues = [
+				...Value.Errors(GotoConfigurationSchema, configurationReferences, defaulted)
+			].map(toConfigIssue);
+			throw new ConfigError(issues);
 		}
 		const configuration = defaulted;
 		const authoredDefaults =

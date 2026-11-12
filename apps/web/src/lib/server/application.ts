@@ -2,6 +2,8 @@ import { isDeepStrictEqual } from 'node:util';
 import { resolve } from 'node:path';
 import type { NewVisit } from '@goto/db';
 import {
+	ConfigError,
+	formatConfigError,
 	loadConfigFile,
 	resolveConfigPath,
 	startConfigReloading,
@@ -42,7 +44,10 @@ export async function createApplication(options: ConfigOptions = {}): Promise<Ap
 		cwd: options.cwd ?? process.cwd()
 	};
 	const path = resolveConfigPath(captured);
-	const initial = await loadConfigFile(path, captured);
+	const initial = await loadConfigFile(path, captured).catch((error: unknown) => {
+		if (error instanceof ConfigError) console.error(formatConfigError(error));
+		throw error;
+	});
 	const initialSettings = startupSettings(initial);
 	const startup = structuredClone(initialSettings);
 	let snapshot = prepareSnapshot(initial);
