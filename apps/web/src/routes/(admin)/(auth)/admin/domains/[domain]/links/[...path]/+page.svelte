@@ -2,6 +2,7 @@
 	import { page } from '$app/state';
 	import { resolveVisitTimeframe, visitGranularity, visitWindow } from '@goto/analytics/daily';
 	import VisitsChart from '#lib/components/admin/VisitsChart.svelte';
+	import BrowserOsBreakdowns from '#lib/components/admin/BrowserOsBreakdowns.svelte';
 	import VisitTimeframes from '#lib/components/admin/VisitTimeframes.svelte';
 	import AdminPage from '#lib/components/admin/AdminPage.svelte';
 	import StatCard from '#lib/components/admin/StatCard.svelte';
@@ -18,6 +19,7 @@
 		data.chart ? visitGranularity(timeframe, data.chart.period.retentionMonths) : 'day'
 	);
 	let visits = $derived(data.countsByTimeframe[timeframe]?.validVisits ?? null);
+	let browserOsVisits = $derived(data.browserOsVisitsByTimeframe[timeframe] ?? null);
 </script>
 
 <AdminPage
@@ -59,5 +61,8 @@
 	</section>
 	{#if data.chart && window}
 		<VisitsChart daily={data.chart.daily} {window} {granularity} />
+	{/if}
+	{#if browserOsVisits && visits !== null}
+		<BrowserOsBreakdowns {browserOsVisits} totalVisits={visits} />
 	{/if}
 </AdminPage>

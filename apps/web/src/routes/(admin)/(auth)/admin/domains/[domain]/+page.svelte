@@ -5,6 +5,7 @@
 	import StatCard from '#lib/components/admin/StatCard.svelte';
 	import ReportNotice from '#lib/components/admin/ReportNotice.svelte';
 	import VisitsChart from '#lib/components/admin/VisitsChart.svelte';
+	import BrowserOsBreakdowns from '#lib/components/admin/BrowserOsBreakdowns.svelte';
 	import VisitTimeframes from '#lib/components/admin/VisitTimeframes.svelte';
 	import LinkInventory from '#lib/components/admin/LinkInventory.svelte';
 	import type { PageData } from './$types';
@@ -21,6 +22,7 @@
 	let visits = $derived(data.countsByTimeframe[timeframe]?.validVisits ?? null);
 	let baseVisits = $derived(data.base.countsByTimeframe[timeframe]?.validVisits ?? null);
 	let invalidClicks = $derived(data.invalidClicksByTimeframe[timeframe] ?? null);
+	let browserOsVisits = $derived(data.browserOsVisitsByTimeframe[timeframe] ?? null);
 </script>
 
 <AdminPage
@@ -70,6 +72,9 @@
 	</section>
 	{#if data.chart && window}
 		<VisitsChart daily={data.chart.daily} {window} {granularity} />
+	{/if}
+	{#if browserOsVisits && visits !== null}
+		<BrowserOsBreakdowns {browserOsVisits} totalVisits={visits} />
 	{/if}
 	<section>
 		<h2>Links</h2>

@@ -97,7 +97,7 @@ const baseCounts = {
 	all: { validVisits: 3, invalidVisits: 4 }
 };
 
-test('projects consistent domain, base and link windows without exposing link series or browser/OS counts', async () => {
+test('projects domain counts and browser/OS visits without exposing link series or dated browser/OS counts', async () => {
 	vi.mocked(readDomainDetails).mockResolvedValue(report);
 	const data = await load(request());
 	expect(readDomainDetails).toHaveBeenCalledExactlyOnceWith(expect.any(Object), domain, [
@@ -117,6 +117,20 @@ test('projects consistent domain, base and link windows without exposing link se
 			'7d': { validVisits: 5, invalidVisits: 5 },
 			'30d': { validVisits: 7, invalidVisits: 8 },
 			all: { validVisits: 15, invalidVisits: 14 }
+		},
+		browserOsVisitsByTimeframe: {
+			'7d': {
+				browsers: [{ name: 'Other', visits: 5 }],
+				operatingSystems: [{ name: 'Other', visits: 5 }]
+			},
+			'30d': {
+				browsers: [{ name: 'Other', visits: 7 }],
+				operatingSystems: [{ name: 'Other', visits: 7 }]
+			},
+			all: {
+				browsers: [{ name: 'Other', visits: 15 }],
+				operatingSystems: [{ name: 'Other', visits: 15 }]
+			}
 		},
 		invalidClicksByTimeframe: { '7d': 3, '30d': 5, all: 10 },
 		chart: { daily: domainDetails.daily, period },
@@ -189,6 +203,7 @@ test('rejects unknown domains before reading and keeps unavailable inventory usa
 	vi.mocked(readDomainDetails).mockResolvedValue(null);
 	const data = await load(request());
 	expect(data.available).toBe(false);
+	expect(data.browserOsVisitsByTimeframe).toEqual({});
 	expect(data.chart).toBeNull();
 	expect(data.countsByTimeframe).toEqual({});
 	expect(data.invalidClicksByTimeframe).toEqual({});
@@ -200,6 +215,7 @@ test('disabled collection reads no reports and preserves current inventory', asy
 	const data = await load(request(domain, undefined, 0));
 	expect(readDomainDetails).not.toHaveBeenCalled();
 	expect(data.collectionEnabled).toBe(false);
+	expect(data.browserOsVisitsByTimeframe).toEqual({});
 	expect(data.timeframes).toEqual([]);
 	expect(data.chart).toBeNull();
 	expect(data.countsByTimeframe).toEqual({});

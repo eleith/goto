@@ -58,7 +58,7 @@ const details: VisitDetails = {
 	operatingSystems: browserOsCounts
 };
 
-test('projects only the requested link series and compact window counts with current configuration', async () => {
+test('projects only the requested link series and compact window counts and breakdowns', async () => {
 	vi.mocked(readVisitDetails).mockResolvedValue(details);
 	const data = await load(request());
 	expect(readVisitDetails).toHaveBeenCalledExactlyOnceWith(expect.any(Object), {
@@ -82,6 +82,20 @@ test('projects only the requested link series and compact window counts with cur
 			'7d': { validVisits: 3, invalidVisits: 1 },
 			'30d': { validVisits: 8, invalidVisits: 2 },
 			all: { validVisits: 15, invalidVisits: 5 }
+		},
+		browserOsVisitsByTimeframe: {
+			'7d': {
+				browsers: [{ name: 'Other', visits: 3 }],
+				operatingSystems: [{ name: 'Other', visits: 3 }]
+			},
+			'30d': {
+				browsers: [{ name: 'Other', visits: 8 }],
+				operatingSystems: [{ name: 'Other', visits: 8 }]
+			},
+			all: {
+				browsers: [{ name: 'Other', visits: 15 }],
+				operatingSystems: [{ name: 'Other', visits: 15 }]
+			}
 		},
 		chart: { daily: details.daily, period }
 	});
@@ -128,6 +142,7 @@ test('rejects unknown scopes before reading and keeps unavailable counts absent'
 	vi.mocked(readVisitDetails).mockResolvedValue(null);
 	const data = await load(request());
 	expect(data.available).toBe(false);
+	expect(data.browserOsVisitsByTimeframe).toEqual({});
 	expect(data.chart).toBeNull();
 	expect(data.asOf).toBeNull();
 	expect(data.countsByTimeframe).toEqual({});
@@ -139,6 +154,7 @@ test('disabled analytics skips the report read and leaves link details usable', 
 	const data = await load(request('/docs', domain, 0));
 	expect(readVisitDetails).not.toHaveBeenCalled();
 	expect(data.collectionEnabled).toBe(false);
+	expect(data.browserOsVisitsByTimeframe).toEqual({});
 	expect(data.available).toBe(false);
 	expect(data.retentionMonths).toBe(0);
 	expect(data.timeframes).toEqual([]);

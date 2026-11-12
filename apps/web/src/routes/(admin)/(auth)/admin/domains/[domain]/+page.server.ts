@@ -1,4 +1,5 @@
 import { error } from '@sveltejs/kit';
+import { countBrowserOsVisitsByTimeframe } from '@goto/analytics';
 import {
 	availableVisitTimeframes,
 	countVisitWindows,
@@ -31,6 +32,10 @@ export const load = (async ({ locals, params }) => {
 		: [];
 	const detailsByPath = new Map(report?.links.map(({ path, details }) => [path, details]));
 	const countsByTimeframe = countVisitWindows(domainDetails?.daily, windows);
+	const browserOsVisitsByTimeframe = countBrowserOsVisitsByTimeframe(
+		domainDetails ?? undefined,
+		windows
+	);
 	const baseCountsByTimeframe = countVisitWindows(detailsByPath.get('/')?.daily, windows);
 	const invalidClicksByTimeframe: Partial<Record<VisitTimeframe, number>> = {};
 	for (const { timeframe } of windows) {
@@ -71,6 +76,7 @@ export const load = (async ({ locals, params }) => {
 		linkCount: links.length,
 		timeframes,
 		countsByTimeframe,
+		browserOsVisitsByTimeframe,
 		invalidClicksByTimeframe,
 		chart,
 		base: {

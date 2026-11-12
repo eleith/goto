@@ -65,7 +65,9 @@ async function seedVisits() {
 				domain: 'go.example.org',
 				path: '/docs',
 				outcome: 'valid',
-				visited_at: Date.now() - 14 * 86_400_000
+				visited_at: Date.now() - 14 * 86_400_000,
+				browser: 'Firefox',
+				os: 'Linux'
 			},
 			{ domain: 'go.example.org', path: '/a/b', outcome: 'invalid' },
 			{ domain: 'go.example.org', path: '/', outcome: 'invalid' },
