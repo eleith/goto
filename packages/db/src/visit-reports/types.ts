@@ -14,10 +14,11 @@ export type DailyVisitCounts = DiscriminatedAggregateScope &
 		baseInvalidVisits: number;
 	};
 
-export type ScopedFamilyCounts = DiscriminatedAggregateScope & VisitTotals & { family: string };
+export type DailyBrowserOsCounts = DiscriminatedAggregateScope &
+	VisitTotals & { day: string; name: string };
 
 export interface AggregatedVisitReports {
 	daily: DailyVisitCounts[];
-	browsers: ScopedFamilyCounts[];
-	operatingSystems: ScopedFamilyCounts[];
+	browsers: DailyBrowserOsCounts[];
+	operatingSystems: DailyBrowserOsCounts[];
 }

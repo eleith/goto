@@ -56,15 +56,17 @@ function preparedReport(
 	return {
 		summary,
 		details: {
-			version: 1,
+			version: 2,
 			scope,
 			period,
 			daily: visitDays(period).map((day, index) => ({
 				...day,
 				...(index === 0 ? totals : zeroVisitTotals())
 			})),
-			browsers: populated ? [{ family: 'Firefox', ...totals }] : [],
-			operatingSystems: populated ? [{ family: 'Linux', ...totals }] : []
+			browsers: populated ? [{ day: period.from.slice(0, 10), name: 'Firefox', ...totals }] : [],
+			operatingSystems: populated
+				? [{ day: period.from.slice(0, 10), name: 'Linux', ...totals }]
+				: []
 		}
 	};
 }
@@ -150,7 +152,7 @@ test('overview details reject malformed or mismatched domain scope, policy and w
 	await publishVisitReports(db, encodeVisitReports([overview, current]));
 	for (const details of [
 		{},
-		{ ...current.details, version: 2 },
+		{ ...current.details, version: 1 },
 		overview.details,
 		{ ...current.details, scope: { kind: 'domain', domain: 'wrong.example.test' } },
 		preparedReport(domainScope, asOf + 86_400_000).details,

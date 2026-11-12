@@ -14,13 +14,13 @@ import type {
 	AggregatedVisitReports,
 	DailyVisitCounts,
 	ReportInventory,
-	ScopedFamilyCounts
+	DailyBrowserOsCounts
 } from '@goto/db/visit-reports';
 
 interface ScopeCounts {
 	daily: DailyVisitCounts[];
-	browsers: ScopedFamilyCounts[];
-	operatingSystems: ScopedFamilyCounts[];
+	browsers: DailyBrowserOsCounts[];
+	operatingSystems: DailyBrowserOsCounts[];
 }
 
 interface DomainCounts {
@@ -81,7 +81,7 @@ function indexCounts(aggregates: AggregatedVisitReports): ReportCounts {
 
 function countsForScope(
 	indexed: ReportCounts,
-	scope: DailyVisitCounts | ScopedFamilyCounts
+	scope: DailyVisitCounts | DailyBrowserOsCounts
 ): ScopeCounts {
 	if (scope.scopeKind === 'overview') return indexed.overview;
 	let domain = indexed.domains.get(scope.domain);
@@ -153,12 +153,12 @@ function buildDetails(
 	days: ReturnType<typeof visitDays>
 ): VisitDetails {
 	return {
-		version: 1,
+		version: 2,
 		scope,
 		period,
 		daily: buildDailyDetails(counts.daily, days),
-		browsers: buildFamilyDetails(counts.browsers),
-		operatingSystems: buildFamilyDetails(counts.operatingSystems)
+		browsers: buildDailyBrowserOsDetails(counts.browsers),
+		operatingSystems: buildDailyBrowserOsDetails(counts.operatingSystems)
 	};
 }
 
@@ -177,9 +177,10 @@ function buildDailyDetails(
 	});
 }
 
-function buildFamilyDetails(rows: ScopedFamilyCounts[]): VisitDetails['browsers'] {
-	return rows.map(({ family, validVisits, invalidVisits }) => ({
-		family,
+function buildDailyBrowserOsDetails(rows: DailyBrowserOsCounts[]): VisitDetails['browsers'] {
+	return rows.map(({ day, name, validVisits, invalidVisits }) => ({
+		day,
+		name,
 		validVisits,
 		invalidVisits
 	}));

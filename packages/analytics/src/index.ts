@@ -14,3 +14,9 @@ export type {
 	PreparedVisitReport,
 	SerializedVisitReport
 } from './reports.js';
+export { countBrowserOsVisitsByTimeframe } from './browser-os-visits.js';
+export type {
+	VisitCountByName,
+	BrowserOsVisits,
+	BrowserOsVisitsByTimeframe
+} from './browser-os-visits.js';

@@ -12,5 +12,5 @@ export type {
 	AggregatedVisitReports,
 	DailyVisitCounts,
 	ReportInventory,
-	ScopedFamilyCounts
+	DailyBrowserOsCounts
 } from './types.js';

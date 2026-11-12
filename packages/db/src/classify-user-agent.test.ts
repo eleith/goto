@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import { classifyUserAgent } from './classify-user-agent.js';
 
-test('recognizes Edge as one family before the generic Chrome and Safari tokens', () => {
+test('recognizes Edge before the generic Chrome and Safari tokens', () => {
 	for (const token of ['Edg', 'EdgA', 'EdgiOS', 'Edge']) {
 		const result = classifyUserAgent(`Mozilla/5.0 Chrome/125.0 Safari/537.36 ${token}/125.0`);
 		expect(result.browser).toBe('Edge');

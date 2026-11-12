@@ -1,20 +1,31 @@
-function browserFamily(ua: string): string {
-	if (ua.includes('edg/') || ua.includes('edga/') || ua.includes('edgios/') || ua.includes('edge/'))
+function browserName(userAgent: string): string {
+	if (
+		userAgent.includes('edg/') ||
+		userAgent.includes('edga/') ||
+		userAgent.includes('edgios/') ||
+		userAgent.includes('edge/')
+	)
 		return 'Edge';
-	if (ua.includes('opr/') || ua.includes('opera/')) return 'Opera';
-	if (ua.includes('firefox/') || ua.includes('fxios/')) return 'Firefox';
-	if (ua.includes('chrome/') || ua.includes('crios/') || ua.includes('chromium/')) return 'Chrome';
-	if (ua.includes('safari/')) return 'Safari';
+	if (userAgent.includes('opr/') || userAgent.includes('opera/')) return 'Opera';
+	if (userAgent.includes('firefox/') || userAgent.includes('fxios/')) return 'Firefox';
+	if (
+		userAgent.includes('chrome/') ||
+		userAgent.includes('crios/') ||
+		userAgent.includes('chromium/')
+	)
+		return 'Chrome';
+	if (userAgent.includes('safari/')) return 'Safari';
 	return 'Other';
 }
 
-function operatingSystem(ua: string): string {
-	if (ua.includes('windows')) return 'Windows';
-	if (ua.includes('android')) return 'Android';
-	if (ua.includes('iphone') || ua.includes('ipad') || ua.includes('ipod')) return 'iOS';
-	if (ua.includes('macintosh') || ua.includes('mac os x')) return 'macOS';
-	if (ua.includes('cros ')) return 'ChromeOS';
-	if (ua.includes('linux')) return 'Linux';
+function operatingSystemName(userAgent: string): string {
+	if (userAgent.includes('windows')) return 'Windows';
+	if (userAgent.includes('android')) return 'Android';
+	if (userAgent.includes('iphone') || userAgent.includes('ipad') || userAgent.includes('ipod'))
+		return 'iOS';
+	if (userAgent.includes('macintosh') || userAgent.includes('mac os x')) return 'macOS';
+	if (userAgent.includes('cros ')) return 'ChromeOS';
+	if (userAgent.includes('linux')) return 'Linux';
 	return 'Other';
 }
 
@@ -22,6 +33,9 @@ export function classifyUserAgent(userAgent: string | null | undefined): {
 	browser: string;
 	os: string;
 } {
-	const ua = userAgent?.toLowerCase() ?? '';
-	return { browser: browserFamily(ua), os: operatingSystem(ua) };
+	const normalizedUserAgent = userAgent?.toLowerCase() ?? '';
+	return {
+		browser: browserName(normalizedUserAgent),
+		os: operatingSystemName(normalizedUserAgent)
+	};
 }

@@ -36,7 +36,7 @@ test('reads prepared output and hides snapshots from a different retention polic
 	};
 	const days = visitDays(period);
 	const details: VisitDetails = {
-		version: 1,
+		version: 2,
 		scope: summary.scope,
 		period,
 		daily: days.map((day, index) => ({
@@ -44,8 +44,8 @@ test('reads prepared output and hides snapshots from a different retention polic
 			validVisits: index === days.length - 1 ? totals.validVisits : 0,
 			invalidVisits: index === days.length - 1 ? totals.invalidVisits : 0
 		})),
-		browsers: [{ family: 'Other', ...totals }],
-		operatingSystems: [{ family: 'Other', ...totals }]
+		browsers: [{ day: period.asOf.slice(0, 10), name: 'Other', ...totals }],
+		operatingSystems: [{ day: period.asOf.slice(0, 10), name: 'Other', ...totals }]
 	};
 	const domain = 'go.example.test';
 	const domainScope = { kind: 'domain', domain } as const;

@@ -4,7 +4,7 @@ import type {
 	AggregatedVisitReports,
 	DailyVisitCounts,
 	ReportInventory,
-	ScopedFamilyCounts
+	DailyBrowserOsCounts
 } from './types.js';
 
 export async function aggregateVisitReports(
@@ -30,19 +30,19 @@ export async function aggregateVisitReports(
 			GROUP BY scope_kind, domain, path, day
 			ORDER BY scope_kind, domain, path, day
 		`.execute(transaction);
-		const browsers = await sql<ScopedFamilyCounts>`
+		const browsers = await sql<DailyBrowserOsCounts>`
 			${scopes}
-			SELECT ${identity}, browser AS family, ${counts}
+			SELECT ${identity}, date(visited_at / 1000.0, 'unixepoch') AS day, browser AS name, ${counts}
 			FROM scoped_visits
-			GROUP BY scope_kind, domain, path, browser
-			ORDER BY scope_kind, domain, path, family
+			GROUP BY scope_kind, domain, path, day, browser
+			ORDER BY scope_kind, domain, path, day, name
 		`.execute(transaction);
-		const operatingSystems = await sql<ScopedFamilyCounts>`
+		const operatingSystems = await sql<DailyBrowserOsCounts>`
 			${scopes}
-			SELECT ${identity}, os AS family, ${counts}
+			SELECT ${identity}, date(visited_at / 1000.0, 'unixepoch') AS day, os AS name, ${counts}
 			FROM scoped_visits
-			GROUP BY scope_kind, domain, path, os
-			ORDER BY scope_kind, domain, path, family
+			GROUP BY scope_kind, domain, path, day, os
+			ORDER BY scope_kind, domain, path, day, name
 		`.execute(transaction);
 		return {
 			daily: daily.rows,

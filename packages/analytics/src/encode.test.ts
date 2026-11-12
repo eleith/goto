@@ -34,15 +34,17 @@ function report(
 	return {
 		summary,
 		details: {
-			version: 1,
+			version: 2,
 			scope,
 			period,
 			daily: visitDays(period).map((day, index) => ({
 				...day,
 				...(index === 0 ? totals : zeroVisitTotals())
 			})),
-			browsers: populated ? [{ family: 'Firefox', ...totals }] : [],
-			operatingSystems: populated ? [{ family: 'Linux', ...totals }] : []
+			browsers: populated ? [{ day: period.from.slice(0, 10), name: 'Firefox', ...totals }] : [],
+			operatingSystems: populated
+				? [{ day: period.from.slice(0, 10), name: 'Linux', ...totals }]
+				: []
 		}
 	};
 }
@@ -88,7 +90,7 @@ test('rejects incompatible pair identities, periods, totals and document version
 		expect(() => encodeVisitReports([invalid])).toThrow('Invalid analytics report');
 	}
 	const wrongVersion = report();
-	Object.assign(wrongVersion.details, { version: 2 });
+	Object.assign(wrongVersion.details, { version: 1 });
 	expect(() => encodeVisitReports([wrongVersion])).toThrow('Invalid analytics report');
 });
 
@@ -133,21 +135,50 @@ test('producer requires gap-free UTC days and correct partial flags including ze
 	}
 });
 
-test('producer checks family sums and duplicate labels against the daily totals', () => {
+test('producer checks dated browser/OS sums and duplicate day/name pairs', () => {
 	const prepared = report();
+	const day = prepared.details.period.from.slice(0, 10);
 	for (const details of [
 		{ ...prepared.details, browsers: [] },
 		{
 			...prepared.details,
-			operatingSystems: [{ family: 'Linux', validVisits: 3, invalidVisits: 0 }]
+			operatingSystems: [{ day, name: 'Linux', validVisits: 3, invalidVisits: 0 }]
 		},
 		{
 			...prepared.details,
 			browsers: [
-				{ family: 'Firefox', validVisits: 1, invalidVisits: 0 },
-				{ family: 'Firefox', validVisits: 1, invalidVisits: 1 }
+				{ day, name: 'Firefox', validVisits: 1, invalidVisits: 0 },
+				{ day, name: 'Firefox', validVisits: 1, invalidVisits: 1 }
 			]
 		}
+	]) {
+		expect(() => encodeVisitReports([{ ...prepared, details }])).toThrow(
+			'Invalid analytics report'
+		);
+	}
+});
+
+test('producer permits the same browser/OS name on different days but rejects moving counts between days', () => {
+	const prepared = report();
+	const first = prepared.details.daily[0];
+	const second = prepared.details.daily[1];
+	if (!first || !second) throw new Error('Expected daily fixtures');
+	first.validVisits = 1;
+	second.validVisits = 1;
+	const browserOsCounts = [
+		{ day: first.start.slice(0, 10), name: 'Other', validVisits: 1, invalidVisits: 1 },
+		{ day: second.start.slice(0, 10), name: 'Other', validVisits: 1, invalidVisits: 0 }
+	];
+	prepared.details.browsers = browserOsCounts;
+	prepared.details.operatingSystems = browserOsCounts;
+	expect(encodeVisitReports([prepared])).toHaveLength(1);
+	const shifted = browserOsCounts.map((row, index) => ({
+		...row,
+		invalidVisits: index === 0 ? 0 : 1
+	}));
+	for (const details of [
+		{ ...prepared.details, browsers: shifted },
+		{ ...prepared.details, operatingSystems: shifted }
 	]) {
 		expect(() => encodeVisitReports([{ ...prepared, details }])).toThrow(
 			'Invalid analytics report'

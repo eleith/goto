@@ -53,8 +53,8 @@ export function encodeVisitReports(reports: PreparedVisitReport[]): SerializedVi
 		checkDailyLayout(details.daily, days);
 		const totals = sumTotals(details.daily);
 		if (!equalTotals(summary.totals, totals)) throw invalidReport();
-		checkFamilies(details.browsers, totals);
-		checkFamilies(details.operatingSystems, totals);
+		checkDailyBrowserOsTotals(details.browsers, details.daily);
+		checkDailyBrowserOsTotals(details.operatingSystems, details.daily);
 		checkChildren(summary);
 	}
 
@@ -80,11 +80,23 @@ function checkDailyLayout(daily: VisitDetails['daily'], days: ReturnType<typeof 
 	}
 }
 
-function checkFamilies(rows: VisitDetails['browsers'], totals: VisitTotals): void {
-	const families = new Set(rows.map(({ family }) => family));
-	const combined = sumTotals(rows);
-	if (families.size !== rows.length || !equalTotals(combined, totals)) {
-		throw invalidReport();
+function checkDailyBrowserOsTotals(
+	rows: VisitDetails['browsers'],
+	dailyVisits: VisitDetails['daily']
+): void {
+	const seenDayAndNamePairs = new Set<string>();
+	const countsByDay = new Map<string, VisitTotals[]>();
+	for (const row of rows) {
+		const dayAndName = `${row.day}:${row.name}`;
+		if (seenDayAndNamePairs.has(dayAndName)) throw invalidReport();
+		seenDayAndNamePairs.add(dayAndName);
+		const dayCounts = countsByDay.get(row.day) ?? [];
+		dayCounts.push(row);
+		countsByDay.set(row.day, dayCounts);
+	}
+	for (const day of dailyVisits) {
+		const totals = sumTotals(countsByDay.get(day.start.slice(0, 10)) ?? []);
+		if (!equalTotals(totals, day)) throw invalidReport();
 	}
 }
 

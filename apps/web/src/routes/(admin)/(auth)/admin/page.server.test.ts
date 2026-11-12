@@ -49,17 +49,21 @@ function details(
 		validVisits: validVisits(day.start.slice(0, 10)),
 		invalidVisits: 1
 	}));
-	const totals = {
-		validVisits: daily.reduce((sum, day) => sum + day.validVisits, 0),
-		invalidVisits: daily.length
-	};
+	const browserOsCounts = daily
+		.filter(({ validVisits, invalidVisits }) => validVisits > 0 || invalidVisits > 0)
+		.map(({ start, validVisits, invalidVisits }) => ({
+			day: start.slice(0, 10),
+			name: 'Other',
+			validVisits,
+			invalidVisits
+		}));
 	return {
-		version: 1,
+		version: 2,
 		scope,
 		period,
 		daily,
-		browsers: [{ family: 'Other', ...totals }],
-		operatingSystems: [{ family: 'Other', ...totals }]
+		browsers: browserOsCounts,
+		operatingSystems: browserOsCounts
 	};
 }
 

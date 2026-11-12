@@ -165,15 +165,26 @@ test('aggregates explicit UTC scope identities, outcomes and root subsets', asyn
 			scopeKind: 'overview',
 			domain: null,
 			path: null,
-			family: 'Firefox',
+			day: '2026-01-31',
+			name: 'Firefox',
 			validVisits: 1,
+			invalidVisits: 0
+		},
+		{
+			scopeKind: 'overview',
+			domain: null,
+			path: null,
+			day: '2026-02-01',
+			name: 'Firefox',
+			validVisits: 0,
 			invalidVisits: 3
 		},
 		{
 			scopeKind: 'overview',
 			domain: null,
 			path: null,
-			family: 'Other',
+			day: '2026-02-01',
+			name: 'Other',
 			validVisits: 0,
 			invalidVisits: 1
 		},
@@ -181,7 +192,8 @@ test('aggregates explicit UTC scope identities, outcomes and root subsets', asyn
 			scopeKind: 'overview',
 			domain: null,
 			path: null,
-			family: 'Safari',
+			day: '2026-02-01',
+			name: 'Safari',
 			validVisits: 1,
 			invalidVisits: 0
 		}
@@ -191,15 +203,26 @@ test('aggregates explicit UTC scope identities, outcomes and root subsets', asyn
 			scopeKind: 'overview',
 			domain: null,
 			path: null,
-			family: 'Linux',
+			day: '2026-01-31',
+			name: 'Linux',
 			validVisits: 1,
+			invalidVisits: 0
+		},
+		{
+			scopeKind: 'overview',
+			domain: null,
+			path: null,
+			day: '2026-02-01',
+			name: 'Linux',
+			validVisits: 0,
 			invalidVisits: 2
 		},
 		{
 			scopeKind: 'overview',
 			domain: null,
 			path: null,
-			family: 'Other',
+			day: '2026-02-01',
+			name: 'Other',
 			validVisits: 0,
 			invalidVisits: 1
 		},
@@ -207,7 +230,8 @@ test('aggregates explicit UTC scope identities, outcomes and root subsets', asyn
 			scopeKind: 'overview',
 			domain: null,
 			path: null,
-			family: 'Windows',
+			day: '2026-02-01',
+			name: 'Windows',
 			validVisits: 0,
 			invalidVisits: 1
 		},
@@ -215,7 +239,8 @@ test('aggregates explicit UTC scope identities, outcomes and root subsets', asyn
 			scopeKind: 'overview',
 			domain: null,
 			path: null,
-			family: 'macOS',
+			day: '2026-02-01',
+			name: 'macOS',
 			validVisits: 1,
 			invalidVisits: 0
 		}
@@ -223,8 +248,24 @@ test('aggregates explicit UTC scope identities, outcomes and root subsets', asyn
 	expect(
 		result.browsers.filter(({ scopeKind, path }) => scopeKind === 'link' && path === '/')
 	).toEqual([
-		{ scopeKind: 'link', domain, path: '/', family: 'Firefox', validVisits: 0, invalidVisits: 1 },
-		{ scopeKind: 'link', domain, path: '/', family: 'Safari', validVisits: 1, invalidVisits: 0 }
+		{
+			scopeKind: 'link',
+			domain,
+			path: '/',
+			day: '2026-02-01',
+			name: 'Firefox',
+			validVisits: 0,
+			invalidVisits: 1
+		},
+		{
+			scopeKind: 'link',
+			domain,
+			path: '/',
+			day: '2026-02-01',
+			name: 'Safari',
+			validVisits: 1,
+			invalidVisits: 0
+		}
 	]);
 	expect(
 		result.operatingSystems.filter(
@@ -235,7 +276,8 @@ test('aggregates explicit UTC scope identities, outcomes and root subsets', asyn
 			scopeKind: 'link',
 			domain: otherDomain,
 			path: '/docs',
-			family: 'Windows',
+			day: '2026-02-01',
+			name: 'Windows',
 			validVisits: 0,
 			invalidVisits: 1
 		}

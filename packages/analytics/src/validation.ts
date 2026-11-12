@@ -32,6 +32,10 @@ export function checkDetails(value: unknown): VisitDetails {
 			throw invalidReport();
 		}
 	}
+	for (const row of [...value.browsers, ...value.operatingSystems]) {
+		const start = Date.parse(`${row.day}T00:00:00.000Z`);
+		if (start >= asOf || start + dayMilliseconds <= from) throw invalidReport();
+	}
 	return value;
 }
 

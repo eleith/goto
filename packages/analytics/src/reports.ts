@@ -8,6 +8,11 @@ const path = Type.String({ pattern: '^/' });
 
 FormatRegistry.Set('goto-analytics-utc-instant', isCanonicalInstant);
 const instant = Type.String({ format: 'goto-analytics-utc-instant' });
+FormatRegistry.Set(
+	'goto-analytics-utc-day',
+	(value) => /^\d{4}-\d{2}-\d{2}$/.test(value) && isCanonicalInstant(`${value}T00:00:00.000Z`)
+);
+const day = Type.String({ format: 'goto-analytics-utc-day' });
 
 export const ReportScopeSchema = Type.Union([
 	Type.Object({ kind: Type.Literal('overview') }, exact),
@@ -74,9 +79,10 @@ export const VisitSummarySchema = Type.Union([
 ]);
 export type VisitSummary = Static<typeof VisitSummarySchema>;
 
-const familyCounts = Type.Object(
+const dailyBrowserOsCounts = Type.Object(
 	{
-		family: Type.String({ minLength: 1 }),
+		day,
+		name: Type.String({ minLength: 1 }),
 		validVisits: count,
 		invalidVisits: count
 	},
@@ -85,7 +91,7 @@ const familyCounts = Type.Object(
 
 export const VisitDetailsSchema = Type.Object(
 	{
-		version: Type.Literal(1),
+		version: Type.Literal(2),
 		scope: ReportScopeSchema,
 		period: ReportPeriodSchema,
 		daily: Type.Array(
@@ -100,8 +106,8 @@ export const VisitDetailsSchema = Type.Object(
 				exact
 			)
 		),
-		browsers: Type.Array(familyCounts),
-		operatingSystems: Type.Array(familyCounts)
+		browsers: Type.Array(dailyBrowserOsCounts),
+		operatingSystems: Type.Array(dailyBrowserOsCounts)
 	},
 	exact
 );

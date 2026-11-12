@@ -37,17 +37,21 @@ function details(scope: ReportScope, counts: Record<string, [number, number]>): 
 		const [validVisits, invalidVisits] = counts[day.start.slice(0, 10)] ?? [0, 0];
 		return { ...day, validVisits, invalidVisits };
 	});
-	const totals = {
-		validVisits: daily.reduce((sum, day) => sum + day.validVisits, 0),
-		invalidVisits: daily.reduce((sum, day) => sum + day.invalidVisits, 0)
-	};
+	const browserOsCounts = daily
+		.filter(({ validVisits, invalidVisits }) => validVisits > 0 || invalidVisits > 0)
+		.map(({ start, validVisits, invalidVisits }) => ({
+			day: start.slice(0, 10),
+			name: 'Other',
+			validVisits,
+			invalidVisits
+		}));
 	return {
-		version: 1,
+		version: 2,
 		scope,
 		period,
 		daily,
-		browsers: [{ family: 'Other', ...totals }],
-		operatingSystems: [{ family: 'Other', ...totals }]
+		browsers: browserOsCounts,
+		operatingSystems: browserOsCounts
 	};
 }
 
@@ -93,7 +97,7 @@ const baseCounts = {
 	all: { validVisits: 3, invalidVisits: 4 }
 };
 
-test('projects consistent domain, base and link windows without exposing link series or families', async () => {
+test('projects consistent domain, base and link windows without exposing link series or browser/OS counts', async () => {
 	vi.mocked(readDomainDetails).mockResolvedValue(report);
 	const data = await load(request());
 	expect(readDomainDetails).toHaveBeenCalledExactlyOnceWith(expect.any(Object), domain, [

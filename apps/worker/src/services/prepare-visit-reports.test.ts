@@ -83,9 +83,14 @@ test('publishes summary/detail pairs for all scopes, deletes expired history and
 			invalidVisits: 0
 		});
 		expect(sum(details!.daily)).toEqual(summary?.totals);
-		expect(details?.browsers).toEqual([{ family: 'Firefox', validVisits: 1, invalidVisits: 1 }]);
+		expect(details?.version).toBe(2);
+		expect(details?.browsers).toEqual([
+			{ day: '2026-02-28', name: 'Firefox', validVisits: 1, invalidVisits: 0 },
+			{ day: '2026-05-31', name: 'Firefox', validVisits: 0, invalidVisits: 1 }
+		]);
 		expect(details?.operatingSystems).toEqual([
-			{ family: 'Linux', validVisits: 1, invalidVisits: 1 }
+			{ day: '2026-02-28', name: 'Linux', validVisits: 1, invalidVisits: 0 },
+			{ day: '2026-05-31', name: 'Linux', validVisits: 0, invalidVisits: 1 }
 		]);
 		expect(await ctx.db.selectFrom('analytics_reports').select('id').execute()).toHaveLength(4);
 		expect(await ctx.db.selectFrom('visits').select('id').execute()).toHaveLength(2);

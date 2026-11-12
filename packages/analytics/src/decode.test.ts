@@ -14,15 +14,15 @@ const summary: OverviewSummary = {
 	domains: []
 };
 const details: VisitDetails = {
-	version: 1,
+	version: 2,
 	scope,
 	period,
 	daily: visitDays(period).map((day, index) => ({
 		...day,
 		...(index === 0 ? summary.totals : zeroVisitTotals())
 	})),
-	browsers: [{ family: 'Firefox', ...summary.totals }],
-	operatingSystems: [{ family: 'Linux', ...summary.totals }]
+	browsers: [{ day: period.from.slice(0, 10), name: 'Firefox', ...summary.totals }],
+	operatingSystems: [{ day: period.from.slice(0, 10), name: 'Linux', ...summary.totals }]
 };
 
 test('readers decode their self-contained document independently', () => {
@@ -100,13 +100,56 @@ test('details reader checks daily instants, window safety, counts and scope', ()
 			'Invalid analytics report'
 		);
 	}
-	expect(() => parseVisitDetails(JSON.stringify({ ...details, version: 2 }), scope)).toThrow(
+	expect(() => parseVisitDetails(JSON.stringify({ ...details, version: 1 }), scope)).toThrow(
 		'Invalid analytics report'
 	);
 	expect(() =>
 		parseVisitDetails(JSON.stringify(details), { kind: 'domain', domain: 'private' })
 	).toThrow('Invalid analytics report');
 	expect(() => parseVisitDetails('{private', scope)).toThrow('Invalid analytics report');
+});
+
+test('details reader requires canonical UTC browser/OS days intersecting the retained reporting period', () => {
+	for (const day of [
+		'2026-1-01',
+		'2026-02-30',
+		'2026-01-01T00:00:00.000Z',
+		'2025-12-31',
+		'2026-04-02'
+	]) {
+		const rows = [{ day, name: 'Other', validVisits: 1, invalidVisits: 0 }];
+		for (const invalid of [
+			{ ...details, browsers: rows },
+			{ ...details, operatingSystems: rows }
+		]) {
+			expect(() => parseVisitDetails(JSON.stringify(invalid), scope)).toThrow(
+				'Invalid analytics report'
+			);
+		}
+	}
+	const midnightPeriod = createVisitPeriod(3, Date.UTC(2026, 3, 1));
+	expect(() =>
+		parseVisitDetails(
+			JSON.stringify({
+				...details,
+				period: midnightPeriod,
+				daily: [],
+				browsers: [{ day: '2026-04-01', name: 'Other', validVisits: 1, invalidVisits: 0 }]
+			}),
+			scope
+		)
+	).toThrow('Invalid analytics report');
+});
+
+test('details reader accepts safe partial-edge browser/OS rows without redoing producer arithmetic', () => {
+	const document = {
+		...details,
+		browsers: [
+			{ day: '2026-01-01', name: 'Other', validVisits: 7, invalidVisits: 0 },
+			{ day: '2026-04-01', name: 'Other', validVisits: 8, invalidVisits: 0 }
+		]
+	};
+	expect(parseVisitDetails(JSON.stringify(document), scope)).toEqual(document);
 });
 
 test('reader prevents a base subset from exceeding totals used by page subtraction', () => {

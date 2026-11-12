@@ -40,16 +40,22 @@ const counts: Record<string, [number, number]> = {
 	'2026-06-09': [2, 1],
 	'2026-06-15': [1, 0]
 };
+const browserOsCounts = Object.entries(counts).map(([day, [validVisits, invalidVisits]]) => ({
+	day,
+	name: 'Other',
+	validVisits,
+	invalidVisits
+}));
 const details: VisitDetails = {
-	version: 1,
+	version: 2,
 	scope: { kind: 'link', domain, path: '/docs' },
 	period,
 	daily: visitDays(period).map((day) => {
 		const [validVisits, invalidVisits] = counts[day.start.slice(0, 10)] ?? [0, 0];
 		return { ...day, validVisits, invalidVisits };
 	}),
-	browsers: [{ family: 'Other', validVisits: 15, invalidVisits: 5 }],
-	operatingSystems: [{ family: 'Other', validVisits: 15, invalidVisits: 5 }]
+	browsers: browserOsCounts,
+	operatingSystems: browserOsCounts
 };
 
 test('projects only the requested link series and compact window counts with current configuration', async () => {
