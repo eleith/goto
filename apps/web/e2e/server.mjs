@@ -24,7 +24,7 @@ await new Promise((resolve, reject) =>
 );
 process.env.PORT = String(address.port);
 const configuration = {
-	url: { app: `http://localhost:${address.port}` },
+	url: { app: `http://localhost:${address.port}`, worker: 'http://goto-worker:9000' },
 	auth: { credentials: { username: 'example', password: 'e2e-only-password' } },
 	analytics: { retention_months: Number(process.env.GOTO_E2E_RETENTION_MONTHS ?? '3') },
 	domains: {
@@ -118,4 +118,6 @@ async function startWorker() {
 		});
 	});
 	if (ready.type !== 'ready') throw new Error('Invalid worker readiness');
+	configuration.url.worker = `http://127.0.0.1:${ready.port}`;
+	await writeFile(join(runtimeDirectory, 'config/goto.yaml'), JSON.stringify(configuration));
 }

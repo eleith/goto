@@ -3,7 +3,7 @@ import { expect, test } from './support/test.ts';
 
 test.use({ withWorker: true });
 
-test('shared credentials protect overview, domain and link pages and sign-out removes access', async ({
+test('shared credentials protect admin pages and sign-out removes access', async ({
 	page,
 	appServer
 }) => {
@@ -140,7 +140,7 @@ test('shared credentials protect overview, domain and link pages and sign-out re
 	await expect(browsers.getByRole('rowheader', { name: 'Other', exact: true })).toBeVisible();
 	const overviewLink = page
 		.getByRole('navigation', { name: 'Administration', exact: true })
-		.getByRole('link');
+		.getByRole('link', { name: 'Goto', exact: true });
 	await expect(overviewLink).toHaveAttribute('href', '/admin?period=all');
 	await expect(page.getByRole('link', { name: 'Overview', exact: true })).toHaveCount(0);
 	await expect(graph).toHaveAttribute('aria-busy', 'false');
@@ -293,6 +293,24 @@ test('shared credentials protect overview, domain and link pages and sign-out re
 	);
 	await expect(visitsValue).toHaveText('2');
 
+	await page
+		.getByRole('navigation', { name: 'Administration', exact: true })
+		.getByRole('link', { name: 'Health', exact: true })
+		.click();
+	await expect(page).toHaveURL(`${appServer.origin}/admin/health`);
+	await expect(page.getByRole('heading', { name: 'Health', exact: true })).toBeVisible();
+	await expect(page.getByRole('region', { name: 'Application', exact: true })).toContainText(
+		'Shared credentials'
+	);
+	await expect(
+		page.getByRole('region', { name: 'Analytics', exact: true }).getByRole('alert')
+	).toHaveCount(0);
+	const workerHealth = page.getByRole('region', { name: 'Worker', exact: true });
+	await expect(workerHealth.getByRole('status')).toHaveText('Not checked');
+	await workerHealth.getByRole('button', { name: 'Test worker', exact: true }).click();
+	await expect(workerHealth.getByRole('alert')).toContainText('Worker is reachable.');
+	await expect(workerHealth.locator('time')).toBeVisible();
+
 	const html = await page.content();
 	await expect(html).not.toContain('e2e-only-password');
 	await page.getByRole('button', { name: 'Sign out', exact: true }).click();
@@ -305,7 +323,7 @@ test('shared credentials protect overview, domain and link pages and sign-out re
 test.describe('analytics disabled', () => {
 	test.use({ withWorker: false, retentionMonths: 0 });
 
-	test('overview remains inventory-only without analytics controls or columns', async ({
+	test('disabled analytics keeps inventory and settings usable without traffic controls', async ({
 		page,
 		appServer
 	}) => {
@@ -351,5 +369,18 @@ test.describe('analytics disabled', () => {
 		await expect(page.getByRole('region', { name: 'Visits over time', exact: true })).toHaveCount(
 			0
 		);
+		await page
+			.getByRole('navigation', { name: 'Administration', exact: true })
+			.getByRole('link', { name: 'Health', exact: true })
+			.click();
+		await expect(
+			page.getByRole('region', { name: 'Analytics', exact: true }).locator('dd')
+		).toHaveText(['Disabled', 'Disabled', 'Disabled']);
+		await expect(
+			page.getByRole('region', { name: 'Analytics', exact: true }).getByRole('alert')
+		).toHaveCount(0);
+		await expect(
+			page.getByRole('region', { name: 'Worker', exact: true }).getByRole('status')
+		).toHaveText('Not checked');
 	});
 });

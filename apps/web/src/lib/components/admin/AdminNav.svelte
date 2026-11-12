@@ -52,6 +52,10 @@
 			<a href={overviewHref} aria-current={page.url.pathname === '/admin' ? 'page' : undefined}
 				>{title}</a
 			>
+			<a
+				href="/admin/health"
+				aria-current={page.url.pathname === '/admin/health' ? 'page' : undefined}>Health</a
+			>
 		</nav>
 		<div class="nav-actions">
 			<ThemeToggle />
@@ -92,6 +96,13 @@
 		display: flex;
 		flex-wrap: wrap;
 		justify-content: space-between;
+		align-items: center;
+		gap: var(--space-5);
+	}
+
+	nav {
+		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
 		gap: var(--space-5);
 	}

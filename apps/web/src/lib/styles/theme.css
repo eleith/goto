@@ -31,6 +31,9 @@
 	--radius-control: 0.5rem;
 	--radius-card: 0.75rem;
 	--shadow-card: 0 1px 6px light-dark(rgb(0 0 0 / 6%), rgb(0 0 0 / 40%));
+	--color-success: light-dark(#059669, #34d399);
+	--color-success-bg: light-dark(#ecfdf5, #022c22);
+	--color-success-border: light-dark(#a7f3d0, #064e3b);
 	--color-danger: light-dark(#991b1b, #ffb4b4);
 	--color-danger-bg: light-dark(#fef2f2, #450a0a);
 	--color-danger-border: light-dark(#fca5a5, #a34242);
