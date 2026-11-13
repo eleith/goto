@@ -6,9 +6,11 @@ test('publishes a deep-frozen copy without changing the loaded configuration', (
 	const prepared = validateConfig(
 		{
 			auth: { credentials: { username: 'example', password: 'test-only-password' } },
-			defaults: { forward_query: true },
+			link_defaults: { forward_query: true },
+			fallback: { url: 'https://example.org/missing' },
 			domains: {
 				'go.example.test': {
+					root: { url: 'https://example.org/start' },
 					links: {
 						'/docs': { url: 'https://example.org/docs', tags: ['work'], forward_query: false }
 					}
@@ -24,6 +26,8 @@ test('publishes a deep-frozen copy without changing the loaded configuration', (
 	expect(snapshot).not.toBe(prepared);
 	expect(Object.isFrozen(snapshot)).toBe(true);
 	expect(Object.isFrozen(snapshot.configuration.auth)).toBe(true);
+	expect(Object.isFrozen(snapshot.domains['go.example.test']!.root)).toBe(true);
+	expect(Object.isFrozen(snapshot.domains['go.example.test']!.fallback)).toBe(true);
 	expect(Object.isFrozen(link.tags)).toBe(true);
 	expect(Reflect.set(link, 'enabled', false)).toBe(false);
 	expect(link.forward_query).toBe(false);

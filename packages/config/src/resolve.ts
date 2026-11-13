@@ -4,14 +4,14 @@ import { isSelfRedirect } from './redirect.js';
 import type { DomainConfiguration, GotoConfiguration, LinkConfiguration } from './schema.js';
 import type { PreparedDomain, PreparedLink, SettingSource } from './types.js';
 
-function settingSource(
-	key: keyof GotoConfiguration['defaults'],
+function linkSettingSource(
+	key: keyof GotoConfiguration['link_defaults'],
 	global: object,
 	domain: DomainConfiguration,
 	link?: LinkConfiguration
 ): SettingSource {
 	if (link && Object.hasOwn(link, key)) return 'link';
-	if (Object.hasOwn(domain.defaults, key)) return 'domain';
+	if (Object.hasOwn(domain.link_defaults, key)) return 'domain';
 	return Object.hasOwn(global, key) ? 'global' : 'builtin';
 }
 
@@ -22,7 +22,7 @@ function prepareLink(
 	configuration: GotoConfiguration,
 	global: object
 ): PreparedLink {
-	if (!isCanonicalPath(path)) throw new ConfigError();
+	if (path === '/' || !isCanonicalPath(path)) throw new ConfigError();
 	if (
 		link.valid_from !== undefined &&
 		link.valid_until !== undefined &&
@@ -34,19 +34,23 @@ function prepareLink(
 		...link,
 		title: link.title ?? path,
 		status_code:
-			link.status_code ?? domain.defaults.status_code ?? configuration.defaults.status_code,
+			link.status_code ??
+			domain.link_defaults.status_code ??
+			configuration.link_defaults.status_code,
 		forward_query:
-			link.forward_query ?? domain.defaults.forward_query ?? configuration.defaults.forward_query,
+			link.forward_query ??
+			domain.link_defaults.forward_query ??
+			configuration.link_defaults.forward_query,
 		provenance: {
-			status_code: settingSource('status_code', global, domain, link),
-			forward_query: settingSource('forward_query', global, domain, link)
+			status_code: linkSettingSource('status_code', global, domain, link),
+			forward_query: linkSettingSource('forward_query', global, domain, link)
 		}
 	};
 }
 
 export function prepareDomains(
 	configuration: GotoConfiguration,
-	authoredDefaults: object
+	authoredLinkDefaults: object
 ): Record<string, PreparedDomain> {
 	const domains: Record<string, PreparedDomain> = Object.create(null);
 	const adminHost = normalizeHost(new URL(configuration.url.app).host);
@@ -55,14 +59,19 @@ export function prepareDomains(
 		if (!host || host === adminHost || Object.hasOwn(domains, host)) {
 			throw new ConfigError();
 		}
+		if (domain.root && isSelfRedirect(domain.root.url, host, '/')) throw new ConfigError();
 		const links: Record<string, PreparedLink> = Object.create(null);
 		for (const [path, link] of Object.entries(domain.links)) {
 			if (isSelfRedirect(link.url, host, path)) throw new ConfigError();
-			links[path] = prepareLink(path, link, domain, configuration, authoredDefaults);
+			links[path] = prepareLink(path, link, domain, configuration, authoredLinkDefaults);
 		}
+		let fallbackSource: SettingSource = 'builtin';
+		if (domain.fallback) fallbackSource = 'domain';
+		else if (configuration.fallback) fallbackSource = 'global';
 		domains[host] = {
-			fallback: domain.defaults.fallback ?? configuration.defaults.fallback,
-			provenance: { fallback: settingSource('fallback', authoredDefaults, domain) },
+			root: domain.root ?? null,
+			fallback: domain.fallback ?? configuration.fallback ?? null,
+			provenance: { fallback: fallbackSource },
 			links
 		};
 	}

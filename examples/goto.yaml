@@ -26,20 +26,26 @@ database:
 analytics:
   retention_months: 3
 
-defaults:
+link_defaults:
   status_code: 302
   forward_query: false
-  fallback: 404
+
+fallback:
+  url: https://example.net/unavailable
+  status_code: 307
+  forward_query: true
 
 domains:
   go.example.org:
-    defaults:
+    link_defaults:
       status_code: 307
       forward_query: true
-      fallback: https://example.org
+    root:
+      url: https://example.org
+      status_code: 308
+    fallback:
+      url: https://example.org/unavailable
     links:
-      /:
-        url: https://example.org
       /docs:
         url: https://example.org/documentation
         title: Documentation

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { VisitCountsByTimeframe, VisitTimeframe } from '@goto/analytics/daily';
+	import type { LinkState } from '#lib/server/link-state.js';
 	import { formatCount } from './format.js';
 
 	let {
@@ -13,7 +14,7 @@
 			path: string;
 			href: string;
 			url: string | null;
-			state: string;
+			state: LinkState;
 			countsByTimeframe: VisitCountsByTimeframe;
 		}>;
 		timeframe: VisitTimeframe;
@@ -41,7 +42,12 @@
 				>
 					<span class="admin-inventory-primary"><code>{link.path}</code></span>
 					<span class="admin-inventory-secondary">{link.url ?? '404 Not found'}</span>
-					<span class="admin-inventory-state">{link.state}</span>
+					<span class="admin-inventory-state">
+						{#if link.state === 'active'}Active
+						{:else if link.state === 'disabled'}Disabled
+						{:else if link.state === 'scheduled'}Scheduled
+						{:else if link.state === 'expired'}Expired{/if}
+					</span>
 					{#if collectionEnabled}
 						<span class="admin-inventory-count">
 							<span class="admin-inventory-label">Visits</span>

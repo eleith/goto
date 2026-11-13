@@ -16,7 +16,6 @@ describe('direct self-loop validation', () => {
 		{ host: redirectHost, path: '/docs', url: 'http://go.example.test/%64ocs' },
 		{ host: redirectHost, path: '/a/b', url: 'https://go.example.test/a%2Fb' },
 		{ host: redirectHost, path: '/a%2Fb', url: 'https://go.example.test/a%252Fb' },
-		{ host: 'GO.EXAMPLE.TEST:8443', path: '/', url: 'https://go.example.test:8443/' },
 		{ host: 'go.example.test:80', path: '/docs', url: 'http://go.example.test:80/docs' },
 		{ host: 'GO.EXAMPLE.TEST', path: '/docs', url: 'http://go.example.test:80/docs' },
 		{ host: redirectHost, path: '/docs', url: 'https:///go.example.test/docs' }
@@ -26,6 +25,34 @@ describe('direct self-loop validation', () => {
 		expect(() =>
 			validateConfig({ ...input, domains: { [host]: { links: { [path]: { url } } } } }, options)
 		).toThrowError(new ConfigError());
+	});
+
+	it('rejects a direct root self-loop and allows a different path on the same domain', () => {
+		const input = configurationInput();
+		expect(() =>
+			validateConfig(
+				{
+					...input,
+					domains: {
+						'GO.EXAMPLE.TEST:8443': {
+							root: { url: 'https://go.example.test:8443/?private=dummy-value#fragment' },
+							links: {}
+						}
+					}
+				},
+				options
+			)
+		).toThrowError(new ConfigError());
+		const { domains } = validateConfig(
+			{
+				...input,
+				domains: {
+					[redirectHost]: { root: { url: 'https://go.example.test/landing' }, links: {} }
+				}
+			},
+			options
+		);
+		expect(domains[redirectHost]?.root?.url).toBe('https://go.example.test/landing');
 	});
 
 	it('keeps errors generic even for disabled links', () => {
@@ -62,16 +89,20 @@ describe('direct self-loop validation', () => {
 
 	it('allows local fallback URLs without graph analysis', () => {
 		const input = configurationInput();
-		const fallback = 'https://go.example.test/landing';
+		const fallback = { url: 'https://go.example.test/landing' };
 		const { domains } = validateConfig(
 			{
 				...input,
-				domains: { [redirectHost]: { defaults: { fallback }, links: {} } }
+				domains: { [redirectHost]: { fallback, links: {} } }
 			},
 			options
 		);
 
-		expect(domains[redirectHost]?.fallback).toBe(fallback);
+		expect(domains[redirectHost]?.fallback).toEqual({
+			...fallback,
+			status_code: 302,
+			forward_query: false
+		});
 	});
 });
 
@@ -79,11 +110,12 @@ describe('effective domains', () => {
 	it('keeps omissions in configuration and records built-in defaults separately', () => {
 		const { configuration, domains } = validateConfig(configurationInput(), options);
 		expect(configuration.domains['go.example.com']).toEqual({
-			defaults: {},
+			link_defaults: {},
 			links: { '/docs': { url: 'https://example.com/docs', tags: [], enabled: true } }
 		});
 		expect(domains['go.example.com']).toEqual({
-			fallback: 404,
+			root: null,
+			fallback: null,
 			provenance: { fallback: 'builtin' },
 			links: {
 				'/docs': {
@@ -98,6 +130,9 @@ describe('effective domains', () => {
 			}
 		});
 		expect(configuration.auth).not.toHaveProperty('secret');
+		expect(configuration).not.toHaveProperty('fallback');
+		expect(configuration.domains['go.example.com']).not.toHaveProperty('root');
+		expect(configuration.domains['go.example.com']).not.toHaveProperty('fallback');
 	});
 
 	it('resolves global, domain and link overrides, including explicit false', () => {
@@ -108,11 +143,13 @@ describe('effective domains', () => {
 		const { domains } = validateConfig(
 			{
 				...input,
-				defaults: { status_code: 301, forward_query: true, fallback: 'https://example.com' },
+				link_defaults: { status_code: 301, forward_query: true },
+				fallback: { url: 'https://example.com' },
 				domains: {
 					global: input.domains['go.example.com'],
 					domain: {
-						defaults: { status_code: 307, forward_query: false, fallback: 404 },
+						link_defaults: { status_code: 307, forward_query: false },
+						fallback: { url: 'https://example.com/domain-missing' },
 						links: input.domains['go.example.com'].links
 					}
 				}
@@ -129,7 +166,7 @@ describe('effective domains', () => {
 			provenance: { forward_query: 'link' }
 		});
 		expect(domains.global).toMatchObject({
-			fallback: 'https://example.com',
+			fallback: { url: 'https://example.com', status_code: 302, forward_query: false },
 			provenance: { fallback: 'global' }
 		});
 		expect(domains.domain?.links['/inherit']).toMatchObject({
@@ -137,13 +174,57 @@ describe('effective domains', () => {
 			forward_query: false,
 			provenance: { status_code: 'domain', forward_query: 'domain' }
 		});
-		expect(domains.domain).toMatchObject({ fallback: 404, provenance: { fallback: 'domain' } });
+		expect(domains.domain).toMatchObject({
+			fallback: {
+				url: 'https://example.com/domain-missing',
+				status_code: 302,
+				forward_query: false
+			},
+			provenance: { fallback: 'domain' }
+		});
 		expect(domains.domain?.links['/override']).toMatchObject({
 			status_code: 308,
 			forward_query: false,
 			provenance: { status_code: 'link', forward_query: 'link' }
 		});
 		expect(domains.domain?.links['/override']).not.toHaveProperty('fallback');
+	});
+
+	it('replaces a global fallback as a whole and keeps root response options independent', () => {
+		const { domains } = validateConfig(
+			{
+				...configurationInput(),
+				link_defaults: { status_code: 308, forward_query: true },
+				fallback: { url: 'https://example.com/global', status_code: 307, forward_query: true },
+				domains: {
+					inherited: { links: {} },
+					replaced: {
+						root: { url: 'https://example.com/root', status_code: 301, forward_query: true },
+						fallback: { url: 'https://example.com/domain' },
+						links: {}
+					}
+				}
+			},
+			options
+		);
+		expect(domains.inherited).toEqual({
+			root: null,
+			fallback: { url: 'https://example.com/global', status_code: 307, forward_query: true },
+			provenance: { fallback: 'global' },
+			links: {}
+		});
+		expect(domains.replaced).toEqual({
+			root: { url: 'https://example.com/root', status_code: 301, forward_query: true },
+			fallback: { url: 'https://example.com/domain', status_code: 302, forward_query: false },
+			provenance: { fallback: 'domain' },
+			links: {}
+		});
+	});
+
+	it('rejects the root as a named link', () => {
+		expect(() =>
+			validateConfig(configurationInput({ '/': { url: 'https://example.com' } }), options)
+		).toThrow(ConfigError);
 	});
 
 	it('normalizes domain identities while keeping their path namespaces independent', () => {

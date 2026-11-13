@@ -106,8 +106,9 @@ test('refreshes report inventory after an accepted domain/link change', async ()
 	const initial = configuration();
 	const next = configuration();
 	next.domains['go.example.test'] = {
+		root: null,
 		links: {},
-		fallback: 404,
+		fallback: null,
 		provenance: { fallback: 'builtin' }
 	};
 	const ctx = context();

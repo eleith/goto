@@ -43,7 +43,17 @@
 		{#if data.collectionEnabled}
 			<StatCard label="Visits" value={visits} />
 		{/if}
-		<StatCard label="Status" value={data.state} />
+		{#if data.state === 'active'}
+			<StatCard label="Status" value="Active" />
+		{:else if data.state === 'disabled'}
+			<StatCard label="Status" value="Disabled" />
+		{:else if data.state === 'scheduled'}
+			<StatCard label="Status" value="Scheduled" />
+		{:else if data.state === 'expired'}
+			<StatCard label="Status" value="Expired" />
+		{:else}
+			<StatCard label="Status" value="Fallback" />
+		{/if}
 	</div>
 	<section class="admin-info" aria-labelledby="link-details-heading">
 		<h2 id="link-details-heading">Link details</h2>

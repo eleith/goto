@@ -85,37 +85,42 @@ function findActiveLink(
 	if (started && notExpired) return link;
 }
 
-function fallbackResponse(
-	fallback: PreparedDomain['fallback'],
-	host: string,
-	path: string
-): Response {
-	if (fallback === 404) return emptyResponse(404);
-	if (isSelfRedirect(fallback, host, path)) return emptyResponse(404);
-	return redirectResponse(fallback, 302);
-}
-
 function resolveVisitResponse(
 	domain: Immutable<PreparedDomain>,
 	host: string,
 	target: ParsedTarget,
 	now: number
 ): ResolvedResponse {
-	const link = findActiveLink(domain, target.path, now);
-	if (!link) {
-		const response = fallbackResponse(domain.fallback, host, target.path);
-		return { response, outcome: 'invalid' };
+	let redirect = domain.fallback;
+	let outcome: VisitOutcome = 'invalid';
+	if (target.path === '/') {
+		if (domain.root !== null) {
+			redirect = domain.root;
+			outcome = 'valid';
+		}
+	} else {
+		const link = findActiveLink(domain, target.path, now);
+		if (link) {
+			redirect = link;
+			outcome = 'valid';
+		}
 	}
 
-	let destination = link.url;
-	if (link.forward_query) destination = forwardQuery(link.url, target.query);
-	if (isSelfRedirect(destination, host, target.path)) {
+	if (redirect === null) {
 		const response = emptyResponse(404);
 		return { response, outcome: 'invalid' };
 	}
 
-	const response = redirectResponse(destination, link.status_code);
-	return { response, outcome: 'valid' };
+	let destination = redirect.url;
+	if (redirect.forward_query) destination = forwardQuery(destination, target.query);
+	const selfRedirect = isSelfRedirect(destination, host, target.path);
+	if (selfRedirect) {
+		const response = emptyResponse(404);
+		return { response, outcome: 'invalid' };
+	}
+
+	const response = redirectResponse(destination, redirect.status_code);
+	return { response, outcome };
 }
 
 export function resolveRedirect(

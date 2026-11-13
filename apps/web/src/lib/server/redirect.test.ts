@@ -1,10 +1,15 @@
-import type { PreparedDomain, PreparedLink, RedirectStatus } from '@goto/config';
+import type { PreparedDomain, PreparedLink, RedirectResponse, RedirectStatus } from '@goto/config';
 import { describe, expect, test, vi } from 'vitest';
 import { resolveRedirect } from './redirect.js';
 
 const host = 'go.example.test';
 const destination = 'https://destination.example.test/page';
-const fallback = 'https://fallback.example.test/landing?owned=one#section';
+const fallbackUrl = 'https://fallback.example.test/landing?owned=one#section';
+const fallback = preparedResponse({ url: fallbackUrl });
+
+function preparedResponse(overrides: Partial<RedirectResponse> = {}): RedirectResponse {
+	return { url: destination, status_code: 302, forward_query: false, ...overrides };
+}
 
 function preparedLink(overrides: Partial<PreparedLink> = {}): PreparedLink {
 	return {
@@ -21,20 +26,23 @@ function preparedLink(overrides: Partial<PreparedLink> = {}): PreparedLink {
 
 function preparedDomain(
 	links: Record<string, PreparedLink> = {},
-	fallback: PreparedDomain['fallback'] = 404
+	fallback: PreparedDomain['fallback'] = null,
+	root: PreparedDomain['root'] = null
 ): PreparedDomain {
-	return { links, fallback, provenance: { fallback: 'builtin' } };
+	return { root, links, fallback, provenance: { fallback: 'builtin' } };
 }
 
 describe('exact single-decode lookup', () => {
-	const paths = ['/', '/docs', '/Docs', '/a/b', '/a//b', '/café', '/a+b', '/a%2Fb', '/100%'];
+	const paths = ['/docs', '/Docs', '/a/b', '/a//b', '/café', '/a+b', '/a%2Fb', '/100%'];
 	const domain = preparedDomain(
 		Object.fromEntries(
 			paths.map((path, index) => [
 				path,
 				preparedLink({ url: `https://destination.example.test/${index}` })
 			])
-		)
+		),
+		null,
+		preparedResponse()
 	);
 
 	test.each([
@@ -58,7 +66,8 @@ describe('exact single-decode lookup', () => {
 		const { response, visit } = resolveRedirect(domain, host, target, 'GET');
 
 		expect(response.status).toBe(302);
-		expect(response.headers.get('location')).toBe(domain.links[path]?.url);
+		const expectedUrl = path === '/' ? domain.root?.url : domain.links[path]?.url;
+		expect(response.headers.get('location')).toBe(expectedUrl);
 		expect(visit).toMatchObject({ path, outcome: 'valid' });
 	});
 
@@ -174,14 +183,35 @@ describe('HTTP responses', () => {
 	});
 
 	test.each([
-		{ target: '/docs', fallback: 404, status: 308 },
-		{ target: '/missing', fallback, status: 302 },
-		{ target: '/missing', fallback: 404, status: 404 },
-		{ target: '/%', fallback, status: 400 }
-	] satisfies { target: string; fallback: PreparedDomain['fallback']; status: number }[])(
+		{ target: '/docs', fallback: null, root: null, status: 308 },
+		{
+			target: '/?incoming=one',
+			fallback,
+			root: preparedResponse({ status_code: 301, forward_query: true }),
+			status: 301
+		},
+		{ target: '/?owned=changed', fallback, root: null, status: 302 },
+		{
+			target: '/missing?owned=changed',
+			fallback: preparedResponse({ url: fallbackUrl, status_code: 307, forward_query: true }),
+			root: null,
+			status: 307
+		},
+		{ target: '/missing', fallback: null, root: null, status: 404 },
+		{ target: '/%', fallback, root: null, status: 400 }
+	] satisfies {
+		target: string;
+		fallback: PreparedDomain['fallback'];
+		root: PreparedDomain['root'];
+		status: number;
+	}[])(
 		'HEAD matches GET status/headers with an empty body: $target $status',
-		async ({ target, fallback, status }) => {
-			const domain = preparedDomain({ '/docs': preparedLink({ status_code: 308 }) }, fallback);
+		async ({ target, fallback, root, status }) => {
+			const domain = preparedDomain(
+				{ '/docs': preparedLink({ status_code: 308 }) },
+				fallback,
+				root
+			);
 			const { response: get } = resolveRedirect(domain, host, target, 'GET');
 			const { response: head, visit } = resolveRedirect(domain, host, target, 'HEAD');
 
@@ -202,12 +232,12 @@ describe('validity and fallback', () => {
 	const end = Date.parse(until);
 
 	test.each([
-		{ enabled: true, now: start - 1, status: 302, location: fallback, outcome: 'invalid' },
+		{ enabled: true, now: start - 1, status: 302, location: fallbackUrl, outcome: 'invalid' },
 		{ enabled: true, now: start, status: 307, location: destination, outcome: 'valid' },
 		{ enabled: true, now: end - 1, status: 307, location: destination, outcome: 'valid' },
-		{ enabled: true, now: end, status: 302, location: fallback, outcome: 'invalid' },
-		{ enabled: true, now: end + 1, status: 302, location: fallback, outcome: 'invalid' },
-		{ enabled: false, now: start, status: 302, location: fallback, outcome: 'invalid' }
+		{ enabled: true, now: end, status: 302, location: fallbackUrl, outcome: 'invalid' },
+		{ enabled: true, now: end + 1, status: 302, location: fallbackUrl, outcome: 'invalid' },
+		{ enabled: false, now: start, status: 302, location: fallbackUrl, outcome: 'invalid' }
 	])('enabled=$enabled at $now returns $status', ({ enabled, now, status, location, outcome }) => {
 		const domain = preparedDomain(
 			{
@@ -264,12 +294,34 @@ describe('validity and fallback', () => {
 		}
 	);
 
-	test('a root link takes precedence over URL fallback', () => {
-		const domain = preparedDomain({ '/': preparedLink() }, fallback);
+	test('a configured root uses its own response options and only matches the root path', () => {
+		const root = preparedResponse({
+			url: 'https://destination.example.test/home',
+			status_code: 308,
+			forward_query: true
+		});
+		const domain = preparedDomain({}, fallback, root);
 
-		const { response, visit } = resolveRedirect(domain, host, '/?incoming=ignored', 'GET');
-		expect(response.headers.get('location')).toBe(destination);
+		const { response, visit } = resolveRedirect(domain, host, '/?from=root', 'GET');
+		expect(response.status).toBe(308);
+		expect(response.headers.get('location')).toBe(
+			'https://destination.example.test/home?from=root'
+		);
+		expect(response.headers.get('cache-control')).toBe('no-store');
 		expect(visit).toMatchObject({ path: '/', outcome: 'valid' });
+
+		const missing = resolveRedirect(domain, host, '/home', 'GET');
+		expect(missing.response.headers.get('location')).toBe(fallbackUrl);
+		expect(missing.visit).toMatchObject({ path: '/home', outcome: 'invalid' });
+	});
+
+	test('an unconfigured root uses the fallback response but remains an invalid base visit', () => {
+		const domain = preparedDomain({}, fallback);
+		const { response, visit } = resolveRedirect(domain, host, '/?incoming=ignored', 'GET');
+
+		expect(response.status).toBe(302);
+		expect(response.headers.get('location')).toBe(fallbackUrl);
+		expect(visit).toMatchObject({ path: '/', outcome: 'invalid' });
 	});
 
 	test('an unconfigured root remains a base visit with an invalid outcome', () => {
@@ -279,7 +331,7 @@ describe('validity and fallback', () => {
 		expect(visit).toMatchObject({ path: '/', outcome: 'invalid' });
 	});
 
-	test('URL fallback is always 302 and never appends the incoming path or query', () => {
+	test('default fallback options preserve the URL without appending the incoming path or query', () => {
 		const domain = preparedDomain({}, fallback);
 		const { response, visit } = resolveRedirect(
 			domain,
@@ -290,8 +342,28 @@ describe('validity and fallback', () => {
 
 		expect(response.status).toBe(302);
 		expect(visit).toMatchObject({ path: '/missing/nested', outcome: 'invalid' });
-		expect(response.headers.get('location')).toBe(fallback);
+		expect(response.headers.get('location')).toBe(fallbackUrl);
 		expect(response.headers.get('cache-control')).toBe('no-store');
+	});
+
+	test('fallback honors its own response options for an inactive named link', () => {
+		const configuredFallback = preparedResponse({
+			url: fallbackUrl,
+			status_code: 307,
+			forward_query: true
+		});
+		const domain = preparedDomain(
+			{ '/disabled': preparedLink({ enabled: false }) },
+			configuredFallback
+		);
+
+		const { response, visit } = resolveRedirect(domain, host, '/disabled?incoming=present', 'GET');
+
+		expect(response.status).toBe(307);
+		expect(response.headers.get('location')).toBe(
+			'https://fallback.example.test/landing?owned=one&incoming=present#section'
+		);
+		expect(visit).toMatchObject({ path: '/disabled', outcome: 'invalid' });
 	});
 });
 
@@ -354,24 +426,44 @@ describe('direct self-loops', () => {
 		['/a%2Fb', 'https://go.example.test/a/b#fragment'],
 		['/docs', 'http://go.example.test:80/docs'],
 		['/docs', 'https:///go.example.test/docs']
-	])('runtime blocks a direct fallback loop: %s -> %s', (target, fallback) => {
-		const { response } = resolveRedirect(preparedDomain({}, fallback), host, target, 'GET');
+	])('runtime blocks a direct fallback loop: %s -> %s', (target, url) => {
+		const domain = preparedDomain({}, preparedResponse({ url, forward_query: true }));
+		const { response, visit } = resolveRedirect(domain, host, target, 'GET');
 
 		expect(response.status).toBe(404);
+		expect(visit?.outcome).toBe('invalid');
 		expect(response.headers.has('location')).toBe(false);
 		expect(response.headers.get('cache-control')).toBe('no-store');
 	});
 
-	test('runtime also guards a direct link loop if startup validation was skipped', () => {
-		const domain = preparedDomain({
-			'/docs': preparedLink({ url: 'https://go.example.test/docs' })
+	test('a direct root loop returns an invalid 404 without trying fallback', () => {
+		const root = preparedResponse({
+			url: 'https://GO.EXAMPLE.TEST:443/?owned=old#section',
+			forward_query: true
 		});
+		const domain = preparedDomain({}, fallback, root);
+		const { response, visit } = resolveRedirect(domain, host, '/?owned=new', 'GET');
 
-		expect(resolveRedirect(domain, host, '/docs', 'GET').response.status).toBe(404);
+		expect(response.status).toBe(404);
+		expect(response.headers.has('location')).toBe(false);
+		expect(response.headers.get('cache-control')).toBe('no-store');
+		expect(visit).toMatchObject({ path: '/', outcome: 'invalid' });
+	});
+
+	test('a direct link loop returns an invalid 404 without trying fallback', () => {
+		const domain = preparedDomain(
+			{ '/docs': preparedLink({ url: 'https://go.example.test/docs' }) },
+			fallback
+		);
+		const { response, visit } = resolveRedirect(domain, host, '/docs', 'GET');
+
+		expect(response.status).toBe(404);
+		expect(response.headers.has('location')).toBe(false);
+		expect(visit?.outcome).toBe('invalid');
 	});
 
 	test('allows fallback to a different local path without graph analysis', () => {
-		const domain = preparedDomain({}, 'https://go.example.test/landing');
+		const domain = preparedDomain({}, preparedResponse({ url: 'https://go.example.test/landing' }));
 
 		expect(resolveRedirect(domain, host, '/missing', 'GET').response.headers.get('location')).toBe(
 			'https://go.example.test/landing'

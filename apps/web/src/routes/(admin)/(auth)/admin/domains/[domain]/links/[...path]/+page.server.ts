@@ -1,7 +1,7 @@
 import { error } from '@sveltejs/kit';
 import { countBrowserOsVisitsByTimeframe } from '@goto/analytics';
 import { availableVisitTimeframes, countVisitWindows, visitWindow } from '@goto/analytics/daily';
-import { currentLinkState } from '#lib/server/link-state.js';
+import { currentLinkState, type LinkState } from '#lib/server/link-state.js';
 import { readVisitDetails } from '#lib/server/visit-reports.js';
 import type { PageServerLoad } from './$types';
 
@@ -13,7 +13,25 @@ export const load = (async ({ locals, params }) => {
 	// Kit has decoded route parameters; preserve literal percent paths as-is.
 	const path = `/${params.path ?? ''}`;
 	if (path !== '/' && !Object.hasOwn(prepared.links, path)) throw error(404, 'Link not configured');
-	const link = prepared.links[path];
+	let url: string | null = null;
+	let state: LinkState | 'fallback';
+	if (path === '/') {
+		const root = prepared.root;
+		if (root !== null) {
+			url = root.url;
+			state = 'active';
+		} else {
+			state = 'fallback';
+		}
+	} else {
+		const link = prepared.links[path]!;
+		url = link.url;
+		state = currentLinkState(link, Date.now());
+	}
+	let fallback: string | 404 = 404;
+	if (prepared.fallback !== null) {
+		fallback = prepared.fallback.url;
+	}
 	const configuration = snapshot.configuration;
 	const retentionMonths = configuration.analytics.retention_months;
 	const collectionEnabled = retentionMonths !== 0;
@@ -25,7 +43,6 @@ export const load = (async ({ locals, params }) => {
 		: [];
 	const countsByTimeframe = countVisitWindows(details?.daily, windows);
 	const browserOsVisitsByTimeframe = countBrowserOsVisitsByTimeframe(details ?? undefined, windows);
-	const state = link ? currentLinkState(link, Date.now()) : 'Fallback';
 	const asOf = details ? Date.parse(details.period.asOf) : null;
 	const chart = details ? { daily: details.daily, period: details.period } : null;
 
@@ -33,8 +50,8 @@ export const load = (async ({ locals, params }) => {
 		domain,
 		path,
 		domainHref: `/admin/domains/${encodeURIComponent(domain)}`,
-		url: link?.url ?? null,
-		fallback: prepared.fallback,
+		url,
+		fallback,
 		state,
 		retentionMonths,
 		collectionEnabled,

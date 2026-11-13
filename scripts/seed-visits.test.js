@@ -46,8 +46,13 @@ test('calendar window clamps month ends and keeps UTC time', () => {
 
 test('fixed inputs produce repeatable retained traffic with request-time outcomes and consistent profiles', () => {
 	const source = structuredClone(fixture);
+	source.fallback = { url: 'https://example.org/missing' };
+	source.domains['one.example.test'].root = {
+		url: 'https://example.org/',
+		status_code: 307,
+		forward_query: true
+	};
 	source.domains['one.example.test'].links = {
-		'/': { url: 'https://example.org/' },
 		'/docs': {
 			url: 'https://example.org/docs',
 			valid_from: '2026-03-31T00:00:00Z',
@@ -85,7 +90,13 @@ test('fixed inputs produce repeatable retained traffic with request-time outcome
 		assert.equal(visit.ip, '192.0.2.1');
 		assert(visit.user_agent.endsWith(' GotoSeed/42'));
 		assert.deepEqual(classifyUserAgent(visit.user_agent), { browser: visit.browser, os: visit.os });
+		if (visit.path === '/') {
+			assert.equal(visit.outcome, visit.domain === 'one.example.test' ? 'valid' : 'invalid');
+		}
 		if (visit.path === '/future') assert.equal(visit.outcome, 'invalid');
+	}
+	for (const domain of Object.keys(domains)) {
+		assert(visits.some((visit) => visit.domain === domain && visit.path === '/'));
 	}
 });
 

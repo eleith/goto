@@ -83,7 +83,7 @@ export function* generateVisits({ domains, visitsPerDomain, since, asOf, seed })
 			yield {
 				domain,
 				path,
-				outcome: visitOutcome(prepared.links[path], visitedAt),
+				outcome: visitOutcome(prepared, path, visitedAt),
 				visited_at: visitedAt,
 				ip: '192.0.2.1',
 				user_agent: `${profile.userAgent} GotoSeed/${seed}`,
@@ -112,7 +112,9 @@ function requestPaths(links) {
 	return paths;
 }
 
-function visitOutcome(link, visitedAt) {
+function visitOutcome(prepared, path, visitedAt) {
+	if (path === '/') return prepared.root ? 'valid' : 'invalid';
+	const link = prepared.links[path];
 	if (!link || !link.enabled) return 'invalid';
 	if (link.valid_from !== undefined && visitedAt < Date.parse(link.valid_from)) return 'invalid';
 	if (link.valid_until !== undefined && visitedAt >= Date.parse(link.valid_until)) return 'invalid';

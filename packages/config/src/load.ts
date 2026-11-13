@@ -82,9 +82,9 @@ export function validateConfig(raw: unknown, options: ConfigOptions = {}): Prepa
 			throw new ConfigError(issues);
 		}
 		const configuration = defaulted;
-		const authoredDefaults =
-			typeof raw.defaults === 'object' && raw.defaults !== null ? raw.defaults : {};
-		return { configuration, domains: prepareDomains(configuration, authoredDefaults) };
+		const authoredLinkDefaults =
+			typeof raw.link_defaults === 'object' && raw.link_defaults !== null ? raw.link_defaults : {};
+		return { configuration, domains: prepareDomains(configuration, authoredLinkDefaults) };
 	} catch (error) {
 		if (error instanceof ConfigError) throw error;
 		throw new ConfigError();

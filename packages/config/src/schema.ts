@@ -133,9 +133,14 @@ const RedirectStatusSchema = Type.Union(
 	{ $id: 'RedirectStatus' }
 );
 
-const FallbackSchema = Type.Union([Type.Literal(404), ref(LinkUrlSchema)], {
-	$id: 'Fallback'
-});
+const RedirectResponseSchema = Type.Object(
+	{
+		url: ref(LinkUrlSchema),
+		status_code: ref(RedirectStatusSchema, { default: 302 }),
+		forward_query: Type.Boolean({ default: false })
+	},
+	{ $id: 'RedirectResponse', additionalProperties: false }
+);
 
 const UrlSchema = Type.Object(
 	{
@@ -224,25 +229,23 @@ const AnalyticsSchema = Type.Object(
 	{ $id: 'Analytics', additionalProperties: false }
 );
 
-const DefaultsSchema = Type.Object(
+const LinkDefaultsSchema = Type.Object(
 	{
 		status_code: ref(RedirectStatusSchema, { default: 302 }),
-		forward_query: Type.Boolean({ default: false }),
-		fallback: ref(FallbackSchema, { default: 404 })
+		forward_query: Type.Boolean({ default: false })
 	},
-	{ $id: 'Defaults', additionalProperties: false }
+	{ $id: 'LinkDefaults', additionalProperties: false }
 );
 
-const DomainDefaultsSchema = Type.Object(
+const DomainLinkDefaultsSchema = Type.Object(
 	{
 		status_code: Type.Optional(ref(RedirectStatusSchema)),
-		forward_query: Type.Optional(Type.Boolean()),
-		fallback: Type.Optional(ref(FallbackSchema))
+		forward_query: Type.Optional(Type.Boolean())
 	},
 	{
-		$id: 'DomainDefaults',
+		$id: 'DomainLinkDefaults',
 		additionalProperties: false,
-		description: 'Omitted settings inherit global defaults. Explicit false overrides true.'
+		description: 'Omitted settings inherit global link_defaults. Explicit false overrides true.'
 	}
 );
 
@@ -262,18 +265,24 @@ const LinkConfigurationSchema = Type.Object(
 		$id: 'LinkConfiguration',
 		additionalProperties: false,
 		description:
-			'Omitted status_code and forward_query inherit domain defaults, then global defaults.'
+			'Omitted status_code and forward_query inherit domain link_defaults, then global link_defaults.'
 	}
 );
 
 const DomainConfigurationSchema = Type.Object(
 	{
-		defaults: ref(DomainDefaultsSchema, { default: {} }),
-		links: Type.Record(Type.String(), ref(LinkConfigurationSchema, { default: {} }), {
-			additionalProperties: false,
-			description:
-				'Logical, case-sensitive paths. Keys are never interpolated or percent-decoded. Use readable canonical paths without spaces, trailing slashes, controls, backslashes, dot segments or :?#[]@. The root path / is allowed.'
-		})
+		link_defaults: ref(DomainLinkDefaultsSchema, { default: {} }),
+		root: Type.Optional(ref(RedirectResponseSchema)),
+		fallback: Type.Optional(ref(RedirectResponseSchema)),
+		links: Type.Record(
+			Type.String({ pattern: '^/.+' }),
+			ref(LinkConfigurationSchema, { default: {} }),
+			{
+				additionalProperties: false,
+				description:
+					'Logical, case-sensitive named paths. Keys are never interpolated or percent-decoded. Use readable canonical paths without spaces, trailing slashes, controls, backslashes, dot segments or :?#[]@. Configure / with the separate root response.'
+			}
+		)
 	},
 	{ $id: 'DomainConfiguration', additionalProperties: false }
 );
@@ -287,7 +296,8 @@ export const GotoConfigurationSchema = Type.Object(
 		auth: ref(AuthSchema),
 		database: ref(DatabaseSchema, { default: {} }),
 		analytics: ref(AnalyticsSchema, { default: {} }),
-		defaults: ref(DefaultsSchema, { default: {} }),
+		link_defaults: ref(LinkDefaultsSchema, { default: {} }),
+		fallback: Type.Optional(ref(RedirectResponseSchema)),
 		domains: Type.Record(Type.String(), ref(DomainConfigurationSchema, { default: {} }), {
 			additionalProperties: false
 		})
@@ -306,7 +316,7 @@ export const configurationReferences: TSchema[] = [
 	HexColorSchema,
 	TagsSchema,
 	RedirectStatusSchema,
-	FallbackSchema,
+	RedirectResponseSchema,
 	UrlSchema,
 	SiteSchema,
 	AppearanceSchema,
@@ -315,8 +325,8 @@ export const configurationReferences: TSchema[] = [
 	AuthSchema,
 	DatabaseSchema,
 	AnalyticsSchema,
-	DefaultsSchema,
-	DomainDefaultsSchema,
+	LinkDefaultsSchema,
+	DomainLinkDefaultsSchema,
 	LinkConfigurationSchema,
 	DomainConfigurationSchema
 ];
@@ -325,3 +335,4 @@ export type GotoConfiguration = Static<typeof GotoConfigurationSchema>;
 export type LinkConfiguration = Static<typeof LinkConfigurationSchema>;
 export type DomainConfiguration = Static<typeof DomainConfigurationSchema>;
 export type RedirectStatus = Static<typeof RedirectStatusSchema>;
+export type RedirectResponse = Static<typeof RedirectResponseSchema>;

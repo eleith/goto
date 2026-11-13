@@ -30,7 +30,7 @@ function request(retention_months = 3) {
 						'/disabled': { url: 'https://example.test/disabled', enabled: false }
 					}
 				},
-				[emptyDomain]: { links: { '/': { url: 'https://example.test/' } } },
+				[emptyDomain]: { root: { url: 'https://example.test/' }, links: {} },
 				[newDomain]: { links: { '/new': { url: 'https://example.test/new' } } }
 			}
 		},
@@ -108,7 +108,7 @@ test('projects compact global window counts while inventory stays current and hi
 		retentionMonths: 3,
 		asOf: Date.parse(period.asOf),
 		domainCount: 3,
-		linkCount: 4,
+		linkCount: 3,
 		timeframes: ['7d', '30d', 'all'],
 		countsByTimeframe: {
 			'7d': { validVisits: 3, invalidVisits: 7 },
@@ -129,7 +129,7 @@ test('projects compact global window counts while inventory stays current and hi
 			},
 			{
 				domain: emptyDomain,
-				linkCount: 1,
+				linkCount: 0,
 				countsByTimeframe: {
 					'7d': { validVisits: 0, invalidVisits: 7 },
 					'30d': { validVisits: 0, invalidVisits: 30 },
@@ -177,7 +177,7 @@ test('missing preparation keeps inventory usable without substituting zero count
 	expect(data.collectionEnabled).toBe(true);
 	expect(data.retentionMonths).toBe(3);
 	expect(data.domainCount).toBe(3);
-	expect(data.linkCount).toBe(4);
+	expect(data.linkCount).toBe(3);
 	expect(data.asOf).toBeNull();
 	expect(data.chart).toBeNull();
 	expect(data.countsByTimeframe).toEqual({});
@@ -190,7 +190,7 @@ test('disabled collection reads no analytics and exposes only inventory with emp
 	expect(data.collectionEnabled).toBe(false);
 	expect(data.available).toBe(false);
 	expect(data.domainCount).toBe(3);
-	expect(data.linkCount).toBe(4);
+	expect(data.linkCount).toBe(3);
 	expect(data.timeframes).toEqual([]);
 	expect(data.countsByTimeframe).toEqual({});
 	expect(data.chart).toBeNull();

@@ -88,7 +88,8 @@ test('projects OIDC mode and configured redirect defaults without exposing the p
 					client_secret: 'private-client-secret'
 				}
 			},
-			defaults: { status_code: 307, forward_query: true, fallback: 'https://example.test/missing' }
+			link_defaults: { status_code: 307, forward_query: true },
+			fallback: { url: 'https://example.test/missing' }
 		})
 	);
 

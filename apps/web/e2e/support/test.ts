@@ -63,7 +63,7 @@ export const test = base.extend<{
 	appServer: async ({ withWorker, retentionMonths }, use, testInfo) => {
 		const directory = process.env.GOTO_E2E_BUILD_DIR;
 		if (!directory) throw new Error('Missing E2E build directory');
-		const child = fork(new URL('../server.mjs', import.meta.url), [], {
+		const child = fork(new URL('../server.js', import.meta.url), [], {
 			env: {
 				...serverEnvironment(),
 				GOTO_E2E_BUILD_DIR: directory,

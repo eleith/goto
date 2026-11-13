@@ -133,7 +133,11 @@ test('captures invalid decoded paths even when the fallback redirects', () => {
 			...snapshot.domains,
 			'go.example.test': {
 				...snapshot.domains['go.example.test']!,
-				fallback: 'https://fallback.example.test/'
+				fallback: {
+					url: 'https://fallback.example.test/',
+					status_code: 302 as const,
+					forward_query: false
+				}
 			}
 		}
 	};

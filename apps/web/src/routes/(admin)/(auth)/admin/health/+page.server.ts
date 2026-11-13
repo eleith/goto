@@ -21,9 +21,9 @@ export const load = (async ({ locals }) => {
 		retentionMonths,
 		reportDataAsOf,
 		reportDelayed,
-		redirectStatusCode: configuration.defaults.status_code,
-		forwardQuery: configuration.defaults.forward_query,
-		fallbackDestination: configuration.defaults.fallback,
+		redirectStatusCode: configuration.link_defaults.status_code,
+		forwardQuery: configuration.link_defaults.forward_query,
+		fallbackDestination: configuration.fallback?.url ?? 404,
 		workerUrl: configuration.url.worker
 	};
 }) satisfies PageServerLoad;

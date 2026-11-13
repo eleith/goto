@@ -16,8 +16,17 @@ auth:
   credentials:
     username: admin
     password: \${DUMMY_PASSWORD}
+link_defaults:
+  status_code: 302
+  forward_query: true
+fallback:
+  url: \${DUMMY_DESTINATION}
 domains:
   go.example.test:
+    link_defaults:
+      status_code: 307
+    root:
+      url: \${DUMMY_DESTINATION}
     links:
       /docs:
         url: \${DUMMY_DESTINATION}

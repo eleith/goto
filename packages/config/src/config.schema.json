@@ -11,7 +11,8 @@
 		"auth": { "$ref": "#/$defs/Auth" },
 		"database": { "default": {}, "$ref": "#/$defs/Database" },
 		"analytics": { "default": {}, "$ref": "#/$defs/Analytics" },
-		"defaults": { "default": {}, "$ref": "#/$defs/Defaults" },
+		"link_defaults": { "default": {}, "$ref": "#/$defs/LinkDefaults" },
+		"fallback": { "$ref": "#/$defs/RedirectResponse" },
 		"domains": {
 			"additionalProperties": false,
 			"type": "object",
@@ -150,7 +151,16 @@
 				{ "const": 308, "type": "number" }
 			]
 		},
-		"Fallback": { "anyOf": [{ "const": 404, "type": "number" }, { "$ref": "#/$defs/LinkUrl" }] },
+		"RedirectResponse": {
+			"additionalProperties": false,
+			"type": "object",
+			"required": ["url"],
+			"properties": {
+				"url": { "$ref": "#/$defs/LinkUrl" },
+				"status_code": { "default": 302, "$ref": "#/$defs/RedirectStatus" },
+				"forward_query": { "default": false, "type": "boolean" }
+			}
+		},
 		"Url": {
 			"additionalProperties": false,
 			"type": "object",
@@ -323,28 +333,26 @@
 				}
 			}
 		},
-		"Defaults": {
+		"LinkDefaults": {
 			"additionalProperties": false,
 			"type": "object",
 			"properties": {
 				"status_code": { "default": 302, "$ref": "#/$defs/RedirectStatus" },
-				"forward_query": { "default": false, "type": "boolean" },
-				"fallback": { "default": 404, "$ref": "#/$defs/Fallback" }
+				"forward_query": { "default": false, "type": "boolean" }
 			}
 		},
-		"DomainDefaults": {
+		"DomainLinkDefaults": {
 			"additionalProperties": false,
-			"description": "Omitted settings inherit global defaults. Explicit false overrides true.",
+			"description": "Omitted settings inherit global link_defaults. Explicit false overrides true.",
 			"type": "object",
 			"properties": {
 				"status_code": { "$ref": "#/$defs/RedirectStatus" },
-				"forward_query": { "type": "boolean" },
-				"fallback": { "$ref": "#/$defs/Fallback" }
+				"forward_query": { "type": "boolean" }
 			}
 		},
 		"LinkConfiguration": {
 			"additionalProperties": false,
-			"description": "Omitted status_code and forward_query inherit domain defaults, then global defaults.",
+			"description": "Omitted status_code and forward_query inherit domain link_defaults, then global link_defaults.",
 			"type": "object",
 			"required": ["url"],
 			"properties": {
@@ -373,12 +381,14 @@
 			"type": "object",
 			"required": ["links"],
 			"properties": {
-				"defaults": { "default": {}, "$ref": "#/$defs/DomainDefaults" },
+				"link_defaults": { "default": {}, "$ref": "#/$defs/DomainLinkDefaults" },
+				"root": { "$ref": "#/$defs/RedirectResponse" },
+				"fallback": { "$ref": "#/$defs/RedirectResponse" },
 				"links": {
 					"additionalProperties": false,
-					"description": "Logical, case-sensitive paths. Keys are never interpolated or percent-decoded. Use readable canonical paths without spaces, trailing slashes, controls, backslashes, dot segments or :?#[]@. The root path / is allowed.",
+					"description": "Logical, case-sensitive named paths. Keys are never interpolated or percent-decoded. Use readable canonical paths without spaces, trailing slashes, controls, backslashes, dot segments or :?#[]@. Configure / with the separate root response.",
 					"type": "object",
-					"patternProperties": { "^(.*)$": { "default": {}, "$ref": "#/$defs/LinkConfiguration" } }
+					"patternProperties": { "^/.+": { "default": {}, "$ref": "#/$defs/LinkConfiguration" } }
 				}
 			}
 		}

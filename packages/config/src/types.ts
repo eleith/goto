@@ -1,4 +1,9 @@
-import type { GotoConfiguration, LinkConfiguration, RedirectStatus } from './schema.js';
+import type {
+	GotoConfiguration,
+	LinkConfiguration,
+	RedirectResponse,
+	RedirectStatus
+} from './schema.js';
 
 export type ConfigEnvironment = Readonly<Record<string, string | undefined>>;
 
@@ -20,7 +25,8 @@ export type PreparedLink = Omit<LinkConfiguration, 'title' | 'status_code' | 'fo
 };
 
 export interface PreparedDomain {
-	fallback: GotoConfiguration['defaults']['fallback'];
+	root: RedirectResponse | null;
+	fallback: RedirectResponse | null;
 	provenance: { fallback: SettingSource };
 	links: Record<string, PreparedLink>;
 }

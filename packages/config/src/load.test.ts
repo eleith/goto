@@ -12,7 +12,7 @@ const yaml = 'auth: {credentials: {username: admin, password: test-password}}\nd
 const authoredKeyMarker = 'dummy-authored-key-marker';
 
 describe('configuration loading', () => {
-	it('parses YAML and applies root defaults without mutating the input', () => {
+	it('parses YAML and applies configuration defaults without mutating the input', () => {
 		expect(parseConfig(`${yaml}\nsite: {title: yes}`, options).configuration.site.title).toBe(
 			'yes'
 		);
@@ -25,7 +25,7 @@ describe('configuration loading', () => {
 			site: { title: 'Goto' },
 			database: { path: './data/goto.sqlite', worker_path: './data/worker.sqlite' },
 			analytics: { retention_months: 3 },
-			defaults: { status_code: 302, forward_query: false, fallback: 404 }
+			link_defaults: { status_code: 302, forward_query: false }
 		});
 		expect(input).toEqual(original);
 	});
@@ -190,6 +190,78 @@ describe('configuration loading', () => {
 		);
 	});
 
+	it('normalizes root and fallback responses independently of link defaults', () => {
+		const input = {
+			...configurationInput(),
+			link_defaults: { status_code: 308, forward_query: true },
+			fallback: { url: '${FALLBACK}' },
+			domains: {
+				'go.example.com': {
+					link_defaults: { status_code: 307, forward_query: true },
+					root: { url: '${ROOT}' },
+					links: {}
+				}
+			}
+		};
+		const original = structuredClone(input);
+		const { configuration, domains } = validateConfig(input, {
+			env: { ROOT: 'https://example.com', FALLBACK: 'https://example.com/missing' }
+		});
+		expect(configuration.fallback).toEqual({
+			url: 'https://example.com/missing',
+			status_code: 302,
+			forward_query: false
+		});
+		expect(domains['go.example.com']?.root).toEqual({
+			url: 'https://example.com',
+			status_code: 302,
+			forward_query: false
+		});
+		expect(input).toEqual(original);
+	});
+
+	it.each([
+		404,
+		'https://example.com/missing',
+		false,
+		null,
+		{},
+		{ url: 'https://example.com', status_code: 404 },
+		{ url: 'https://example.com', forward_query: 'false' },
+		{ url: 'https://example.com', action: 'not_found' }
+	])('rejects non-response fallback values %j', (fallback) => {
+		expect(() => validateConfig({ ...configurationInput(), fallback }, options)).toThrow(
+			ConfigError
+		);
+	});
+
+	it('restricts root and domain fallback to redirect responses and rejects old defaults', () => {
+		const input = configurationInput();
+		for (const domain of [
+			{ root: { url: 'https://example.com', enabled: false } },
+			{ root: { url: 'https://example.com', valid_from: '2027-01-01T00:00:00Z' } },
+			{ fallback: 404 },
+			{ defaults: { status_code: 307 } },
+			{ link_defaults: { fallback: 'https://example.com' } }
+		]) {
+			expect(() =>
+				validateConfig(
+					{
+						...input,
+						domains: { 'go.example.com': { ...domain, links: {} } }
+					},
+					options
+				)
+			).toThrow(ConfigError);
+		}
+		expect(() => validateConfig({ ...input, defaults: { status_code: 307 } }, options)).toThrow(
+			ConfigError
+		);
+		expect(() => validateConfig({ ...input, link_defaults: { fallback: 404 } }, options)).toThrow(
+			ConfigError
+		);
+	});
+
 	it.each([
 		{ unknown: 'private-value' },
 		{ site: null },
@@ -206,7 +278,7 @@ describe('configuration loading', () => {
 		},
 		{ auth: { ...configurationInput().auth, secret: 'too-short-private-secret' } },
 		{ url: { app: 'https://ADMIN.example.com/' } },
-		{ defaults: { forward_query: null } },
+		{ link_defaults: { forward_query: null } },
 		{ domains: [] },
 		{ domains: { 'go.example.com': { links: [] } } },
 		{
@@ -323,6 +395,15 @@ describe('configuration loading', () => {
 			}
 		});
 		expect(prepared.configuration.analytics.retention_months).toBe(3);
+		expect(prepared.domains['go.example.org']).toMatchObject({
+			root: { url: 'https://example.org', status_code: 308, forward_query: false },
+			fallback: { url: 'https://example.org/unavailable', status_code: 302, forward_query: false }
+		});
+		expect(prepared.domains['tiny.example.com']?.fallback).toEqual({
+			url: 'https://example.net/unavailable',
+			status_code: 307,
+			forward_query: true
+		});
 		expect(prepared.domains['go.example.org']?.links['/docs']).toMatchObject({
 			forward_query: false,
 			provenance: { forward_query: 'link' }

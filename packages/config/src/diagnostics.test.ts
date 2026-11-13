@@ -112,6 +112,43 @@ describe('configuration diagnostics', () => {
 		}
 	});
 
+	it('keeps response diagnostics secret-safe and redacts their domain keys', () => {
+		const error = captureConfigError(() =>
+			validateConfig(
+				{
+					...configurationInput(),
+					fallback: { url: `https://user:${privateValue}@example.com` },
+					domains: {
+						'private-domain-marker.example.com': {
+							root: { url: `https://user:${privateValue}@example.com` },
+							fallback: { url: 'https://example.com', [privateKey]: privateValue },
+							links: {}
+						}
+					}
+				},
+				options
+			)
+		);
+		expect(error.message).toBe('Invalid configuration');
+		expect(error.issues).toContainEqual({
+			path: '/fallback/url',
+			message: "Expected string to match 'goto-link-url' format"
+		});
+		expect(error.issues).toContainEqual({
+			path: '/domains/*/root/url',
+			message: "Expected string to match 'goto-link-url' format"
+		});
+		expect(error.issues).toContainEqual({
+			path: '/domains/*/fallback',
+			message: 'Unexpected property. Allowed fields: url, status_code, forward_query'
+		});
+		for (const output of [JSON.stringify(error), formatConfigError(error)]) {
+			expect(output).not.toContain('private-domain-marker');
+			expect(output).not.toContain('private-authored-key-marker');
+			expect(output).not.toContain(privateValue);
+		}
+	});
+
 	it('reports YAML codes and line positions without parser snippets or authored keys', () => {
 		const source = `${privateKey}: ${privateValue}\n${privateKey}: ${privateValue}`;
 		const error = captureConfigError(() => parseConfig(source, options));

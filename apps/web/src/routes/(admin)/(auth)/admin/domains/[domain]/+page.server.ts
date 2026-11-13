@@ -58,12 +58,12 @@ export const load = (async ({ locals, params }) => {
 			href: linkHref(domain, path)
 		};
 	});
-	const root = prepared.links['/'];
-	let baseUrl = prepared.fallback === 404 ? null : prepared.fallback;
-	let baseState = 'Fallback';
-	if (root && currentLinkState(root, now) === 'Active') {
-		baseUrl = root.url;
-		baseState = 'Active';
+	const hasRoot = prepared.root !== null;
+	let baseUrl: string | null = null;
+	if (prepared.root !== null) {
+		baseUrl = prepared.root.url;
+	} else if (prepared.fallback !== null) {
+		baseUrl = prepared.fallback.url;
 	}
 	const asOf = domainDetails ? Date.parse(domainDetails.period.asOf) : null;
 	const chart = domainDetails ? { daily: domainDetails.daily, period: domainDetails.period } : null;
@@ -81,7 +81,7 @@ export const load = (async ({ locals, params }) => {
 		chart,
 		base: {
 			url: baseUrl,
-			state: baseState,
+			hasRoot,
 			countsByTimeframe: baseCountsByTimeframe,
 			href: linkHref(domain, '/')
 		},

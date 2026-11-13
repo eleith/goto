@@ -67,7 +67,9 @@
 				{:else}404 Not found{/if}
 			</dd>
 			<dt>Base status</dt>
-			<dd>{data.base.state}</dd>
+			<dd>
+				{#if data.base.hasRoot}Active{:else}Fallback{/if}
+			</dd>
 		</dl>
 	</section>
 	{#if data.chart && window}

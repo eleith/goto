@@ -9,13 +9,14 @@ vi.mock('#lib/server/visit-reports.js', () => ({ readVisitDetails: vi.fn() }));
 beforeEach(() => vi.resetAllMocks());
 
 const domain = 'go.example.test';
-function request(path = '/docs', host = domain, retention_months = 3) {
+function request(path = '/docs', host = domain, retention_months = 3, rootUrl?: string) {
 	const prepared = validateConfig(
 		{
 			auth: { credentials: { username: 'test', password: 'link-test-password' } },
 			analytics: { retention_months },
 			domains: {
 				[domain]: {
+					...(rootUrl ? { root: { url: rootUrl } } : {}),
 					links: {
 						'/docs': { url: 'https://example.test/docs' },
 						'/a/b': { url: 'https://example.test/nested' },
@@ -72,7 +73,7 @@ test('projects only the requested link series and compact window counts and brea
 		domainHref: '/admin/domains/go.example.test',
 		url: 'https://example.test/docs',
 		fallback: 404,
-		state: 'Active',
+		state: 'active',
 		retentionMonths: 3,
 		collectionEnabled: true,
 		available: true,
@@ -111,7 +112,7 @@ test('keeps decoded nested and literal-percent identities distinct and supports 
 	const root = await load(request('/'));
 	expect(nested.path).toBe('/a/b');
 	expect(percent.path).toBe('/a%2Fb');
-	expect(percent.state).toBe('Disabled');
+	expect(percent.state).toBe('disabled');
 	expect(percent.countsByTimeframe.all?.validVisits).toBe(15);
 	expect(readVisitDetails).toHaveBeenNthCalledWith(1, expect.any(Object), {
 		kind: 'link',
@@ -129,10 +130,27 @@ test('keeps decoded nested and literal-percent identities distinct and supports 
 		path: '/'
 	});
 	expect(root.path).toBe('/');
-	expect(root.state).toBe('Fallback');
+	expect(root.state).toBe('fallback');
 	expect(root.url).toBeNull();
 	expect(root.fallback).toBe(404);
 	expect(root.countsByTimeframe.all?.validVisits).toBe(15);
+});
+
+test('shows the configured root response while preserving its historical analytics scope', async () => {
+	vi.mocked(readVisitDetails).mockResolvedValue({
+		...details,
+		scope: { kind: 'link', domain, path: '/' }
+	});
+	const data = await load(request('/', domain, 3, 'https://example.test/start'));
+	expect(readVisitDetails).toHaveBeenCalledExactlyOnceWith(expect.any(Object), {
+		kind: 'link',
+		domain,
+		path: '/'
+	});
+	expect(data.path).toBe('/');
+	expect(data.state).toBe('active');
+	expect(data.url).toBe('https://example.test/start');
+	expect(data.countsByTimeframe.all).toEqual({ validVisits: 15, invalidVisits: 5 });
 });
 
 test('rejects unknown scopes before reading and keeps unavailable counts absent', async () => {
@@ -161,5 +179,5 @@ test('disabled analytics skips the report read and leaves link details usable', 
 	expect(data.chart).toBeNull();
 	expect(data.countsByTimeframe).toEqual({});
 	expect(data.url).toBe('https://example.test/docs');
-	expect(data.state).toBe('Active');
+	expect(data.state).toBe('active');
 });

@@ -17,12 +17,11 @@ function request(host = domain, rootUrl?: string, retentionMonths = 3) {
 		'/a/b': { url: 'https://example.test/nested' },
 		'/a%2Fb': { url: 'https://example.test/percent', enabled: false }
 	};
-	if (rootUrl) links['/'] = { url: rootUrl };
 	const prepared = validateConfig(
 		{
 			auth: { credentials: { username: 'test', password: 'domain-test-password' } },
 			analytics: { retention_months: retentionMonths },
-			domains: { [domain]: { links } }
+			domains: { [domain]: { ...(rootUrl ? { root: { url: rootUrl } } : {}), links } }
 		},
 		{ env: {} }
 	);
@@ -136,7 +135,7 @@ test('projects domain counts and browser/OS visits without exposing link series 
 		chart: { daily: domainDetails.daily, period },
 		base: {
 			url: null,
-			state: 'Fallback',
+			hasRoot: false,
 			countsByTimeframe: baseCounts,
 			href: '/admin/domains/go.example.test/links'
 		},
@@ -144,7 +143,7 @@ test('projects domain counts and browser/OS visits without exposing link series 
 			{
 				path: '/docs',
 				url: 'https://example.test/docs',
-				state: 'Active',
+				state: 'active',
 				countsByTimeframe: {
 					'7d': { validVisits: 3, invalidVisits: 0 },
 					'30d': { validVisits: 3, invalidVisits: 0 },
@@ -155,14 +154,14 @@ test('projects domain counts and browser/OS visits without exposing link series 
 			{
 				path: '/a/b',
 				url: 'https://example.test/nested',
-				state: 'Active',
+				state: 'active',
 				countsByTimeframe: {},
 				href: '/admin/domains/go.example.test/links/a/b'
 			},
 			{
 				path: '/a%2Fb',
 				url: 'https://example.test/percent',
-				state: 'Disabled',
+				state: 'disabled',
 				countsByTimeframe: {
 					'7d': { validVisits: 0, invalidVisits: 0 },
 					'30d': { validVisits: 0, invalidVisits: 0 },
@@ -178,11 +177,12 @@ test('shows an active root destination without reclassifying retained outcomes o
 	vi.mocked(readDomainDetails).mockResolvedValue(report);
 	const data = await load(request(domain, 'https://example.test/start'));
 	expect(data.base.url).toBe('https://example.test/start');
-	expect(data.base.state).toBe('Active');
+	expect(data.base.hasRoot).toBe(true);
 	expect(data.base.countsByTimeframe).toEqual(baseCounts);
 	expect(data.countsByTimeframe.all?.validVisits).toBe(15);
 	expect(data.invalidClicksByTimeframe.all).toBe(10);
-	expect(data.linkCount).toBe(4);
+	expect(data.linkCount).toBe(3);
+	expect(data.links.map(({ path }) => path)).toEqual(['/docs', '/a/b', '/a%2Fb']);
 });
 
 test('missing base details leave base and non-base invalid counts unavailable, not zero', async () => {
@@ -220,6 +220,6 @@ test('disabled collection reads no reports and preserves current inventory', asy
 	expect(data.chart).toBeNull();
 	expect(data.countsByTimeframe).toEqual({});
 	expect(data.invalidClicksByTimeframe).toEqual({});
-	expect(data.base.state).toBe('Fallback');
+	expect(data.base.hasRoot).toBe(false);
 	expect(data.linkCount).toBe(3);
 });

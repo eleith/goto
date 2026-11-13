@@ -14,7 +14,8 @@ export {
 	type GotoConfiguration,
 	type LinkConfiguration,
 	type DomainConfiguration,
-	type RedirectStatus
+	type RedirectStatus,
+	type RedirectResponse
 } from './schema.js';
 export type {
 	ConfigEnvironment,

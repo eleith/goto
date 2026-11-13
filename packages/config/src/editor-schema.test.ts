@@ -22,7 +22,7 @@ describe('Goto editor schema', () => {
 	it('relaxes defaulted fields while keeping authentication, domain links and destinations required', () => {
 		const editor = createEditorSchema();
 		expect(editor.required).toEqual(['auth', 'domains']);
-		for (const name of ['Url', 'Site', 'Appearance', 'Database', 'Analytics', 'Defaults']) {
+		for (const name of ['Url', 'Site', 'Appearance', 'Database', 'Analytics', 'LinkDefaults']) {
 			expect(definition(editor, name).required).toBeUndefined();
 		}
 		expect(property(editor, 'site')).toEqual({ $ref: '#/$defs/Site', default: {} });
@@ -74,22 +74,57 @@ describe('Goto editor schema', () => {
 				{ $ref: `#/$defs/${target}`, default: {} }
 			]);
 		}
-		for (const name of ['DomainDefaults', 'LinkConfiguration']) {
+		for (const name of ['DomainLinkDefaults', 'LinkConfiguration']) {
 			const schema = definition(editor, name);
 			for (const field of ['status_code', 'forward_query']) {
 				expect(property(schema, field)).not.toHaveProperty('default');
 				expect(schema.required ?? []).not.toContain(field);
 			}
 		}
-		expect(property(definition(editor, 'DomainDefaults'), 'fallback')).not.toHaveProperty(
-			'default'
-		);
-		expect(property(definition(editor, 'Defaults'), 'status_code').default).toBe(302);
-		expect(property(definition(editor, 'Defaults'), 'forward_query')).toEqual({
+		expect(property(definition(editor, 'LinkDefaults'), 'status_code').default).toBe(302);
+		expect(property(definition(editor, 'LinkDefaults'), 'forward_query')).toEqual({
 			type: 'boolean',
 			default: false
 		});
-		expect(property(definition(editor, 'Defaults'), 'fallback').default).toBe(404);
+		expect(object(definition(editor, 'LinkDefaults').properties)).not.toHaveProperty('fallback');
+		expect(object(definition(editor, 'DomainLinkDefaults').properties)).not.toHaveProperty(
+			'fallback'
+		);
+	});
+
+	it('keeps root and fallbacks optional with required redirect destinations and no root link key', () => {
+		const editor = createEditorSchema();
+		const domain = definition(editor, 'DomainConfiguration');
+		const response = definition(editor, 'RedirectResponse');
+		expect(response.required).toEqual(['url']);
+		expect(response.additionalProperties).toBe(false);
+		expect(Object.keys(object(response.properties))).toEqual([
+			'url',
+			'status_code',
+			'forward_query'
+		]);
+		expect(property(response, 'url')).toEqual({ $ref: '#/$defs/LinkUrl' });
+		expect(property(response, 'status_code')).toEqual({
+			$ref: '#/$defs/RedirectStatus',
+			default: 302
+		});
+		expect(property(response, 'forward_query')).toEqual({ type: 'boolean', default: false });
+		for (const schema of [
+			property(editor, 'fallback'),
+			property(domain, 'fallback'),
+			property(domain, 'root')
+		]) {
+			expect(schema).toEqual({ $ref: '#/$defs/RedirectResponse' });
+		}
+		expect(branches(definition(editor, 'RedirectStatus')).map((branch) => branch.const)).toEqual([
+			301, 302, 307, 308
+		]);
+		const links = property(domain, 'links');
+		const patterns = Object.keys(object(links.patternProperties));
+		expect(patterns.some((pattern) => new RegExp(pattern).test('/'))).toBe(false);
+		expect(patterns.some((pattern) => new RegExp(pattern).test('/docs'))).toBe(true);
+		expect(object(editor.properties)).not.toHaveProperty('defaults');
+		expect(object(domain.properties)).not.toHaveProperty('defaults');
 	});
 
 	it('maps runtime formats to editor formats and keeps literal constraints separate from tokens', () => {
