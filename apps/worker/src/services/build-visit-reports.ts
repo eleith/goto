@@ -153,7 +153,7 @@ function buildDetails(
 	days: ReturnType<typeof visitDays>
 ): VisitDetails {
 	return {
-		version: 2,
+		version: 3,
 		scope,
 		period,
 		daily: buildDailyDetails(counts.daily, days),

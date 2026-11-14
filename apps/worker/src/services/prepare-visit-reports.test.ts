@@ -47,6 +47,7 @@ const visit: ClassifiedVisit = {
 const overview = { kind: 'overview' as const };
 const domain = { kind: 'domain' as const, domain: 'go.example.test' };
 const docs = { kind: 'link' as const, domain: 'go.example.test', path: '/docs' };
+const root = { ...docs, path: '/' };
 
 function sum(values: VisitTotals[]): VisitTotals {
 	return values.reduce(
@@ -69,10 +70,16 @@ test('publishes summary/detail pairs for all scopes, deletes expired history and
 			.execute();
 		await insertVisit(ctx.db, { ...visit, visited_at: cutoff });
 		await insertVisit(ctx.db, { ...visit, path: '/', outcome: 'invalid', visited_at: now - 2000 });
+		await insertVisit(ctx.db, {
+			...visit,
+			path: '/missing',
+			outcome: 'invalid',
+			visited_at: now - 1000
+		});
 		await prepareVisitReports(ctx, now);
 		const summary = await readVisitSummary(ctx.db, domain);
 		const details = await readVisitDetails(ctx.db, domain);
-		expect(summary?.totals).toEqual({ validVisits: 1, invalidVisits: 1 });
+		expect(summary?.totals).toEqual({ validVisits: 2, invalidVisits: 1 });
 		expect(summary?.scope).toEqual(domain);
 		expect(summary?.period.from).toBe('2026-02-28T12:00:00.000Z');
 		expect(summary?.period.asOf).toBe('2026-05-31T12:00:00.000Z');
@@ -83,17 +90,36 @@ test('publishes summary/detail pairs for all scopes, deletes expired history and
 			invalidVisits: 0
 		});
 		expect(sum(details!.daily)).toEqual(summary?.totals);
-		expect(details?.version).toBe(2);
+		expect(details?.version).toBe(3);
 		expect(details?.browsers).toEqual([
 			{ day: '2026-02-28', name: 'Firefox', validVisits: 1, invalidVisits: 0 },
-			{ day: '2026-05-31', name: 'Firefox', validVisits: 0, invalidVisits: 1 }
+			{ day: '2026-05-31', name: 'Firefox', validVisits: 1, invalidVisits: 1 }
 		]);
 		expect(details?.operatingSystems).toEqual([
 			{ day: '2026-02-28', name: 'Linux', validVisits: 1, invalidVisits: 0 },
-			{ day: '2026-05-31', name: 'Linux', validVisits: 0, invalidVisits: 1 }
+			{ day: '2026-05-31', name: 'Linux', validVisits: 1, invalidVisits: 1 }
 		]);
 		expect(await ctx.db.selectFrom('analytics_reports').select('id').execute()).toHaveLength(4);
-		expect(await ctx.db.selectFrom('visits').select('id').execute()).toHaveLength(2);
+		expect(await ctx.db.selectFrom('visits').select('id').execute()).toHaveLength(3);
+		const rootDetails = await readVisitDetails(ctx.db, root);
+		expect((await readVisitSummary(ctx.db, root))?.totals).toEqual({
+			validVisits: 1,
+			invalidVisits: 0
+		});
+		expect(sum(rootDetails!.daily)).toEqual({ validVisits: 1, invalidVisits: 0 });
+		expect(rootDetails?.browsers).toEqual([
+			{ day: '2026-05-31', name: 'Firefox', validVisits: 1, invalidVisits: 0 }
+		]);
+		expect(rootDetails?.operatingSystems).toEqual([
+			{ day: '2026-05-31', name: 'Linux', validVisits: 1, invalidVisits: 0 }
+		]);
+		expect(
+			await ctx.db
+				.selectFrom('visits')
+				.select(['path', 'outcome'])
+				.where('path', '=', '/')
+				.execute()
+		).toEqual([{ path: '/', outcome: 'invalid' }]);
 		await prepareVisitReports(ctx, now);
 		expect((await readVisitSummary(ctx.db, overview))?.totals).toEqual(summary?.totals);
 	} finally {

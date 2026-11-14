@@ -4,21 +4,11 @@
 	import IconWarningCircle from 'virtual:icons/ph/warning-circle';
 	import IconSpinner from 'virtual:icons/ph/spinner';
 	import AdminPage from '#lib/components/admin/AdminPage.svelte';
+	import { formatUtc } from '#lib/components/admin/format.js';
 	import type { ActionData, PageData, SubmitFunction } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData | null } = $props();
 	let pending = $state(false);
-	const utcFormatter = new Intl.DateTimeFormat('en', {
-		dateStyle: 'medium',
-		timeStyle: 'medium',
-		hourCycle: 'h23',
-		timeZone: 'UTC'
-	});
-
-	function formatUtc(value: string): string {
-		return `${utcFormatter.format(new Date(value))} UTC`;
-	}
-
 	const checkWorker: SubmitFunction = () => {
 		pending = true;
 		return async ({ update }) => {
@@ -41,11 +31,16 @@
 			<dd>{data.appUrl}</dd>
 			<dt>Authentication</dt>
 			<dd>{data.authMode === 'oidc' ? 'OIDC' : 'Shared credentials'}</dd>
-			<dt>Redirect status code</dt>
+		</dl>
+	</section>
+	<section class="admin-info" aria-labelledby="application-defaults-heading">
+		<h2 id="application-defaults-heading">Application defaults</h2>
+		<dl>
+			<dt>Status code</dt>
 			<dd>{data.redirectStatusCode}</dd>
-			<dt>Forward query</dt>
+			<dt>Query forwarding</dt>
 			<dd>{data.forwardQuery ? 'Yes' : 'No'}</dd>
-			<dt>Fallback destination</dt>
+			<dt>Fallback</dt>
 			<dd>{data.fallbackDestination === 404 ? '404 Not found' : data.fallbackDestination}</dd>
 		</dl>
 	</section>

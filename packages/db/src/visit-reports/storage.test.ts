@@ -56,7 +56,7 @@ function preparedReport(
 	return {
 		summary,
 		details: {
-			version: 2,
+			version: 3,
 			scope,
 			period,
 			daily: visitDays(period).map((day, index) => ({
@@ -75,7 +75,7 @@ test('reads summary and details for each explicit SQL scope including root', asy
 	const reports = [
 		preparedReport(overviewScope, asOf, { validVisits: 2, invalidVisits: 1 }),
 		preparedReport(domainScope, asOf, { validVisits: 1, invalidVisits: 1 }),
-		preparedReport(rootScope)
+		preparedReport(rootScope, asOf, { validVisits: 2, invalidVisits: 0 })
 	];
 	await publishVisitReports(db, encodeVisitReports(reports));
 

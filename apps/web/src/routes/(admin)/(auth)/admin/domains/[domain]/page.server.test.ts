@@ -1,4 +1,4 @@
-import { validateConfig } from '@goto/config';
+import { validateConfig, type DomainConfiguration, type RedirectResponse } from '@goto/config';
 import { createVisitPeriod, visitDays, type ReportScope, type VisitDetails } from '@goto/analytics';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { prepareSnapshot } from '#lib/server/snapshot.js';
@@ -11,20 +11,33 @@ beforeEach(() => vi.resetAllMocks());
 const domain = 'go.example.test';
 const period = createVisitPeriod(3, Date.parse('2026-06-15T12:00:00.000Z'));
 
-function request(host = domain, rootUrl?: string, retentionMonths = 3) {
-	const links: Record<string, { url: string; enabled?: boolean }> = {
+function request(
+	host = domain,
+	settings: {
+		root?: RedirectResponse;
+		fallback?: RedirectResponse;
+		globalFallback?: RedirectResponse;
+		retentionMonths?: number;
+		links?: Record<string, { url: string; enabled?: boolean }>;
+	} = {}
+) {
+	const links = settings.links ?? {
 		'/docs': { url: 'https://example.test/docs' },
 		'/a/b': { url: 'https://example.test/nested' },
 		'/a%2Fb': { url: 'https://example.test/percent', enabled: false }
 	};
-	const prepared = validateConfig(
-		{
-			auth: { credentials: { username: 'test', password: 'domain-test-password' } },
-			analytics: { retention_months: retentionMonths },
-			domains: { [domain]: { ...(rootUrl ? { root: { url: rootUrl } } : {}), links } }
-		},
-		{ env: {} }
-	);
+	const domainConfiguration: Pick<DomainConfiguration, 'root' | 'fallback'> & {
+		links: typeof links;
+	} = { links };
+	if (settings.root) domainConfiguration.root = settings.root;
+	if (settings.fallback) domainConfiguration.fallback = settings.fallback;
+	const configuration: Record<string, unknown> = {
+		auth: { credentials: { username: 'test', password: 'domain-test-password' } },
+		analytics: { retention_months: settings.retentionMonths ?? 3 },
+		domains: { [domain]: domainConfiguration }
+	};
+	if (settings.globalFallback) configuration.fallback = settings.globalFallback;
+	const prepared = validateConfig(configuration, { env: {} });
 	return {
 		locals: { snapshot: prepareSnapshot(prepared) },
 		params: { domain: host }
@@ -45,7 +58,7 @@ function details(scope: ReportScope, counts: Record<string, [number, number]>): 
 			invalidVisits
 		}));
 	return {
-		version: 2,
+		version: 3,
 		scope,
 		period,
 		daily,
@@ -57,20 +70,20 @@ function details(scope: ReportScope, counts: Record<string, [number, number]>): 
 const domainDetails = details(
 	{ kind: 'domain', domain },
 	{
-		'2026-03-15': [3, 2],
+		'2026-03-15': [4, 1],
 		'2026-05-16': [5, 4],
-		'2026-06-08': [2, 3],
-		'2026-06-09': [1, 2],
-		'2026-06-15': [4, 3]
+		'2026-06-08': [3, 2],
+		'2026-06-09': [2, 1],
+		'2026-06-15': [5, 2]
 	}
 );
-const baseDetails = details(
+const rootDetails = details(
 	{ kind: 'link', domain, path: '/' },
 	{
-		'2026-03-15': [3, 1],
-		'2026-06-08': [0, 1],
-		'2026-06-09': [0, 1],
-		'2026-06-15': [0, 1]
+		'2026-03-15': [4, 0],
+		'2026-06-08': [1, 0],
+		'2026-06-09': [1, 0],
+		'2026-06-15': [1, 0]
 	}
 );
 const docsDetails = details(
@@ -85,15 +98,15 @@ const emptyDetails = details({ kind: 'link', domain, path: '/a%2Fb' }, {});
 const report = {
 	domain: domainDetails,
 	links: [
-		{ path: '/', details: baseDetails },
+		{ path: '/', details: rootDetails },
 		{ path: '/docs', details: docsDetails },
 		{ path: '/a%2Fb', details: emptyDetails }
 	]
 };
-const baseCounts = {
-	'7d': { validVisits: 0, invalidVisits: 2 },
-	'30d': { validVisits: 0, invalidVisits: 3 },
-	all: { validVisits: 3, invalidVisits: 4 }
+const rootCounts = {
+	'7d': { validVisits: 2, invalidVisits: 0 },
+	'30d': { validVisits: 3, invalidVisits: 0 },
+	all: { validVisits: 7, invalidVisits: 0 }
 };
 
 test('projects domain counts and browser/OS visits without exposing link series or dated browser/OS counts', async () => {
@@ -113,33 +126,35 @@ test('projects domain counts and browser/OS visits without exposing link series 
 		linkCount: 3,
 		timeframes: ['7d', '30d', 'all'],
 		countsByTimeframe: {
-			'7d': { validVisits: 5, invalidVisits: 5 },
-			'30d': { validVisits: 7, invalidVisits: 8 },
-			all: { validVisits: 15, invalidVisits: 14 }
+			'7d': { validVisits: 7, invalidVisits: 3 },
+			'30d': { validVisits: 10, invalidVisits: 5 },
+			all: { validVisits: 19, invalidVisits: 10 }
 		},
 		browserOsVisitsByTimeframe: {
 			'7d': {
-				browsers: [{ name: 'Other', visits: 5 }],
-				operatingSystems: [{ name: 'Other', visits: 5 }]
-			},
-			'30d': {
 				browsers: [{ name: 'Other', visits: 7 }],
 				operatingSystems: [{ name: 'Other', visits: 7 }]
 			},
+			'30d': {
+				browsers: [{ name: 'Other', visits: 10 }],
+				operatingSystems: [{ name: 'Other', visits: 10 }]
+			},
 			all: {
-				browsers: [{ name: 'Other', visits: 15 }],
-				operatingSystems: [{ name: 'Other', visits: 15 }]
+				browsers: [{ name: 'Other', visits: 19 }],
+				operatingSystems: [{ name: 'Other', visits: 19 }]
 			}
 		},
-		invalidClicksByTimeframe: { '7d': 3, '30d': 5, all: 10 },
 		chart: { daily: domainDetails.daily, period },
-		base: {
-			url: null,
-			hasRoot: false,
-			countsByTimeframe: baseCounts,
-			href: '/admin/domains/go.example.test/links'
-		},
+		root: null,
+		fallback: null,
 		links: [
+			{
+				path: '/',
+				url: null,
+				state: 'active',
+				countsByTimeframe: rootCounts,
+				href: '/admin/domains/go.example.test/links'
+			},
 			{
 				path: '/docs',
 				url: 'https://example.test/docs',
@@ -173,53 +188,132 @@ test('projects domain counts and browser/OS visits without exposing link series 
 	});
 });
 
-test('shows an active root destination without reclassifying retained outcomes or subtracting valid root traffic', async () => {
+test('keeps root and fallback responses separate and includes all normalized root history in valid domain visits', async () => {
 	vi.mocked(readDomainDetails).mockResolvedValue(report);
-	const data = await load(request(domain, 'https://example.test/start'));
-	expect(data.base.url).toBe('https://example.test/start');
-	expect(data.base.hasRoot).toBe(true);
-	expect(data.base.countsByTimeframe).toEqual(baseCounts);
-	expect(data.countsByTimeframe.all?.validVisits).toBe(15);
-	expect(data.invalidClicksByTimeframe.all).toBe(10);
+	const root: RedirectResponse = {
+		url: 'https://example.test/start',
+		status_code: 307,
+		forward_query: true
+	};
+	const fallback: RedirectResponse = {
+		url: 'https://example.test/missing',
+		status_code: 308,
+		forward_query: false
+	};
+	const data = await load(
+		request(domain, {
+			root,
+			fallback,
+			globalFallback: { url: 'https://example.test/global', status_code: 302, forward_query: true }
+		})
+	);
+	expect(data.root).toEqual(root);
+	expect(data.fallback).toEqual(fallback);
+	expect(data.links[0]).toEqual({
+		path: '/',
+		url: root.url,
+		state: 'active',
+		countsByTimeframe: rootCounts,
+		href: '/admin/domains/go.example.test/links'
+	});
+	expect(data.countsByTimeframe.all).toEqual({ validVisits: 19, invalidVisits: 10 });
 	expect(data.linkCount).toBe(3);
-	expect(data.links.map(({ path }) => path)).toEqual(['/docs', '/a/b', '/a%2Fb']);
+	expect(data.links.map(({ path }) => path)).toEqual(['/', '/docs', '/a/b', '/a%2Fb']);
 });
 
-test('missing base details leave base and non-base invalid counts unavailable, not zero', async () => {
+test('keeps root reachable through the domain fallback with no named links', async () => {
+	vi.mocked(readDomainDetails).mockResolvedValue(report);
+	const fallback: RedirectResponse = {
+		url: 'https://example.test/missing',
+		status_code: 302,
+		forward_query: false
+	};
+	const data = await load(request(domain, { fallback, links: {} }));
+	expect(readDomainDetails).toHaveBeenCalledExactlyOnceWith(expect.any(Object), domain, []);
+	expect(data.root).toBeNull();
+	expect(data.fallback).toEqual(fallback);
+	expect(data.linkCount).toBe(0);
+	expect(data.links).toEqual([
+		{
+			path: '/',
+			url: fallback.url,
+			state: 'active',
+			countsByTimeframe: rootCounts,
+			href: '/admin/domains/go.example.test/links'
+		}
+	]);
+	expect(data.countsByTimeframe.all).toEqual({ validVisits: 19, invalidVisits: 10 });
+});
+
+test('missing root details leave root visits unavailable without hiding non-root invalid counts', async () => {
 	vi.mocked(readDomainDetails).mockResolvedValue({
 		domain: domainDetails,
 		links: [{ path: '/docs', details: docsDetails }]
 	});
 	const data = await load(request());
 	expect(data.available).toBe(true);
-	expect(data.base.countsByTimeframe).toEqual({});
-	expect(data.invalidClicksByTimeframe).toEqual({});
-	expect(data.countsByTimeframe.all?.validVisits).toBe(15);
+	expect(data.links[0]).toEqual({
+		path: '/',
+		url: null,
+		state: 'active',
+		countsByTimeframe: {},
+		href: '/admin/domains/go.example.test/links'
+	});
+	expect(data.countsByTimeframe.all).toEqual({ validVisits: 19, invalidVisits: 10 });
 });
 
 test('rejects unknown domains before reading and keeps unavailable inventory usable', async () => {
 	await expect(load(request('unknown.test'))).rejects.toMatchObject({ status: 404 });
 	expect(readDomainDetails).not.toHaveBeenCalled();
 	vi.mocked(readDomainDetails).mockResolvedValue(null);
-	const data = await load(request());
+	const fallback: RedirectResponse = {
+		url: 'https://example.test/global',
+		status_code: 307,
+		forward_query: true
+	};
+	const data = await load(request(domain, { globalFallback: fallback }));
+	expect(data.root).toBeNull();
+	expect(data.fallback).toEqual(fallback);
 	expect(data.available).toBe(false);
 	expect(data.browserOsVisitsByTimeframe).toEqual({});
 	expect(data.chart).toBeNull();
 	expect(data.countsByTimeframe).toEqual({});
-	expect(data.invalidClicksByTimeframe).toEqual({});
-	expect(data.links[0]?.countsByTimeframe).toEqual({});
+	expect(data.links[0]).toEqual({
+		path: '/',
+		url: fallback.url,
+		state: 'active',
+		countsByTimeframe: {},
+		href: '/admin/domains/go.example.test/links'
+	});
 	expect(data.linkCount).toBe(3);
 });
 
 test('disabled collection reads no reports and preserves current inventory', async () => {
-	const data = await load(request(domain, undefined, 0));
+	const root: RedirectResponse = {
+		url: 'https://example.test/start',
+		status_code: 301,
+		forward_query: true
+	};
+	const fallback: RedirectResponse = {
+		url: 'https://example.test/missing',
+		status_code: 302,
+		forward_query: false
+	};
+	const data = await load(request(domain, { root, fallback, retentionMonths: 0 }));
 	expect(readDomainDetails).not.toHaveBeenCalled();
 	expect(data.collectionEnabled).toBe(false);
 	expect(data.browserOsVisitsByTimeframe).toEqual({});
 	expect(data.timeframes).toEqual([]);
 	expect(data.chart).toBeNull();
 	expect(data.countsByTimeframe).toEqual({});
-	expect(data.invalidClicksByTimeframe).toEqual({});
-	expect(data.base.hasRoot).toBe(false);
+	expect(data.root).toEqual(root);
+	expect(data.fallback).toEqual(fallback);
+	expect(data.links[0]).toEqual({
+		path: '/',
+		url: root.url,
+		state: 'active',
+		countsByTimeframe: {},
+		href: '/admin/domains/go.example.test/links'
+	});
 	expect(data.linkCount).toBe(3);
 });

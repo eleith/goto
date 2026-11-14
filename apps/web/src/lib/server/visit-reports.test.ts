@@ -36,7 +36,7 @@ test('reads prepared output and hides snapshots from a different retention polic
 	};
 	const days = visitDays(period);
 	const details: VisitDetails = {
-		version: 2,
+		version: 3,
 		scope: summary.scope,
 		period,
 		daily: days.map((day, index) => ({

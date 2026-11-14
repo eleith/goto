@@ -91,7 +91,7 @@ const dailyBrowserOsCounts = Type.Object(
 
 export const VisitDetailsSchema = Type.Object(
 	{
-		version: Type.Literal(2),
+		version: Type.Literal(3),
 		scope: ReportScopeSchema,
 		period: ReportPeriodSchema,
 		daily: Type.Array(

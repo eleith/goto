@@ -1,11 +1,6 @@
 import { error } from '@sveltejs/kit';
 import { countBrowserOsVisitsByTimeframe } from '@goto/analytics';
-import {
-	availableVisitTimeframes,
-	countVisitWindows,
-	visitWindow,
-	type VisitTimeframe
-} from '@goto/analytics/daily';
+import { availableVisitTimeframes, countVisitWindows, visitWindow } from '@goto/analytics/daily';
 import { currentLinkState } from '#lib/server/link-state.js';
 import { readDomainDetails } from '#lib/server/visit-reports.js';
 import type { PageServerLoad } from './$types';
@@ -36,35 +31,32 @@ export const load = (async ({ locals, params }) => {
 		domainDetails ?? undefined,
 		windows
 	);
-	const baseCountsByTimeframe = countVisitWindows(detailsByPath.get('/')?.daily, windows);
-	const invalidClicksByTimeframe: Partial<Record<VisitTimeframe, number>> = {};
-	for (const { timeframe } of windows) {
-		const totals = countsByTimeframe[timeframe];
-		if (!totals) continue;
-		const base = baseCountsByTimeframe[timeframe];
-		if (!base) continue;
-		invalidClicksByTimeframe[timeframe] = totals.invalidVisits - base.invalidVisits;
-	}
-
+	let rootUrl: string | null = null;
+	if (prepared.root !== null) rootUrl = prepared.root.url;
+	else if (prepared.fallback !== null) rootUrl = prepared.fallback.url;
+	const rootCountsByTimeframe = countVisitWindows(detailsByPath.get('/')?.daily, windows);
+	const rootHref = linkHref(domain, '/');
 	const now = Date.now();
-	const links = Object.entries(prepared.links).map(([path, link]) => {
-		const daily = detailsByPath.get(path)?.daily;
-		const countsByTimeframe = countVisitWindows(daily, windows);
-		return {
-			path,
-			url: link.url,
-			state: currentLinkState(link, now),
-			countsByTimeframe,
-			href: linkHref(domain, path)
-		};
-	});
-	const hasRoot = prepared.root !== null;
-	let baseUrl: string | null = null;
-	if (prepared.root !== null) {
-		baseUrl = prepared.root.url;
-	} else if (prepared.fallback !== null) {
-		baseUrl = prepared.fallback.url;
-	}
+	const links = [
+		{
+			path: '/',
+			url: rootUrl,
+			state: 'active' as const,
+			countsByTimeframe: rootCountsByTimeframe,
+			href: rootHref
+		},
+		...Object.entries(prepared.links).map(([path, link]) => {
+			const daily = detailsByPath.get(path)?.daily;
+			const countsByTimeframe = countVisitWindows(daily, windows);
+			return {
+				path,
+				url: link.url,
+				state: currentLinkState(link, now),
+				countsByTimeframe,
+				href: linkHref(domain, path)
+			};
+		})
+	];
 	const asOf = domainDetails ? Date.parse(domainDetails.period.asOf) : null;
 	const chart = domainDetails ? { daily: domainDetails.daily, period: domainDetails.period } : null;
 	return {
@@ -73,18 +65,13 @@ export const load = (async ({ locals, params }) => {
 		collectionEnabled,
 		available: domainDetails !== null,
 		asOf,
-		linkCount: links.length,
+		linkCount: currentPaths.length,
 		timeframes,
 		countsByTimeframe,
 		browserOsVisitsByTimeframe,
-		invalidClicksByTimeframe,
 		chart,
-		base: {
-			url: baseUrl,
-			hasRoot,
-			countsByTimeframe: baseCountsByTimeframe,
-			href: linkHref(domain, '/')
-		},
+		root: prepared.root,
+		fallback: prepared.fallback,
 		links
 	};
 }) satisfies PageServerLoad;

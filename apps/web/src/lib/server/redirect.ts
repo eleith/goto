@@ -91,13 +91,12 @@ function resolveVisitResponse(
 	target: ParsedTarget,
 	now: number
 ): ResolvedResponse {
+	const isRoot = target.path === '/';
 	let redirect = domain.fallback;
 	let outcome: VisitOutcome = 'invalid';
-	if (target.path === '/') {
-		if (domain.root !== null) {
-			redirect = domain.root;
-			outcome = 'valid';
-		}
+	if (isRoot) {
+		outcome = 'valid';
+		if (domain.root !== null) redirect = domain.root;
 	} else {
 		const link = findActiveLink(domain, target.path, now);
 		if (link) {
@@ -108,7 +107,7 @@ function resolveVisitResponse(
 
 	if (redirect === null) {
 		const response = emptyResponse(404);
-		return { response, outcome: 'invalid' };
+		return { response, outcome };
 	}
 
 	let destination = redirect.url;
@@ -116,7 +115,8 @@ function resolveVisitResponse(
 	const selfRedirect = isSelfRedirect(destination, host, target.path);
 	if (selfRedirect) {
 		const response = emptyResponse(404);
-		return { response, outcome: 'invalid' };
+		if (!isRoot) outcome = 'invalid';
+		return { response, outcome };
 	}
 
 	const response = redirectResponse(destination, redirect.status_code);

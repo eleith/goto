@@ -38,10 +38,12 @@
 				<a
 					class="admin-inventory-row admin-inventory-link"
 					href={`${link.href}?period=${timeframe}`}
-					aria-label={link.path}
+					aria-label={link.path === '/' ? '(root)' : link.path}
 				>
-					<span class="admin-inventory-primary"><code>{link.path}</code></span>
-					<span class="admin-inventory-secondary">{link.url ?? '404 Not found'}</span>
+					<span class="admin-inventory-primary"
+						><code>{link.path === '/' ? '(root)' : link.path}</code></span
+					>
+					<span class="admin-inventory-secondary">{link.url ?? '[not found]'}</span>
 					<span class="admin-inventory-state">
 						{#if link.state === 'active'}Active
 						{:else if link.state === 'disabled'}Disabled

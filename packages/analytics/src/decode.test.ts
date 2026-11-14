@@ -14,7 +14,7 @@ const summary: OverviewSummary = {
 	domains: []
 };
 const details: VisitDetails = {
-	version: 2,
+	version: 3,
 	scope,
 	period,
 	daily: visitDays(period).map((day, index) => ({
@@ -28,6 +28,12 @@ const details: VisitDetails = {
 test('readers decode their self-contained document independently', () => {
 	expect(parseVisitSummary(JSON.stringify(summary), scope)).toEqual(summary);
 	expect(parseVisitDetails(JSON.stringify(details), scope)).toEqual(details);
+});
+
+test('details reader rejects version 2 reports with legacy Root classification', () => {
+	expect(() => parseVisitDetails(JSON.stringify({ ...details, version: 2 }), scope)).toThrow(
+		'Invalid analytics report'
+	);
 });
 
 test('details reader can require the same reporting policy and window', () => {

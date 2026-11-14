@@ -315,20 +315,20 @@ describe('validity and fallback', () => {
 		expect(missing.visit).toMatchObject({ path: '/home', outcome: 'invalid' });
 	});
 
-	test('an unconfigured root uses the fallback response but remains an invalid base visit', () => {
+	test('a root request using fallback is still a valid Root visit', () => {
 		const domain = preparedDomain({}, fallback);
 		const { response, visit } = resolveRedirect(domain, host, '/?incoming=ignored', 'GET');
 
 		expect(response.status).toBe(302);
 		expect(response.headers.get('location')).toBe(fallbackUrl);
-		expect(visit).toMatchObject({ path: '/', outcome: 'invalid' });
+		expect(visit).toMatchObject({ path: '/', outcome: 'valid' });
 	});
 
-	test('an unconfigured root remains a base visit with an invalid outcome', () => {
+	test('a root request returning 404 is still a valid Root visit', () => {
 		const domain = preparedDomain();
 		const { response, visit } = resolveRedirect(domain, host, '/', 'GET');
 		expect(response.status).toBe(404);
-		expect(visit).toMatchObject({ path: '/', outcome: 'invalid' });
+		expect(visit).toMatchObject({ path: '/', outcome: 'valid' });
 	});
 
 	test('default fallback options preserve the URL without appending the incoming path or query', () => {
@@ -421,22 +421,22 @@ describe('query forwarding', () => {
 
 describe('direct self-loops', () => {
 	test.each([
-		['/', 'https://GO.EXAMPLE.TEST:443/?changed=one#fragment'],
-		['/%64ocs?incoming=one', 'https://go.example.test/docs?different=two'],
-		['/a%2Fb', 'https://go.example.test/a/b#fragment'],
-		['/docs', 'http://go.example.test:80/docs'],
-		['/docs', 'https:///go.example.test/docs']
-	])('runtime blocks a direct fallback loop: %s -> %s', (target, url) => {
+		['/', 'https://GO.EXAMPLE.TEST:443/?changed=one#fragment', 'valid'],
+		['/%64ocs?incoming=one', 'https://go.example.test/docs?different=two', 'invalid'],
+		['/a%2Fb', 'https://go.example.test/a/b#fragment', 'invalid'],
+		['/docs', 'http://go.example.test:80/docs', 'invalid'],
+		['/docs', 'https:///go.example.test/docs', 'invalid']
+	])('runtime blocks a direct fallback loop: %s -> %s', (target, url, expectedOutcome) => {
 		const domain = preparedDomain({}, preparedResponse({ url, forward_query: true }));
 		const { response, visit } = resolveRedirect(domain, host, target, 'GET');
 
 		expect(response.status).toBe(404);
-		expect(visit?.outcome).toBe('invalid');
+		expect(visit?.outcome).toBe(expectedOutcome);
 		expect(response.headers.has('location')).toBe(false);
 		expect(response.headers.get('cache-control')).toBe('no-store');
 	});
 
-	test('a direct root loop returns an invalid 404 without trying fallback', () => {
+	test('a Root loop is blocked with 404 without making the Root request invalid', () => {
 		const root = preparedResponse({
 			url: 'https://GO.EXAMPLE.TEST:443/?owned=old#section',
 			forward_query: true
@@ -447,7 +447,7 @@ describe('direct self-loops', () => {
 		expect(response.status).toBe(404);
 		expect(response.headers.has('location')).toBe(false);
 		expect(response.headers.get('cache-control')).toBe('no-store');
-		expect(visit).toMatchObject({ path: '/', outcome: 'invalid' });
+		expect(visit).toMatchObject({ path: '/', outcome: 'valid' });
 	});
 
 	test('a direct link loop returns an invalid 404 without trying fallback', () => {

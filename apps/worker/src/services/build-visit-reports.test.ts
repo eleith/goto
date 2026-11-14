@@ -22,10 +22,10 @@ test('builds gap-free UTC daily details with zeros and partial calendar edges', 
 					domain: null,
 					path: null,
 					day: '2026-05-31',
-					validVisits: 1,
-					invalidVisits: 4,
-					baseValidVisits: 0,
-					baseInvalidVisits: 2
+					validVisits: 3,
+					invalidVisits: 2,
+					baseValidVisits: 2,
+					baseInvalidVisits: 0
 				}
 			],
 			browsers: [
@@ -44,8 +44,8 @@ test('builds gap-free UTC daily details with zeros and partial calendar edges', 
 					path: null,
 					day: '2026-05-31',
 					name: 'Firefox',
-					validVisits: 1,
-					invalidVisits: 4
+					validVisits: 3,
+					invalidVisits: 2
 				}
 			],
 			operatingSystems: [
@@ -64,8 +64,8 @@ test('builds gap-free UTC daily details with zeros and partial calendar edges', 
 					path: null,
 					day: '2026-05-31',
 					name: 'Linux',
-					validVisits: 1,
-					invalidVisits: 4
+					validVisits: 3,
+					invalidVisits: 2
 				}
 			]
 		},
@@ -77,18 +77,18 @@ test('builds gap-free UTC daily details with zeros and partial calendar edges', 
 		version: 1,
 		scope: { kind: 'overview' },
 		period,
-		totals: { validVisits: 3, invalidVisits: 5 },
-		base: { validVisits: 1, invalidVisits: 2 },
+		totals: { validVisits: 5, invalidVisits: 3 },
+		base: { validVisits: 3, invalidVisits: 0 },
 		domains: []
 	});
-	expect(report?.details.version).toBe(2);
+	expect(report?.details.version).toBe(3);
 	expect(report?.details.browsers).toEqual([
 		{ day: '2026-02-28', name: 'Firefox', validVisits: 2, invalidVisits: 1 },
-		{ day: '2026-05-31', name: 'Firefox', validVisits: 1, invalidVisits: 4 }
+		{ day: '2026-05-31', name: 'Firefox', validVisits: 3, invalidVisits: 2 }
 	]);
 	expect(report?.details.operatingSystems).toEqual([
 		{ day: '2026-02-28', name: 'Linux', validVisits: 2, invalidVisits: 1 },
-		{ day: '2026-05-31', name: 'Linux', validVisits: 1, invalidVisits: 4 }
+		{ day: '2026-05-31', name: 'Linux', validVisits: 3, invalidVisits: 2 }
 	]);
 	expect(report?.details.daily).toHaveLength(visitDays(period).length);
 	expect(report?.details.daily[0]).toEqual({
@@ -109,8 +109,8 @@ test('builds gap-free UTC daily details with zeros and partial calendar edges', 
 		start: '2026-05-31T00:00:00.000Z',
 		end: '2026-06-01T00:00:00.000Z',
 		partial: true,
-		validVisits: 1,
-		invalidVisits: 4
+		validVisits: 3,
+		invalidVisits: 2
 	});
 });
 
@@ -126,18 +126,18 @@ test('indexes explicit domain and link scopes, including empty links and root, w
 				{
 					...overview,
 					day: '2026-06-01',
-					validVisits: 8,
-					invalidVisits: 3,
-					baseValidVisits: 1,
-					baseInvalidVisits: 1
+					validVisits: 9,
+					invalidVisits: 2,
+					baseValidVisits: 2,
+					baseInvalidVisits: 0
 				},
 				{
 					...domain,
 					day: '2026-06-01',
-					validVisits: 4,
-					invalidVisits: 2,
-					baseValidVisits: 1,
-					baseInvalidVisits: 1
+					validVisits: 5,
+					invalidVisits: 1,
+					baseValidVisits: 2,
+					baseInvalidVisits: 0
 				},
 				{
 					...link,
@@ -150,27 +150,27 @@ test('indexes explicit domain and link scopes, including empty links and root, w
 				{
 					...root,
 					day: '2026-06-01',
-					validVisits: 1,
-					invalidVisits: 1,
-					baseValidVisits: 1,
-					baseInvalidVisits: 1
+					validVisits: 2,
+					invalidVisits: 0,
+					baseValidVisits: 2,
+					baseInvalidVisits: 0
 				}
 			],
 			browsers: [
-				{ ...overview, day: '2026-06-01', name: 'Other', validVisits: 8, invalidVisits: 3 },
-				{ ...domain, day: '2026-06-01', name: 'Firefox', validVisits: 4, invalidVisits: 2 },
+				{ ...overview, day: '2026-06-01', name: 'Other', validVisits: 9, invalidVisits: 2 },
+				{ ...domain, day: '2026-06-01', name: 'Firefox', validVisits: 5, invalidVisits: 1 },
 				{ ...link, day: '2026-06-01', name: 'Chrome', validVisits: 2, invalidVisits: 0 },
-				{ ...root, day: '2026-06-01', name: 'Firefox', validVisits: 1, invalidVisits: 1 }
+				{ ...root, day: '2026-06-01', name: 'Firefox', validVisits: 2, invalidVisits: 0 }
 			],
 			operatingSystems: [
-				{ ...overview, day: '2026-06-01', name: 'Other', validVisits: 8, invalidVisits: 3 },
-				{ ...domain, day: '2026-06-01', name: 'Linux', validVisits: 4, invalidVisits: 2 },
+				{ ...overview, day: '2026-06-01', name: 'Other', validVisits: 9, invalidVisits: 2 },
+				{ ...domain, day: '2026-06-01', name: 'Linux', validVisits: 5, invalidVisits: 1 },
 				{ ...link, day: '2026-06-01', name: 'Linux', validVisits: 2, invalidVisits: 0 },
-				{ ...root, day: '2026-06-01', name: 'Linux', validVisits: 1, invalidVisits: 1 }
+				{ ...root, day: '2026-06-01', name: 'Linux', validVisits: 2, invalidVisits: 0 }
 			]
 		},
 		[
-			{ domain: 'go.example.test', paths: ['/docs', '/empty', '/'] },
+			{ domain: 'go.example.test', paths: ['/docs', '/empty'] },
 			{ domain: 'empty.example.test', paths: ['/docs'] }
 		],
 		period
@@ -192,22 +192,21 @@ test('indexes explicit domain and link scopes, including empty links and root, w
 		version: 1,
 		scope: { kind: 'domain', domain: 'go.example.test' },
 		period,
-		totals: { validVisits: 4, invalidVisits: 2 },
-		base: { validVisits: 1, invalidVisits: 1 },
+		totals: { validVisits: 5, invalidVisits: 1 },
+		base: { validVisits: 2, invalidVisits: 0 },
 		links: [
 			{ path: '/docs', totals: { validVisits: 2, invalidVisits: 0 } },
-			{ path: '/empty', totals: { validVisits: 0, invalidVisits: 0 } },
-			{ path: '/', totals: { validVisits: 1, invalidVisits: 1 } }
+			{ path: '/empty', totals: { validVisits: 0, invalidVisits: 0 } }
 		]
 	});
 	expect(overviewReport?.summary).toEqual({
 		version: 1,
 		scope: { kind: 'overview' },
 		period,
-		totals: { validVisits: 8, invalidVisits: 3 },
-		base: { validVisits: 1, invalidVisits: 1 },
+		totals: { validVisits: 9, invalidVisits: 2 },
+		base: { validVisits: 2, invalidVisits: 0 },
 		domains: [
-			{ domain: 'go.example.test', totals: { validVisits: 4, invalidVisits: 2 } },
+			{ domain: 'go.example.test', totals: { validVisits: 5, invalidVisits: 1 } },
 			{ domain: 'empty.example.test', totals: { validVisits: 0, invalidVisits: 0 } }
 		]
 	});
@@ -221,10 +220,21 @@ test('indexes explicit domain and link scopes, including empty links and root, w
 		{ day: '2026-06-01', name: 'Chrome', validVisits: 2, invalidVisits: 0 }
 	]);
 	expect(domainReport?.details.browsers).toEqual([
-		{ day: '2026-06-01', name: 'Firefox', validVisits: 4, invalidVisits: 2 }
+		{ day: '2026-06-01', name: 'Firefox', validVisits: 5, invalidVisits: 1 }
+	]);
+	expect(base?.summary.totals).toEqual({ validVisits: 2, invalidVisits: 0 });
+	expect(base?.details.daily.find(({ start }) => start === '2026-06-01T00:00:00.000Z')).toEqual({
+		start: '2026-06-01T00:00:00.000Z',
+		end: '2026-06-02T00:00:00.000Z',
+		partial: false,
+		validVisits: 2,
+		invalidVisits: 0
+	});
+	expect(base?.details.browsers).toEqual([
+		{ day: '2026-06-01', name: 'Firefox', validVisits: 2, invalidVisits: 0 }
 	]);
 	expect(base?.details.operatingSystems).toEqual([
-		{ day: '2026-06-01', name: 'Linux', validVisits: 1, invalidVisits: 1 }
+		{ day: '2026-06-01', name: 'Linux', validVisits: 2, invalidVisits: 0 }
 	]);
 	expect(empty?.summary.totals).toEqual({ validVisits: 0, invalidVisits: 0 });
 	expect(empty?.details.daily).toEqual(
@@ -258,6 +268,7 @@ test('indexes explicit domain and link scopes, including empty links and root, w
 	);
 	expect(unconfiguredRoot?.summary.totals).toEqual({ validVisits: 0, invalidVisits: 0 });
 	for (const report of reports) {
+		expect(report.details.version).toBe(3);
 		expect(report.details.scope).toEqual(report.summary.scope);
 		expect(report.details.period).toEqual(period);
 	}

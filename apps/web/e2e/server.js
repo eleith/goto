@@ -34,7 +34,12 @@ const configuration = {
 				'/_app/version.json': { url: 'https://example.org/public-asset' },
 				'/a/b': { url: 'https://example.org/decoded' },
 				'/a%2Fb': { url: 'https://example.org/literal-percent' },
-				'/docs': { url: 'https://example.org/first-domain' },
+				'/docs': {
+					url: 'https://example.org/first-domain',
+					valid_from: '2020-01-01T00:00:00Z',
+					valid_until: '2100-01-01T00:00:00Z',
+					tags: ['work', 'docs']
+				},
 				'/healthz': { url: 'https://example.org/public-health' }
 			}
 		},
@@ -70,6 +75,7 @@ async function seedVisits() {
 				os: 'Linux'
 			},
 			{ domain: 'go.example.org', path: '/a/b', outcome: 'invalid' },
+			// Legacy Root classification exercises report normalization without rewriting raw visits.
 			{ domain: 'go.example.org', path: '/', outcome: 'invalid' },
 			{
 				domain: 'go.example.org',

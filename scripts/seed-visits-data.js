@@ -113,7 +113,7 @@ function requestPaths(links) {
 }
 
 function visitOutcome(prepared, path, visitedAt) {
-	if (path === '/') return prepared.root ? 'valid' : 'invalid';
+	if (path === '/') return 'valid';
 	const link = prepared.links[path];
 	if (!link || !link.enabled) return 'invalid';
 	if (link.valid_from !== undefined && visitedAt < Date.parse(link.valid_from)) return 'invalid';

@@ -75,7 +75,7 @@ test('the compiled writer persists outcomes, isolates locks and drains visits be
 				)
 				.all('go.example.org', '/', '/missing')
 		).toEqual([
-			{ path: '/', outcome: 'invalid' },
+			{ path: '/', outcome: 'valid' },
 			{ path: '/missing', outcome: 'invalid' }
 		]);
 	} finally {

@@ -62,7 +62,8 @@ function scopedVisits(since: number, asOf: number, inventory: ReportInventory) {
 	const currentLink = linkRules.length === 0 ? sql`0` : sql.join(linkRules, sql` OR `);
 	return sql`
 		WITH retained_visits AS (
-			SELECT domain, path, outcome, visited_at, browser, os
+			SELECT domain, path, CASE WHEN path = '/' THEN 'valid' ELSE outcome END AS outcome,
+				visited_at, browser, os
 			FROM visits
 			WHERE visited_at >= ${since} AND visited_at < ${asOf}
 		), scoped_visits AS (

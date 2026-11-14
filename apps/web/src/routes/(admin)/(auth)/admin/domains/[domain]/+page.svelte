@@ -20,8 +20,7 @@
 		data.chart ? visitGranularity(timeframe, data.chart.period.retentionMonths) : 'day'
 	);
 	let visits = $derived(data.countsByTimeframe[timeframe]?.validVisits ?? null);
-	let baseVisits = $derived(data.base.countsByTimeframe[timeframe]?.validVisits ?? null);
-	let invalidClicks = $derived(data.invalidClicksByTimeframe[timeframe] ?? null);
+	let invalidClicks = $derived(data.countsByTimeframe[timeframe]?.invalidVisits ?? null);
 	let browserOsVisits = $derived(data.browserOsVisitsByTimeframe[timeframe] ?? null);
 </script>
 
@@ -47,13 +46,6 @@
 		{#if data.collectionEnabled}
 			<StatCard label="Visits" value={visits} />
 			<StatCard label="Invalid clicks" value={invalidClicks} />
-			<a
-				class="base-visits-link"
-				href={`${data.base.href}?period=${timeframe}`}
-				aria-label="Base visits"
-			>
-				<StatCard label="Base visits" value={baseVisits} />
-			</a>
 		{/if}
 	</div>
 	<section class="admin-info" aria-labelledby="domain-details-heading">
@@ -61,14 +53,17 @@
 		<dl>
 			<dt>Domain</dt>
 			<dd>{data.domain}</dd>
-			<dt>Base destination</dt>
+			<dt>Root</dt>
 			<dd>
-				{#if data.base.url}<a class="admin-destination" href={data.base.url}>{data.base.url}</a>
-				{:else}404 Not found{/if}
+				{#if data.root}
+					<a class="admin-destination" href={data.root.url}>{data.root.url}</a>
+				{:else}Uses fallback{/if}
 			</dd>
-			<dt>Base status</dt>
+			<dt>Fallback</dt>
 			<dd>
-				{#if data.base.hasRoot}Active{:else}Fallback{/if}
+				{#if data.fallback}
+					<a class="admin-destination" href={data.fallback.url}>{data.fallback.url}</a>
+				{:else}404 Not found{/if}
 			</dd>
 		</dl>
 	</section>
@@ -80,22 +75,11 @@
 	{/if}
 	<section>
 		<h2>Links</h2>
-		{#if data.links.length === 0}<p>No links configured.</p>
-		{:else}
-			<LinkInventory
-				label={`Links on ${data.domain}`}
-				links={data.links}
-				{timeframe}
-				collectionEnabled={data.collectionEnabled}
-			/>
-		{/if}
+		<LinkInventory
+			label={`Links on ${data.domain}`}
+			links={data.links}
+			{timeframe}
+			collectionEnabled={data.collectionEnabled}
+		/>
 	</section>
 </AdminPage>
-
-<style>
-	.base-visits-link {
-		color: inherit;
-		text-decoration: none;
-		border-radius: var(--radius-card);
-	}
-</style>

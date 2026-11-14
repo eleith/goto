@@ -71,7 +71,7 @@ async function seedVisits(): Promise<void> {
 		.execute();
 }
 
-test('aggregates explicit UTC scope identities, outcomes and root subsets', async () => {
+test('aggregates explicit UTC scopes with legacy Root outcomes normalized only in reports', async () => {
 	await seedVisits();
 	const result = await aggregateVisitReports(db, since, asOf, inventory);
 
@@ -93,10 +93,10 @@ test('aggregates explicit UTC scope identities, outcomes and root subsets', asyn
 				domain: null,
 				path: null,
 				day: '2026-02-01',
-				validVisits: 1,
-				invalidVisits: 4,
-				baseValidVisits: 1,
-				baseInvalidVisits: 2
+				validVisits: 3,
+				invalidVisits: 2,
+				baseValidVisits: 3,
+				baseInvalidVisits: 0
 			},
 			{
 				scopeKind: 'domain',
@@ -113,10 +113,10 @@ test('aggregates explicit UTC scope identities, outcomes and root subsets', asyn
 				domain,
 				path: null,
 				day: '2026-02-01',
-				validVisits: 1,
-				invalidVisits: 2,
-				baseValidVisits: 1,
-				baseInvalidVisits: 1
+				validVisits: 2,
+				invalidVisits: 1,
+				baseValidVisits: 2,
+				baseInvalidVisits: 0
 			},
 			{
 				scopeKind: 'link',
@@ -133,10 +133,10 @@ test('aggregates explicit UTC scope identities, outcomes and root subsets', asyn
 				domain,
 				path: '/',
 				day: '2026-02-01',
-				validVisits: 1,
-				invalidVisits: 1,
-				baseValidVisits: 1,
-				baseInvalidVisits: 1
+				validVisits: 2,
+				invalidVisits: 0,
+				baseValidVisits: 2,
+				baseInvalidVisits: 0
 			},
 			{
 				scopeKind: 'domain',
@@ -176,8 +176,8 @@ test('aggregates explicit UTC scope identities, outcomes and root subsets', asyn
 			path: null,
 			day: '2026-02-01',
 			name: 'Firefox',
-			validVisits: 0,
-			invalidVisits: 3
+			validVisits: 2,
+			invalidVisits: 1
 		},
 		{
 			scopeKind: 'overview',
@@ -214,8 +214,8 @@ test('aggregates explicit UTC scope identities, outcomes and root subsets', asyn
 			path: null,
 			day: '2026-02-01',
 			name: 'Linux',
-			validVisits: 0,
-			invalidVisits: 2
+			validVisits: 2,
+			invalidVisits: 0
 		},
 		{
 			scopeKind: 'overview',
@@ -254,8 +254,8 @@ test('aggregates explicit UTC scope identities, outcomes and root subsets', asyn
 			path: '/',
 			day: '2026-02-01',
 			name: 'Firefox',
-			validVisits: 0,
-			invalidVisits: 1
+			validVisits: 1,
+			invalidVisits: 0
 		},
 		{
 			scopeKind: 'link',
@@ -266,6 +266,54 @@ test('aggregates explicit UTC scope identities, outcomes and root subsets', asyn
 			validVisits: 1,
 			invalidVisits: 0
 		}
+	]);
+	expect(result.browsers).toEqual(
+		expect.arrayContaining([
+			{
+				scopeKind: 'domain',
+				domain,
+				path: null,
+				day: '2026-02-01',
+				name: 'Firefox',
+				validVisits: 1,
+				invalidVisits: 0
+			}
+		])
+	);
+	expect(result.operatingSystems).toEqual(
+		expect.arrayContaining([
+			{
+				scopeKind: 'domain',
+				domain,
+				path: null,
+				day: '2026-02-01',
+				name: 'Linux',
+				validVisits: 1,
+				invalidVisits: 0
+			},
+			{
+				scopeKind: 'link',
+				domain,
+				path: '/',
+				day: '2026-02-01',
+				name: 'Linux',
+				validVisits: 1,
+				invalidVisits: 0
+			}
+		])
+	);
+	expect(
+		await db
+			.selectFrom('visits')
+			.select(['path', 'outcome'])
+			.where('outcome', '=', 'invalid')
+			.orderBy('visited_at')
+			.execute()
+	).toEqual([
+		{ path: '/', outcome: 'invalid' },
+		{ path: '/unconfigured', outcome: 'invalid' },
+		{ path: '/', outcome: 'invalid' },
+		{ path: '/docs', outcome: 'invalid' }
 	]);
 	expect(
 		result.operatingSystems.filter(
@@ -304,10 +352,10 @@ test('empty inventory keeps historical overview traffic but no domain or link sc
 			domain: null,
 			path: null,
 			day: '2026-02-01',
-			validVisits: 1,
-			invalidVisits: 4,
-			baseValidVisits: 1,
-			baseInvalidVisits: 2
+			validVisits: 3,
+			invalidVisits: 2,
+			baseValidVisits: 3,
+			baseInvalidVisits: 0
 		}
 	]);
 	expect(

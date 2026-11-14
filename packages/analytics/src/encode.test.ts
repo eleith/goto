@@ -34,7 +34,7 @@ function report(
 	return {
 		summary,
 		details: {
-			version: 2,
+			version: 3,
 			scope,
 			period,
 			daily: visitDays(period).map((day, index) => ({
@@ -50,7 +50,11 @@ function report(
 }
 
 test('encodes each summary variant and explicit root without changing document shapes', () => {
-	const reports = [report(overview), report(domain), report(root, asOf, zeroVisitTotals())];
+	const reports = [
+		report(overview),
+		report(domain),
+		report(root, asOf, { validVisits: 2, invalidVisits: 0 })
+	];
 	const rows = encodeVisitReports(reports);
 
 	for (const [index, prepared] of reports.entries()) {

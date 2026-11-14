@@ -91,7 +91,7 @@ test('fixed inputs produce repeatable retained traffic with request-time outcome
 		assert(visit.user_agent.endsWith(' GotoSeed/42'));
 		assert.deepEqual(classifyUserAgent(visit.user_agent), { browser: visit.browser, os: visit.os });
 		if (visit.path === '/') {
-			assert.equal(visit.outcome, visit.domain === 'one.example.test' ? 'valid' : 'invalid');
+			assert.equal(visit.outcome, 'valid');
 		}
 		if (visit.path === '/future') assert.equal(visit.outcome, 'invalid');
 	}

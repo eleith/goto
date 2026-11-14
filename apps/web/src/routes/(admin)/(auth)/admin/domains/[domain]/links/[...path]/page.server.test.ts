@@ -1,4 +1,4 @@
-import { validateConfig } from '@goto/config';
+import { validateConfig, type DomainConfiguration } from '@goto/config';
 import { createVisitPeriod, visitDays, type VisitDetails } from '@goto/analytics';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { prepareSnapshot } from '#lib/server/snapshot.js';
@@ -9,27 +9,43 @@ vi.mock('#lib/server/visit-reports.js', () => ({ readVisitDetails: vi.fn() }));
 beforeEach(() => vi.resetAllMocks());
 
 const domain = 'go.example.test';
-function request(path = '/docs', host = domain, retention_months = 3, rootUrl?: string) {
+const linkMetadata = {
+	response: { url: 'https://example.test/docs', status_code: 308, forward_query: true },
+	state: 'active',
+	validFrom: '2000-01-01T00:00:00Z',
+	validUntil: '2100-01-01T00:00:00Z',
+	tags: ['guides', 'reference'],
+	sources: { status_code: 'link', forward_query: 'domain' }
+};
+
+function request(path = '/docs', options: { host?: string; retentionMonths?: number } = {}) {
+	const domainConfiguration: Partial<DomainConfiguration> = {
+		link_defaults: { forward_query: true },
+		links: {
+			'/docs': {
+				url: 'https://example.test/docs',
+				status_code: 308,
+				enabled: true,
+				valid_from: '2000-01-01T00:00:00Z',
+				valid_until: '2100-01-01T00:00:00Z',
+				tags: ['guides', 'reference']
+			},
+			'/a/b': { url: 'https://example.test/nested', enabled: true, tags: [] },
+			'/a%2Fb': { url: 'https://example.test/percent', enabled: false, tags: [] }
+		}
+	};
 	const prepared = validateConfig(
 		{
 			auth: { credentials: { username: 'test', password: 'link-test-password' } },
-			analytics: { retention_months },
-			domains: {
-				[domain]: {
-					...(rootUrl ? { root: { url: rootUrl } } : {}),
-					links: {
-						'/docs': { url: 'https://example.test/docs' },
-						'/a/b': { url: 'https://example.test/nested' },
-						'/a%2Fb': { url: 'https://example.test/percent', enabled: false }
-					}
-				}
-			}
+			analytics: { retention_months: options.retentionMonths ?? 3 },
+			link_defaults: { status_code: 301 },
+			domains: { [domain]: domainConfiguration }
 		},
 		{ env: {} }
 	);
 	return {
 		locals: { snapshot: prepareSnapshot(prepared) },
-		params: { domain: host, path: path.slice(1) }
+		params: { domain: options.host ?? domain, path: path.slice(1) }
 	} as Parameters<typeof load>[0];
 }
 
@@ -48,7 +64,7 @@ const browserOsCounts = Object.entries(counts).map(([day, [validVisits, invalidV
 	invalidVisits
 }));
 const details: VisitDetails = {
-	version: 2,
+	version: 3,
 	scope: { kind: 'link', domain, path: '/docs' },
 	period,
 	daily: visitDays(period).map((day) => {
@@ -59,7 +75,7 @@ const details: VisitDetails = {
 	operatingSystems: browserOsCounts
 };
 
-test('projects only the requested link series and compact window counts and breakdowns', async () => {
+test('projects only requested link settings, series and compact window counts and breakdowns', async () => {
 	vi.mocked(readVisitDetails).mockResolvedValue(details);
 	const data = await load(request());
 	expect(readVisitDetails).toHaveBeenCalledExactlyOnceWith(expect.any(Object), {
@@ -71,9 +87,7 @@ test('projects only the requested link series and compact window counts and brea
 		domain,
 		path: '/docs',
 		domainHref: '/admin/domains/go.example.test',
-		url: 'https://example.test/docs',
-		fallback: 404,
-		state: 'active',
+		...linkMetadata,
 		retentionMonths: 3,
 		collectionEnabled: true,
 		available: true,
@@ -102,15 +116,21 @@ test('projects only the requested link series and compact window counts and brea
 	});
 });
 
-test('keeps decoded nested and literal-percent identities distinct and supports historical root traffic', async () => {
+test('keeps decoded nested and literal-percent identities distinct', async () => {
 	vi.mocked(readVisitDetails)
 		.mockResolvedValueOnce({ ...details, scope: { kind: 'link', domain, path: '/a/b' } })
-		.mockResolvedValueOnce({ ...details, scope: { kind: 'link', domain, path: '/a%2Fb' } })
-		.mockResolvedValueOnce({ ...details, scope: { kind: 'link', domain, path: '/' } });
+		.mockResolvedValueOnce({ ...details, scope: { kind: 'link', domain, path: '/a%2Fb' } });
 	const nested = await load(request('/a/b'));
 	const percent = await load(request('/a%2Fb'));
-	const root = await load(request('/'));
 	expect(nested.path).toBe('/a/b');
+	expect(nested).toMatchObject({
+		response: { url: 'https://example.test/nested', status_code: 301, forward_query: true },
+		state: 'active',
+		validFrom: null,
+		validUntil: null,
+		tags: [],
+		sources: { status_code: 'global', forward_query: 'domain' }
+	});
 	expect(percent.path).toBe('/a%2Fb');
 	expect(percent.state).toBe('disabled');
 	expect(percent.countsByTimeframe.all?.validVisits).toBe(15);
@@ -124,38 +144,14 @@ test('keeps decoded nested and literal-percent identities distinct and supports 
 		domain,
 		path: '/a%2Fb'
 	});
-	expect(readVisitDetails).toHaveBeenNthCalledWith(3, expect.any(Object), {
-		kind: 'link',
-		domain,
-		path: '/'
-	});
-	expect(root.path).toBe('/');
-	expect(root.state).toBe('fallback');
-	expect(root.url).toBeNull();
-	expect(root.fallback).toBe(404);
-	expect(root.countsByTimeframe.all?.validVisits).toBe(15);
-});
-
-test('shows the configured root response while preserving its historical analytics scope', async () => {
-	vi.mocked(readVisitDetails).mockResolvedValue({
-		...details,
-		scope: { kind: 'link', domain, path: '/' }
-	});
-	const data = await load(request('/', domain, 3, 'https://example.test/start'));
-	expect(readVisitDetails).toHaveBeenCalledExactlyOnceWith(expect.any(Object), {
-		kind: 'link',
-		domain,
-		path: '/'
-	});
-	expect(data.path).toBe('/');
-	expect(data.state).toBe('active');
-	expect(data.url).toBe('https://example.test/start');
-	expect(data.countsByTimeframe.all).toEqual({ validVisits: 15, invalidVisits: 5 });
 });
 
 test('rejects unknown scopes before reading and keeps unavailable counts absent', async () => {
-	await expect(load(request('/docs', 'unknown.test'))).rejects.toMatchObject({ status: 404 });
+	await expect(load(request('/docs', { host: 'unknown.test' }))).rejects.toMatchObject({
+		status: 404
+	});
 	await expect(load(request('/not-configured'))).rejects.toMatchObject({ status: 404 });
+	await expect(load(request('/'))).rejects.toMatchObject({ status: 404 });
 	expect(readVisitDetails).not.toHaveBeenCalled();
 	vi.mocked(readVisitDetails).mockResolvedValue(null);
 	const data = await load(request());
@@ -164,12 +160,12 @@ test('rejects unknown scopes before reading and keeps unavailable counts absent'
 	expect(data.chart).toBeNull();
 	expect(data.asOf).toBeNull();
 	expect(data.countsByTimeframe).toEqual({});
-	expect(data.url).toBe('https://example.test/docs');
+	expect(data).toMatchObject(linkMetadata);
 	expect(data.retentionMonths).toBe(3);
 });
 
 test('disabled analytics skips the report read and leaves link details usable', async () => {
-	const data = await load(request('/docs', domain, 0));
+	const data = await load(request('/docs', { retentionMonths: 0 }));
 	expect(readVisitDetails).not.toHaveBeenCalled();
 	expect(data.collectionEnabled).toBe(false);
 	expect(data.browserOsVisitsByTimeframe).toEqual({});
@@ -178,6 +174,5 @@ test('disabled analytics skips the report read and leaves link details usable', 
 	expect(data.timeframes).toEqual([]);
 	expect(data.chart).toBeNull();
 	expect(data.countsByTimeframe).toEqual({});
-	expect(data.url).toBe('https://example.test/docs');
-	expect(data.state).toBe('active');
+	expect(data).toMatchObject(linkMetadata);
 });

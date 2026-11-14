@@ -1,7 +1,7 @@
 import { error } from '@sveltejs/kit';
 import { countBrowserOsVisitsByTimeframe } from '@goto/analytics';
 import { availableVisitTimeframes, countVisitWindows, visitWindow } from '@goto/analytics/daily';
-import { currentLinkState, type LinkState } from '#lib/server/link-state.js';
+import { currentLinkState } from '#lib/server/link-state.js';
 import { readVisitDetails } from '#lib/server/visit-reports.js';
 import type { PageServerLoad } from './$types';
 
@@ -12,26 +12,16 @@ export const load = (async ({ locals, params }) => {
 	const prepared = snapshot.domains[domain]!;
 	// Kit has decoded route parameters; preserve literal percent paths as-is.
 	const path = `/${params.path ?? ''}`;
-	if (path !== '/' && !Object.hasOwn(prepared.links, path)) throw error(404, 'Link not configured');
-	let url: string | null = null;
-	let state: LinkState | 'fallback';
-	if (path === '/') {
-		const root = prepared.root;
-		if (root !== null) {
-			url = root.url;
-			state = 'active';
-		} else {
-			state = 'fallback';
-		}
-	} else {
-		const link = prepared.links[path]!;
-		url = link.url;
-		state = currentLinkState(link, Date.now());
-	}
-	let fallback: string | 404 = 404;
-	if (prepared.fallback !== null) {
-		fallback = prepared.fallback.url;
-	}
+	if (!Object.hasOwn(prepared.links, path)) throw error(404, 'Link not configured');
+	const link = prepared.links[path]!;
+	const response = {
+		url: link.url,
+		status_code: link.status_code,
+		forward_query: link.forward_query
+	};
+	const state = currentLinkState(link, Date.now());
+	const validFrom = link.valid_from ?? null;
+	const validUntil = link.valid_until ?? null;
 	const configuration = snapshot.configuration;
 	const retentionMonths = configuration.analytics.retention_months;
 	const collectionEnabled = retentionMonths !== 0;
@@ -50,9 +40,12 @@ export const load = (async ({ locals, params }) => {
 		domain,
 		path,
 		domainHref: `/admin/domains/${encodeURIComponent(domain)}`,
-		url,
-		fallback,
+		response,
 		state,
+		validFrom,
+		validUntil,
+		tags: link.tags,
+		sources: link.provenance,
 		retentionMonths,
 		collectionEnabled,
 		available: details !== null,
