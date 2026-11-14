@@ -13,7 +13,12 @@ import type { GotoConfiguration } from '@goto/config';
 import { openDb, runMigrations } from '@goto/db';
 import { publishVisitReports } from '@goto/db/visit-reports';
 import { expect, test, vi } from 'vitest';
-import { readOverviewDetails, readDomainDetails, readVisitDetails } from './visit-reports.js';
+import {
+	readOverviewDetails,
+	readDomainDetails,
+	readLinkDetails,
+	readVisitDetails
+} from './reports.js';
 
 test('reads prepared output and hides snapshots from a different retention policy', async () => {
 	const directory = await mkdtemp(join(tmpdir(), 'goto-page-reports-'));
@@ -59,6 +64,7 @@ test('reads prepared output and hides snapshots from a different retention polic
 			expect(await readOverviewDetails(configuration, [domain])).toBeNull();
 			expect(await readDomainDetails(configuration, domain, ['/docs'])).toBeNull();
 			expect(await readVisitDetails(configuration, linkScope)).toBeNull();
+			expect(await readLinkDetails(configuration, [linkScope])).toBeNull();
 			await publishVisitReports(
 				db,
 				encodeVisitReports([
@@ -99,13 +105,24 @@ test('reads prepared output and hides snapshots from a different retention polic
 			expect(close).toHaveBeenCalledTimes(3);
 			expect(await readVisitDetails(configuration, { ...linkScope, path: '/missing' })).toBeNull();
 			expect(close).toHaveBeenCalledTimes(4);
+			expect(await readLinkDetails(configuration, [linkScope])).toEqual({
+				period,
+				links: [{ domain, path: '/docs', details: linkDetails }]
+			});
+			expect(close).toHaveBeenCalledTimes(5);
+			expect(
+				await readLinkDetails(configuration, [linkScope, { domain, path: '/missing' }])
+			).toBeNull();
+			expect(close).toHaveBeenCalledTimes(6);
 			configuration.analytics.retention_months = 9;
 			expect(await readOverviewDetails(configuration, ['go.example.test'])).toBeNull();
-			expect(close).toHaveBeenCalledTimes(5);
-			expect(await readDomainDetails(configuration, domain, ['/docs'])).toBeNull();
-			expect(close).toHaveBeenCalledTimes(6);
-			expect(await readVisitDetails(configuration, linkScope)).toBeNull();
 			expect(close).toHaveBeenCalledTimes(7);
+			expect(await readDomainDetails(configuration, domain, ['/docs'])).toBeNull();
+			expect(close).toHaveBeenCalledTimes(8);
+			expect(await readVisitDetails(configuration, linkScope)).toBeNull();
+			expect(close).toHaveBeenCalledTimes(9);
+			expect(await readLinkDetails(configuration, [linkScope])).toBeNull();
+			expect(close).toHaveBeenCalledTimes(10);
 		} finally {
 			close.mockRestore();
 		}
@@ -172,7 +189,12 @@ test('invalid prepared output is unavailable, sanitized and closed', async () =>
 				})
 			).toBeNull();
 			expect(close).toHaveBeenCalledTimes(3);
+			expect(
+				await readLinkDetails(configuration, [{ domain: 'go.example.test', path: '/docs' }])
+			).toBeNull();
+			expect(close).toHaveBeenCalledTimes(4);
 			expect(warning.mock.calls).toEqual([
+				['Prepared visit reports unavailable'],
 				['Prepared visit reports unavailable'],
 				['Prepared visit reports unavailable'],
 				['Prepared visit reports unavailable']
@@ -207,7 +229,11 @@ test('enabled collection fails safely without creating missing storage', async (
 		).toBeNull();
 		expect(await readOverviewDetails(configuration, ['go.example.test'])).toBeNull();
 		expect(await readDomainDetails(configuration, 'go.example.test', ['/docs'])).toBeNull();
+		expect(
+			await readLinkDetails(configuration, [{ domain: 'go.example.test', path: '/docs' }])
+		).toBeNull();
 		expect(warning.mock.calls).toEqual([
+			['Prepared visit reports unavailable'],
 			['Prepared visit reports unavailable'],
 			['Prepared visit reports unavailable'],
 			['Prepared visit reports unavailable']
@@ -235,6 +261,9 @@ test('disabled collection does not attempt to open missing storage', async () =>
 		).toBeNull();
 		expect(await readOverviewDetails(configuration, ['go.example.test'])).toBeNull();
 		expect(await readDomainDetails(configuration, 'go.example.test', ['/docs'])).toBeNull();
+		expect(
+			await readLinkDetails(configuration, [{ domain: 'go.example.test', path: '/docs' }])
+		).toBeNull();
 		expect(warning).not.toHaveBeenCalled();
 	} finally {
 		warning.mockRestore();

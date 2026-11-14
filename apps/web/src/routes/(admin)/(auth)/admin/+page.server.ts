@@ -1,5 +1,5 @@
 import { availableVisitTimeframes, countVisitWindows, visitWindow } from '@goto/analytics/daily';
-import { readOverviewDetails } from '#lib/server/visit-reports.js';
+import { readOverviewDetails } from '#lib/server/visits/reports.js';
 import type { PageServerLoad } from './$types';
 
 export const load = (async ({ locals }) => {

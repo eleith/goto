@@ -2,10 +2,10 @@ import { validateConfig, type DomainConfiguration } from '@goto/config';
 import { createVisitPeriod, visitDays, type VisitDetails } from '@goto/analytics';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { prepareSnapshot } from '#lib/server/snapshot.js';
-import { readVisitDetails } from '#lib/server/visit-reports.js';
+import { readVisitDetails } from '#lib/server/visits/reports.js';
 import { load } from './+page.server.js';
 
-vi.mock('#lib/server/visit-reports.js', () => ({ readVisitDetails: vi.fn() }));
+vi.mock('#lib/server/visits/reports.js', () => ({ readVisitDetails: vi.fn() }));
 beforeEach(() => vi.resetAllMocks());
 
 const domain = 'go.example.test';

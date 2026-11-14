@@ -1,12 +1,14 @@
 import packageJson from '../../../../../../package.json' with { type: 'json' };
-import { readOverviewDetails } from '#lib/server/visit-reports.js';
+import { readOverviewDetails } from '#lib/server/visits/reports.js';
+import { currentTags } from '#lib/server/tags/inventory.js';
 import { isWorkerReachable } from '#lib/server/worker-health.js';
 import type { Actions, PageServerLoad } from './$types';
 
 const MAX_REPORT_AGE_MS = 75 * 60 * 1000;
 
 export const load = (async ({ locals }) => {
-	const configuration = locals.snapshot.configuration;
+	const snapshot = locals.snapshot;
+	const configuration = snapshot.configuration;
 	const retentionMonths = configuration.analytics.retention_months;
 	const report = retentionMonths === 0 ? null : await readOverviewDetails(configuration, []);
 	const reportDataAsOf = report?.overview.period.asOf ?? null;
@@ -27,7 +29,8 @@ export const load = (async ({ locals }) => {
 		ignoreTrailingSlash: configuration.link_defaults.ignore_trailing_slash,
 		forwardPath: configuration.link_defaults.forward_path,
 		fallbackDestination: configuration.fallback?.url ?? 404,
-		workerUrl: configuration.url.worker
+		workerUrl: configuration.url.worker,
+		tags: currentTags(snapshot.domains)
 	};
 }) satisfies PageServerLoad;
 

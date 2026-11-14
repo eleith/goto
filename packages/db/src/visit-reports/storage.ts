@@ -1,6 +1,7 @@
 import {
 	parseVisitDetails,
 	parseVisitSummary,
+	type ReportPeriod,
 	type ReportScope,
 	type SerializedVisitReport,
 	type VisitDetails,
@@ -115,6 +116,56 @@ export async function readDomainVisitDetails(
 		links.push({ path: row.path, details: linkDetails });
 	}
 	return { domain: details, links };
+}
+
+export interface LinkVisitDetails {
+	period: ReportPeriod;
+	links: Array<{ domain: string; path: string; details: VisitDetails }>;
+}
+
+export async function readLinkVisitDetails(
+	db: Kysely<Database>,
+	currentLinks: readonly { domain: string; path: string }[]
+): Promise<LinkVisitDetails | null> {
+	const pathsByDomain = new Map<string, Set<string>>();
+	for (const { domain, path } of currentLinks) {
+		let paths = pathsByDomain.get(domain);
+		if (!paths) {
+			paths = new Set();
+			pathsByDomain.set(domain, paths);
+		}
+		paths.add(path);
+	}
+	if (pathsByDomain.size === 0) return null;
+	const rows = await db
+		.selectFrom('analytics_reports')
+		.select(['scope_kind', 'domain', 'path', 'details_json'])
+		.where('scope_kind', '=', 'link')
+		.where(({ and, or, eb }) =>
+			or(
+				[...pathsByDomain].map(([domain, paths]) =>
+					and([eb('domain', '=', domain), eb('path', 'in', [...paths])])
+				)
+			)
+		)
+		.execute();
+	let period: ReportPeriod | undefined;
+	const links: LinkVisitDetails['links'] = [];
+	for (const row of rows) {
+		if (row.scope_kind !== 'link' || row.domain === null || row.path === null) {
+			throw new Error('Invalid analytics report');
+		}
+		const details = parseVisitDetails(
+			row.details_json,
+			{ kind: 'link', domain: row.domain, path: row.path },
+			period
+		);
+		period ??= details.period;
+		links.push({ domain: row.domain, path: row.path, details });
+	}
+	const memberCount = [...pathsByDomain.values()].reduce((total, paths) => total + paths.size, 0);
+	if (!period || links.length !== memberCount) return null;
+	return { period, links };
 }
 
 export async function readVisitSummary(

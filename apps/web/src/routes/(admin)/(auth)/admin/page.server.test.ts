@@ -8,10 +8,10 @@ import {
 } from '@goto/analytics';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { prepareSnapshot } from '#lib/server/snapshot.js';
-import { readOverviewDetails } from '#lib/server/visit-reports.js';
+import { readOverviewDetails } from '#lib/server/visits/reports.js';
 import { load } from './+page.server.js';
 
-vi.mock('#lib/server/visit-reports.js', () => ({ readOverviewDetails: vi.fn() }));
+vi.mock('#lib/server/visits/reports.js', () => ({ readOverviewDetails: vi.fn() }));
 beforeEach(() => vi.resetAllMocks());
 
 const domain = 'go.example.test';

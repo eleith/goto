@@ -1,8 +1,9 @@
 import { error } from '@sveltejs/kit';
 import { countBrowserOsVisitsByTimeframe } from '@goto/analytics';
 import { availableVisitTimeframes, countVisitWindows, visitWindow } from '@goto/analytics/daily';
+import { linkHref } from '#lib/components/admin/urls.js';
 import { currentLinkState } from '#lib/server/link-state.js';
-import { readDomainDetails } from '#lib/server/visit-reports.js';
+import { readDomainDetails } from '#lib/server/visits/reports.js';
 import type { PageServerLoad } from './$types';
 
 export const load = (async ({ locals, params }) => {
@@ -75,10 +76,3 @@ export const load = (async ({ locals, params }) => {
 		links
 	};
 }) satisfies PageServerLoad;
-
-function linkHref(domain: string, path: string): string {
-	const base = `/admin/domains/${encodeURIComponent(domain)}/links`;
-	if (path === '/') return base;
-	const segments = path.slice(1).split('/').map(encodeURIComponent);
-	return `${base}/${segments.join('/')}`;
-}

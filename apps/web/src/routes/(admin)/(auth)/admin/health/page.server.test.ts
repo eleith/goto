@@ -3,11 +3,11 @@ import { createVisitPeriod, visitDays, type VisitDetails } from '@goto/analytics
 import { validateConfig } from '@goto/config';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { prepareSnapshot } from '#lib/server/snapshot.js';
-import { readOverviewDetails } from '#lib/server/visit-reports.js';
+import { readOverviewDetails } from '#lib/server/visits/reports.js';
 import { isWorkerReachable } from '#lib/server/worker-health.js';
 import { actions, load } from './+page.server.js';
 
-vi.mock('#lib/server/visit-reports.js', () => ({ readOverviewDetails: vi.fn() }));
+vi.mock('#lib/server/visits/reports.js', () => ({ readOverviewDetails: vi.fn() }));
 vi.mock('#lib/server/worker-health.js', () => ({ isWorkerReachable: vi.fn() }));
 beforeEach(() => {
 	vi.resetAllMocks();
@@ -70,7 +70,8 @@ test('returns only allowlisted settings and the prepared report cutoff, without 
 		ignoreTrailingSlash: true,
 		forwardPath: false,
 		fallbackDestination: 404,
-		workerUrl: 'http://worker.example.test:9000/base'
+		workerUrl: 'http://worker.example.test:9000/base',
+		tags: []
 	});
 	expect(readOverviewDetails).toHaveBeenCalledExactlyOnceWith(
 		event.locals.snapshot.configuration,
@@ -115,7 +116,8 @@ test('projects OIDC mode and configured redirect defaults without exposing the p
 		ignoreTrailingSlash: false,
 		forwardPath: true,
 		fallbackDestination: 'https://example.test/missing',
-		workerUrl: 'http://worker.example.test:9000/base'
+		workerUrl: 'http://worker.example.test:9000/base',
+		tags: []
 	});
 });
 
@@ -129,8 +131,31 @@ test('marks reports delayed only after the hourly refresh grace period', async (
 	expect((await load(request())).reportDelayed).toBe(true);
 });
 
-test('zero retention skips the report read and remains a normal read-only page', async () => {
-	const data = await load(request({ analytics: { retention_months: 0 } }));
+const taggedDomains = {
+	'go.example.test': {
+		links: {
+			'/docs': { url: 'https://example.test/docs', tags: ['Work', 'Work'] },
+			'/disabled': { url: 'https://example.test/disabled', tags: ['work'], enabled: false },
+			'/later': {
+				url: 'https://example.test/later',
+				tags: [' Work '],
+				valid_from: '2099-01-01T00:00:00Z'
+			},
+			'/old': {
+				url: 'https://example.test/old',
+				tags: ['Old'],
+				valid_until: '2020-01-01T00:00:00Z'
+			}
+		}
+	},
+	'other.example.test': {
+		links: { '/docs': { url: 'https://example.test/other', tags: ['Work', 'Work/100%é'] } }
+	}
+};
+
+test('zero retention skips the report read and keeps all current tag labels available', async () => {
+	const data = await load(request({ analytics: { retention_months: 0 }, domains: taggedDomains }));
+	expect(data.tags).toEqual([' Work ', 'Old', 'Work', 'Work/100%é', 'work']);
 	expect(data.retentionMonths).toBe(0);
 	expect(data.reportDataAsOf).toBeNull();
 	expect(data.reportDelayed).toBe(false);
@@ -141,7 +166,8 @@ test('zero retention skips the report read and remains a normal read-only page',
 
 test('unavailable prepared analytics do not prevent viewing settings', async () => {
 	vi.mocked(readOverviewDetails).mockResolvedValue(null);
-	const data = await load(request());
+	const data = await load(request({ domains: taggedDomains }));
+	expect(data.tags).toEqual([' Work ', 'Old', 'Work', 'Work/100%é', 'work']);
 	expect(data.retentionMonths).toBe(3);
 	expect(data.reportDataAsOf).toBeNull();
 	expect(data.reportDelayed).toBe(false);

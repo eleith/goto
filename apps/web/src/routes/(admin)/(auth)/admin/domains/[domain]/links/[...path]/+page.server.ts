@@ -2,7 +2,7 @@ import { error } from '@sveltejs/kit';
 import { countBrowserOsVisitsByTimeframe } from '@goto/analytics';
 import { availableVisitTimeframes, countVisitWindows, visitWindow } from '@goto/analytics/daily';
 import { currentLinkState } from '#lib/server/link-state.js';
-import { readVisitDetails } from '#lib/server/visit-reports.js';
+import { readVisitDetails } from '#lib/server/visits/reports.js';
 import type { PageServerLoad } from './$types';
 
 export const load = (async ({ locals, params }) => {

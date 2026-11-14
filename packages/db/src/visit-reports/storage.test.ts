@@ -18,6 +18,7 @@ import {
 	readVisitDetails,
 	readOverviewVisitDetails,
 	readDomainVisitDetails,
+	readLinkVisitDetails,
 	readVisitSummary
 } from './storage.js';
 
@@ -287,6 +288,100 @@ test('domain details require selected paths to share the domain publication peri
 	await expect(readDomainVisitDetails(db, domain, [])).rejects.toThrow(
 		/^Invalid analytics report$/
 	);
+});
+
+test('link details read deduplicated exact members in one statement without parent reports', async () => {
+	const otherDomain = 'other.example.test';
+	const docs = preparedReport({ kind: 'link', domain, path: '/docs' }, asOf, {
+		validVisits: 3,
+		invalidVisits: 1
+	});
+	const faq = preparedReport({ kind: 'link', domain, path: '/faq' });
+	const otherDocs = preparedReport({ kind: 'link', domain: otherDomain, path: '/docs' });
+	const excluded = [
+		preparedReport(overviewScope),
+		preparedReport(domainScope),
+		preparedReport(rootScope),
+		preparedReport({ kind: 'link', domain: otherDomain, path: '/faq' })
+	];
+	await publishVisitReports(db, encodeVisitReports([docs, faq, otherDocs, ...excluded]));
+	await db.updateTable('analytics_reports').set({ summary_json: '{}' }).execute();
+	await db
+		.updateTable('analytics_reports')
+		.set({ details_json: '{}' })
+		.where(({ or, and, eb }) =>
+			or([
+				eb('scope_kind', '!=', 'link'),
+				eb('path', '=', '/'),
+				and([eb('domain', '=', otherDomain), eb('path', '=', '/faq')])
+			])
+		)
+		.execute();
+	const statements = vi.spyOn(DatabaseSync.prototype, 'prepare');
+	try {
+		const report = await readLinkVisitDetails(db, [
+			{ domain, path: '/docs' },
+			{ domain, path: '/faq' },
+			{ domain: otherDomain, path: '/docs' },
+			{ domain, path: '/docs' }
+		]);
+		expect(report).toEqual({
+			period: docs.details.period,
+			links: expect.arrayContaining([
+				{ domain, path: '/docs', details: docs.details },
+				{ domain, path: '/faq', details: faq.details },
+				{ domain: otherDomain, path: '/docs', details: otherDocs.details }
+			])
+		});
+		expect(report?.links).toHaveLength(3);
+		expect(statements).toHaveBeenCalledTimes(1);
+		const query = statements.mock.calls[0]?.[0];
+		expect(query).toMatch(
+			/^select\s+"scope_kind",\s*"domain",\s*"path",\s*"details_json"\s+from\s+"analytics_reports"/i
+		);
+		expect(query).not.toMatch(/summary_json|\bvisits\b|\bjoin\b/i);
+	} finally {
+		statements.mockRestore();
+	}
+});
+
+test('link details require every member while accepting an explicitly prepared zero', async () => {
+	const member = { domain, path: '/docs' };
+	expect(await readLinkVisitDetails(db, [])).toBeNull();
+	expect(await readLinkVisitDetails(db, [member])).toBeNull();
+	const zero = preparedReport({ kind: 'link', ...member });
+	await publishVisitReports(db, encodeVisitReports([zero]));
+	expect(await readLinkVisitDetails(db, [member])).toEqual({
+		period: zero.details.period,
+		links: [{ ...member, details: zero.details }]
+	});
+	expect(await readLinkVisitDetails(db, [member, { domain, path: '/new' }])).toBeNull();
+});
+
+test('link details validate each selected identity and require a common full period', async () => {
+	const members = [
+		{ domain, path: '/docs' },
+		{ domain, path: '/faq' }
+	];
+	const docs = preparedReport({ kind: 'link', domain, path: '/docs' });
+	const faq = preparedReport({ kind: 'link', domain, path: '/faq' });
+	await publishVisitReports(db, encodeVisitReports([docs, faq]));
+	await db
+		.updateTable('analytics_reports')
+		.set({ details_json: JSON.stringify({ ...faq.details, scope: docs.details.scope }) })
+		.where('path', '=', '/faq')
+		.execute();
+	await expect(readLinkVisitDetails(db, members)).rejects.toThrow(/^Invalid analytics report$/);
+	await db
+		.updateTable('analytics_reports')
+		.set({
+			details_json: JSON.stringify(
+				preparedReport({ kind: 'link', domain, path: '/faq' }, asOf + 86_400_000).details
+			)
+		})
+		.where('path', '=', '/faq')
+		.execute();
+	await expect(readLinkVisitDetails(db, members)).rejects.toThrow(/^Invalid analytics report$/);
 });
 
 test('publication replaces the complete batch, including when the replacement is empty', async () => {
