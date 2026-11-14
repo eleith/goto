@@ -108,6 +108,7 @@ test('refreshes report inventory after an accepted domain/link change', async ()
 	next.domains['go.example.test'] = {
 		root: null,
 		links: {},
+		caseInsensitivePaths: {},
 		fallback: null,
 		provenance: { fallback: 'builtin' }
 	};

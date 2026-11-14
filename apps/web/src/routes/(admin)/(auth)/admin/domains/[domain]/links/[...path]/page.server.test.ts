@@ -11,20 +11,23 @@ beforeEach(() => vi.resetAllMocks());
 const domain = 'go.example.test';
 const linkMetadata = {
 	response: { url: 'https://example.test/docs', status_code: 308, forward_query: true },
+	caseInsensitive: false,
+	ignoreTrailingSlash: false,
+	forwardPath: true,
 	state: 'active',
 	validFrom: '2000-01-01T00:00:00Z',
 	validUntil: '2100-01-01T00:00:00Z',
-	tags: ['guides', 'reference'],
-	sources: { status_code: 'link', forward_query: 'domain' }
+	tags: ['guides', 'reference']
 };
 
 function request(path = '/docs', options: { host?: string; retentionMonths?: number } = {}) {
 	const domainConfiguration: Partial<DomainConfiguration> = {
-		link_defaults: { forward_query: true },
+		link_defaults: { forward_query: true, ignore_trailing_slash: false },
 		links: {
 			'/docs': {
 				url: 'https://example.test/docs',
 				status_code: 308,
+				forward_path: true,
 				enabled: true,
 				valid_from: '2000-01-01T00:00:00Z',
 				valid_until: '2100-01-01T00:00:00Z',
@@ -38,7 +41,7 @@ function request(path = '/docs', options: { host?: string; retentionMonths?: num
 		{
 			auth: { credentials: { username: 'test', password: 'link-test-password' } },
 			analytics: { retention_months: options.retentionMonths ?? 3 },
-			link_defaults: { status_code: 301 },
+			link_defaults: { status_code: 301, case_insensitive: false },
 			domains: { [domain]: domainConfiguration }
 		},
 		{ env: {} }
@@ -86,7 +89,6 @@ test('projects only requested link settings, series and compact window counts an
 	expect(data).toEqual({
 		domain,
 		path: '/docs',
-		domainHref: '/admin/domains/go.example.test',
 		...linkMetadata,
 		retentionMonths: 3,
 		collectionEnabled: true,
@@ -125,11 +127,13 @@ test('keeps decoded nested and literal-percent identities distinct', async () =>
 	expect(nested.path).toBe('/a/b');
 	expect(nested).toMatchObject({
 		response: { url: 'https://example.test/nested', status_code: 301, forward_query: true },
+		caseInsensitive: false,
+		ignoreTrailingSlash: false,
+		forwardPath: false,
 		state: 'active',
 		validFrom: null,
 		validUntil: null,
-		tags: [],
-		sources: { status_code: 'global', forward_query: 'domain' }
+		tags: []
 	});
 	expect(percent.path).toBe('/a%2Fb');
 	expect(percent.state).toBe('disabled');

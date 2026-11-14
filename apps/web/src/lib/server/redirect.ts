@@ -1,5 +1,11 @@
-import { isSelfRedirect, type PreparedDomain, type PreparedLink } from '@goto/config';
+import {
+	isSelfRedirect,
+	matchLink,
+	type PreparedDomain,
+	type RedirectResponse
+} from '@goto/config';
 import type { VisitOutcome } from '@goto/db';
+import { currentLinkState } from './link-state.js';
 import type { Immutable } from './snapshot.js';
 
 export interface ResolvedVisit {
@@ -21,6 +27,14 @@ interface ParsedTarget {
 
 interface ResolvedResponse {
 	response: Response;
+	path: string;
+	outcome: VisitOutcome;
+}
+
+interface SelectedVisitRedirect {
+	path: string;
+	suffix: string;
+	redirect: Immutable<RedirectResponse> | null;
 	outcome: VisitOutcome;
 }
 
@@ -40,6 +54,14 @@ function parseTarget(target: string): ParsedTarget | undefined {
 	} catch {
 		return undefined;
 	}
+}
+
+function forwardPath(destination: string, suffix: string): string {
+	const url = new URL(destination);
+	const basePath = url.pathname.endsWith('/') ? url.pathname.slice(0, -1) : url.pathname;
+	const encodedSuffix = suffix.split('/').map(encodeURIComponent).join('/');
+	url.pathname = basePath + encodedSuffix;
+	return url.href;
 }
 
 function forwardQuery(destination: string, query: string): string {
@@ -73,16 +95,28 @@ function redirectResponse(destination: string, status: number): Response {
 	return new Response(null, { status, headers });
 }
 
-function findActiveLink(
+function selectVisitRedirect(
 	domain: Immutable<PreparedDomain>,
-	path: string,
+	requestedPath: string,
 	now: number
-): Immutable<PreparedLink> | undefined {
-	const link = Object.hasOwn(domain.links, path) ? domain.links[path] : undefined;
-	if (!link || !link.enabled) return;
-	const started = link.valid_from === undefined || now >= Date.parse(link.valid_from);
-	const notExpired = link.valid_until === undefined || now < Date.parse(link.valid_until);
-	if (started && notExpired) return link;
+): SelectedVisitRedirect {
+	if (requestedPath === '/') {
+		let redirect = domain.root;
+		if (redirect === null) redirect = domain.fallback;
+		return { path: '/', suffix: '', redirect, outcome: 'valid' };
+	}
+
+	const match = matchLink(domain, requestedPath);
+	if (match === undefined) {
+		return { path: requestedPath, suffix: '', redirect: domain.fallback, outcome: 'invalid' };
+	}
+
+	const link = domain.links[match.path]!;
+	if (currentLinkState(link, now) !== 'active') {
+		return { path: match.path, suffix: '', redirect: domain.fallback, outcome: 'invalid' };
+	}
+
+	return { path: match.path, suffix: match.suffix, redirect: link, outcome: 'valid' };
 }
 
 function resolveVisitResponse(
@@ -91,36 +125,26 @@ function resolveVisitResponse(
 	target: ParsedTarget,
 	now: number
 ): ResolvedResponse {
-	const isRoot = target.path === '/';
-	let redirect = domain.fallback;
-	let outcome: VisitOutcome = 'invalid';
-	if (isRoot) {
-		outcome = 'valid';
-		if (domain.root !== null) redirect = domain.root;
-	} else {
-		const link = findActiveLink(domain, target.path, now);
-		if (link) {
-			redirect = link;
-			outcome = 'valid';
-		}
-	}
+	const { path, suffix, redirect, outcome } = selectVisitRedirect(domain, target.path, now);
 
 	if (redirect === null) {
 		const response = emptyResponse(404);
-		return { response, outcome };
+		return { response, path, outcome };
 	}
 
 	let destination = redirect.url;
+	if (suffix !== '') destination = forwardPath(destination, suffix);
 	if (redirect.forward_query) destination = forwardQuery(destination, target.query);
-	const selfRedirect = isSelfRedirect(destination, host, target.path);
+	const selfRedirect = isSelfRedirect(destination, host, target.path, domain);
 	if (selfRedirect) {
 		const response = emptyResponse(404);
-		if (!isRoot) outcome = 'invalid';
-		return { response, outcome };
+		let loopOutcome: VisitOutcome = 'invalid';
+		if (target.path === '/') loopOutcome = 'valid';
+		return { response, path, outcome: loopOutcome };
 	}
 
 	const response = redirectResponse(destination, redirect.status_code);
-	return { response, outcome };
+	return { response, path, outcome };
 }
 
 export function resolveRedirect(
@@ -147,7 +171,7 @@ export function resolveRedirect(
 	if (method === 'HEAD') return { response };
 	const visit: ResolvedVisit = {
 		domain: host,
-		path: parsed.path,
+		path: resolved.path,
 		outcome: resolved.outcome,
 		visitedAt: now
 	};

@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { resolveVisitTimeframe, visitGranularity, visitWindow } from '@goto/analytics/daily';
-	import type { SettingSource } from '@goto/config';
 	import VisitsChart from '#lib/components/admin/VisitsChart.svelte';
 	import BrowserOsBreakdowns from '#lib/components/admin/BrowserOsBreakdowns.svelte';
 	import VisitTimeframes from '#lib/components/admin/VisitTimeframes.svelte';
@@ -23,15 +22,6 @@
 	let visits = $derived(data.countsByTimeframe[timeframe]?.validVisits ?? null);
 	let browserOsVisits = $derived(data.browserOsVisitsByTimeframe[timeframe] ?? null);
 </script>
-
-{#snippet sourceHint(source: SettingSource)}
-	<span class="source-hint">
-		{#if source === 'builtin'}Built-in
-		{:else if source === 'global'}Global defaults
-		{:else if source === 'domain'}Domain defaults
-		{:else}Link override{/if}
-	</span>
-{/snippet}
 
 <AdminPage
 	siteTitle={data.title}
@@ -67,10 +57,8 @@
 	<section class="admin-info" aria-labelledby="link-details-heading">
 		<h2 id="link-details-heading">Link details</h2>
 		<dl>
-			<dt>Domain</dt>
-			<dd><a href={`${data.domainHref}?period=${timeframe}`}>{data.domain}</a></dd>
-			<dt>Path</dt>
-			<dd>{data.path}</dd>
+			<dt>Link</dt>
+			<dd>{data.domain}{data.path}</dd>
 			<dt>Destination</dt>
 			<dd>
 				<a class="admin-destination" href={data.response.url}>
@@ -78,15 +66,15 @@
 				</a>
 			</dd>
 			<dt>HTTP status</dt>
-			<dd>
-				{data.response.status_code}
-				{@render sourceHint(data.sources.status_code)}
-			</dd>
-			<dt>Forward query</dt>
-			<dd>
-				{data.response.forward_query ? 'Yes' : 'No'}
-				{@render sourceHint(data.sources.forward_query)}
-			</dd>
+			<dd>{data.response.status_code}</dd>
+			<dt>Case insensitive</dt>
+			<dd>{data.caseInsensitive ? 'Yes' : 'No'}</dd>
+			<dt>Trailing slash</dt>
+			<dd>{data.ignoreTrailingSlash ? 'Yes' : 'No'}</dd>
+			<dt>Path forwarding</dt>
+			<dd>{data.forwardPath ? 'Yes' : 'No'}</dd>
+			<dt>Query forwarding</dt>
+			<dd>{data.response.forward_query ? 'Yes' : 'No'}</dd>
 			{#if data.validFrom}
 				<dt>Starts</dt>
 				<dd>
@@ -112,11 +100,3 @@
 		<BrowserOsBreakdowns {browserOsVisits} totalVisits={visits} />
 	{/if}
 </AdminPage>
-
-<style>
-	.source-hint {
-		margin-inline-start: calc(var(--space-1) * 2);
-		color: var(--color-text-muted);
-		font-size: var(--font-size-sm);
-	}
-</style>

@@ -28,6 +28,9 @@ analytics:
 
 link_defaults:
   status_code: 302
+  case_insensitive: true
+  ignore_trailing_slash: true
+  forward_path: false
   forward_query: false
 
 fallback:
@@ -50,6 +53,7 @@ domains:
         url: https://example.org/documentation
         title: Documentation
         tags: [work]
+        forward_path: true
         forward_query: false
       /café:
         url: https://example.org/cafe

@@ -38,6 +38,12 @@
 		<dl>
 			<dt>Status code</dt>
 			<dd>{data.redirectStatusCode}</dd>
+			<dt>Case insensitive</dt>
+			<dd>{data.caseInsensitive ? 'Yes' : 'No'}</dd>
+			<dt>Trailing slash</dt>
+			<dd>{data.ignoreTrailingSlash ? 'Yes' : 'No'}</dd>
+			<dt>Path forwarding</dt>
+			<dd>{data.forwardPath ? 'Yes' : 'No'}</dd>
 			<dt>Query forwarding</dt>
 			<dd>{data.forwardQuery ? 'Yes' : 'No'}</dd>
 			<dt>Fallback</dt>

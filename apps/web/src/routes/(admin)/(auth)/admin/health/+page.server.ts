@@ -23,6 +23,9 @@ export const load = (async ({ locals }) => {
 		reportDelayed,
 		redirectStatusCode: configuration.link_defaults.status_code,
 		forwardQuery: configuration.link_defaults.forward_query,
+		caseInsensitive: configuration.link_defaults.case_insensitive,
+		ignoreTrailingSlash: configuration.link_defaults.ignore_trailing_slash,
+		forwardPath: configuration.link_defaults.forward_path,
 		fallbackDestination: configuration.fallback?.url ?? 404,
 		workerUrl: configuration.url.worker
 	};

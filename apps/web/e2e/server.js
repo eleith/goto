@@ -36,6 +36,8 @@ const configuration = {
 				'/a%2Fb': { url: 'https://example.org/literal-percent' },
 				'/docs': {
 					url: 'https://example.org/first-domain',
+					forward_path: true,
+					forward_query: true,
 					valid_from: '2020-01-01T00:00:00Z',
 					valid_until: '2100-01-01T00:00:00Z',
 					tags: ['work', 'docs']

@@ -25,7 +25,13 @@ describe('configuration loading', () => {
 			site: { title: 'Goto' },
 			database: { path: './data/goto.sqlite', worker_path: './data/worker.sqlite' },
 			analytics: { retention_months: 3 },
-			link_defaults: { status_code: 302, forward_query: false }
+			link_defaults: {
+				status_code: 302,
+				forward_query: false,
+				case_insensitive: true,
+				ignore_trailing_slash: true,
+				forward_path: false
+			}
 		});
 		expect(input).toEqual(original);
 	});
@@ -228,7 +234,8 @@ describe('configuration loading', () => {
 		{},
 		{ url: 'https://example.com', status_code: 404 },
 		{ url: 'https://example.com', forward_query: 'false' },
-		{ url: 'https://example.com', action: 'not_found' }
+		{ url: 'https://example.com', action: 'not_found' },
+		{ url: 'https://example.com', forward_path: true }
 	])('rejects non-response fallback values %j', (fallback) => {
 		expect(() => validateConfig({ ...configurationInput(), fallback }, options)).toThrow(
 			ConfigError
@@ -240,6 +247,8 @@ describe('configuration loading', () => {
 		for (const domain of [
 			{ root: { url: 'https://example.com', enabled: false } },
 			{ root: { url: 'https://example.com', valid_from: '2027-01-01T00:00:00Z' } },
+			{ root: { url: 'https://example.com', ignore_trailing_slash: true } },
+			{ fallback: { url: 'https://example.com', case_insensitive: true } },
 			{ fallback: 404 },
 			{ defaults: { status_code: 307 } },
 			{ link_defaults: { fallback: 'https://example.com' } }
@@ -279,6 +288,19 @@ describe('configuration loading', () => {
 		{ auth: { ...configurationInput().auth, secret: 'too-short-private-secret' } },
 		{ url: { app: 'https://ADMIN.example.com/' } },
 		{ link_defaults: { forward_query: null } },
+		{ link_defaults: { case_insensitive: 'false' } },
+		{
+			domains: {
+				'go.example.com': { link_defaults: { ignore_trailing_slash: null }, links: {} }
+			}
+		},
+		{
+			domains: {
+				'go.example.com': {
+					links: { '/docs': { url: 'https://example.com', forward_path: 'true' } }
+				}
+			}
+		},
 		{ domains: [] },
 		{ domains: { 'go.example.com': { links: [] } } },
 		{
@@ -406,7 +428,8 @@ describe('configuration loading', () => {
 		});
 		expect(prepared.domains['go.example.org']?.links['/docs']).toMatchObject({
 			forward_query: false,
-			provenance: { forward_query: 'link' }
+			forward_path: true,
+			provenance: { forward_query: 'link', forward_path: 'link' }
 		});
 	});
 

@@ -338,7 +338,10 @@
 			"type": "object",
 			"properties": {
 				"status_code": { "default": 302, "$ref": "#/$defs/RedirectStatus" },
-				"forward_query": { "default": false, "type": "boolean" }
+				"forward_query": { "default": false, "type": "boolean" },
+				"case_insensitive": { "default": true, "type": "boolean" },
+				"ignore_trailing_slash": { "default": true, "type": "boolean" },
+				"forward_path": { "default": false, "type": "boolean" }
 			}
 		},
 		"DomainLinkDefaults": {
@@ -347,12 +350,15 @@
 			"type": "object",
 			"properties": {
 				"status_code": { "$ref": "#/$defs/RedirectStatus" },
-				"forward_query": { "type": "boolean" }
+				"forward_query": { "type": "boolean" },
+				"case_insensitive": { "type": "boolean" },
+				"ignore_trailing_slash": { "type": "boolean" },
+				"forward_path": { "type": "boolean" }
 			}
 		},
 		"LinkConfiguration": {
 			"additionalProperties": false,
-			"description": "Omitted status_code and forward_query inherit domain link_defaults, then global link_defaults.",
+			"description": "Omitted response and matching settings inherit domain link_defaults, then global link_defaults.",
 			"type": "object",
 			"required": ["url"],
 			"properties": {
@@ -372,6 +378,9 @@
 				"enabled": { "default": true, "type": "boolean" },
 				"status_code": { "$ref": "#/$defs/RedirectStatus" },
 				"forward_query": { "type": "boolean" },
+				"case_insensitive": { "type": "boolean" },
+				"ignore_trailing_slash": { "type": "boolean" },
+				"forward_path": { "type": "boolean" },
 				"valid_from": { "$ref": "#/$defs/Instant" },
 				"valid_until": { "$ref": "#/$defs/Instant" }
 			}
@@ -386,7 +395,7 @@
 				"fallback": { "$ref": "#/$defs/RedirectResponse" },
 				"links": {
 					"additionalProperties": false,
-					"description": "Logical, case-sensitive named paths. Keys are never interpolated or percent-decoded. Use readable canonical paths without spaces, trailing slashes, controls, backslashes, dot segments or :?#[]@. Configure / with the separate root response.",
+					"description": "Logical named paths. Keys preserve their spelling and are never interpolated or percent-decoded. Use readable canonical paths without spaces, trailing slashes, controls, backslashes, dot segments or :?#[]@. Configure / with the separate root response.",
 					"type": "object",
 					"patternProperties": { "^/.+": { "default": {}, "$ref": "#/$defs/LinkConfiguration" } }
 				}

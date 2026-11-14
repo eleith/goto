@@ -29,6 +29,10 @@ test('publishes a deep-frozen copy without changing the loaded configuration', (
 	expect(Object.isFrozen(snapshot.domains['go.example.test']!.root)).toBe(true);
 	expect(Object.isFrozen(snapshot.domains['go.example.test']!.fallback)).toBe(true);
 	expect(Object.isFrozen(link.tags)).toBe(true);
+	expect(Object.isFrozen(snapshot.domains['go.example.test']!.caseInsensitivePaths)).toBe(true);
+	expect(
+		Reflect.set(snapshot.domains['go.example.test']!.caseInsensitivePaths, '/docs', '/other')
+	).toBe(false);
 	expect(Reflect.set(link, 'enabled', false)).toBe(false);
 	expect(link.forward_query).toBe(false);
 	expect(link.provenance.forward_query).toBe('link');

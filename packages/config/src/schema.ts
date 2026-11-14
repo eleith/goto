@@ -232,7 +232,10 @@ const AnalyticsSchema = Type.Object(
 const LinkDefaultsSchema = Type.Object(
 	{
 		status_code: ref(RedirectStatusSchema, { default: 302 }),
-		forward_query: Type.Boolean({ default: false })
+		forward_query: Type.Boolean({ default: false }),
+		case_insensitive: Type.Boolean({ default: true }),
+		ignore_trailing_slash: Type.Boolean({ default: true }),
+		forward_path: Type.Boolean({ default: false })
 	},
 	{ $id: 'LinkDefaults', additionalProperties: false }
 );
@@ -240,7 +243,10 @@ const LinkDefaultsSchema = Type.Object(
 const DomainLinkDefaultsSchema = Type.Object(
 	{
 		status_code: Type.Optional(ref(RedirectStatusSchema)),
-		forward_query: Type.Optional(Type.Boolean())
+		forward_query: Type.Optional(Type.Boolean()),
+		case_insensitive: Type.Optional(Type.Boolean()),
+		ignore_trailing_slash: Type.Optional(Type.Boolean()),
+		forward_path: Type.Optional(Type.Boolean())
 	},
 	{
 		$id: 'DomainLinkDefaults',
@@ -258,6 +264,9 @@ const LinkConfigurationSchema = Type.Object(
 		enabled: Type.Boolean({ default: true }),
 		status_code: Type.Optional(ref(RedirectStatusSchema)),
 		forward_query: Type.Optional(Type.Boolean()),
+		case_insensitive: Type.Optional(Type.Boolean()),
+		ignore_trailing_slash: Type.Optional(Type.Boolean()),
+		forward_path: Type.Optional(Type.Boolean()),
 		valid_from: Type.Optional(ref(InstantSchema)),
 		valid_until: Type.Optional(ref(InstantSchema))
 	},
@@ -265,7 +274,7 @@ const LinkConfigurationSchema = Type.Object(
 		$id: 'LinkConfiguration',
 		additionalProperties: false,
 		description:
-			'Omitted status_code and forward_query inherit domain link_defaults, then global link_defaults.'
+			'Omitted response and matching settings inherit domain link_defaults, then global link_defaults.'
 	}
 );
 
@@ -280,7 +289,7 @@ const DomainConfigurationSchema = Type.Object(
 			{
 				additionalProperties: false,
 				description:
-					'Logical, case-sensitive named paths. Keys are never interpolated or percent-decoded. Use readable canonical paths without spaces, trailing slashes, controls, backslashes, dot segments or :?#[]@. Configure / with the separate root response.'
+					'Logical named paths. Keys preserve their spelling and are never interpolated or percent-decoded. Use readable canonical paths without spaces, trailing slashes, controls, backslashes, dot segments or :?#[]@. Configure / with the separate root response.'
 			}
 		)
 	},

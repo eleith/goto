@@ -1,6 +1,12 @@
+import { matchLink, type MatchingDomain } from './matching.js';
 import { normalizeHost } from './paths.js';
 
-export function isSelfRedirect(destination: string, host: string, path: string): boolean {
+export function isSelfRedirect(
+	destination: string,
+	host: string,
+	path: string,
+	domain?: MatchingDomain
+): boolean {
 	const normalizedHost = normalizeHost(host);
 	if (normalizedHost === undefined) return false;
 
@@ -11,7 +17,13 @@ export function isSelfRedirect(destination: string, host: string, path: string):
 		const sameHost =
 			normalizeHost(url.host) === normalizedHost ||
 			(authoredAuthority !== undefined && normalizeHost(authoredAuthority) === normalizedHost);
-		return sameHost && decodeURIComponent(url.pathname) === path;
+		if (!sameHost) return false;
+		const destinationPath = decodeURIComponent(url.pathname);
+		if (destinationPath === path) return true;
+		if (domain === undefined || path === '/' || destinationPath === '/') return false;
+		const source = matchLink(domain, path);
+		const target = matchLink(domain, destinationPath);
+		return source !== undefined && target !== undefined && source.path === target.path;
 	} catch {
 		return false;
 	}

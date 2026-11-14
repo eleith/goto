@@ -80,11 +80,63 @@ describe('direct self-loop validation', () => {
 	])('preserves distinct authored destinations: %s', (url) => {
 		const input = configurationInput();
 		const { domains } = validateConfig(
-			{ ...input, domains: { [redirectHost]: { links: { '/docs': { url } } } } },
+			{
+				...input,
+				domains: {
+					[redirectHost]: {
+						links: {
+							'/docs': { url, case_insensitive: false, ignore_trailing_slash: false }
+						}
+					}
+				}
+			},
 			options
 		);
 
 		expect(domains[redirectHost]?.links['/docs']?.url).toBe(url);
+	});
+
+	it.each(['/DOCS', '/docs/', '/DOCS/Install'])(
+		'rejects a destination matching the same link: %s',
+		(path) => {
+			expect(() =>
+				validateConfig(
+					{
+						...configurationInput(),
+						domains: {
+							[redirectHost]: {
+								links: {
+									'/docs': {
+										url: `https://${redirectHost}${path}?changed=one#fragment`,
+										forward_path: true,
+										enabled: false
+									}
+								}
+							}
+						}
+					},
+					options
+				)
+			).toThrowError(new ConfigError());
+		}
+	);
+
+	it('uses all prepared links to distinguish destination identity from its parent prefix', () => {
+		const { domains } = validateConfig(
+			{
+				...configurationInput(),
+				domains: {
+					[redirectHost]: {
+						links: {
+							'/docs': { url: `https://${redirectHost}/DOCS/API/`, forward_path: true },
+							'/docs/api': { url: 'https://destination.example/api' }
+						}
+					}
+				}
+			},
+			options
+		);
+		expect(domains[redirectHost]?.links['/docs']?.url).toBe(`https://${redirectHost}/DOCS/API/`);
 	});
 
 	it('allows local fallback URLs without graph analysis', () => {
@@ -117,6 +169,7 @@ describe('effective domains', () => {
 			root: null,
 			fallback: null,
 			provenance: { fallback: 'builtin' },
+			caseInsensitivePaths: { '/docs': '/docs' },
 			links: {
 				'/docs': {
 					url: 'https://example.com/docs',
@@ -125,7 +178,16 @@ describe('effective domains', () => {
 					enabled: true,
 					status_code: 302,
 					forward_query: false,
-					provenance: { status_code: 'builtin', forward_query: 'builtin' }
+					case_insensitive: true,
+					ignore_trailing_slash: true,
+					forward_path: false,
+					provenance: {
+						status_code: 'builtin',
+						forward_query: 'builtin',
+						case_insensitive: 'builtin',
+						ignore_trailing_slash: 'builtin',
+						forward_path: 'builtin'
+					}
 				}
 			}
 		});
@@ -135,20 +197,65 @@ describe('effective domains', () => {
 		expect(configuration.domains['go.example.com']).not.toHaveProperty('fallback');
 	});
 
+	it('records explicit global false matching defaults instead of treating them as omissions', () => {
+		const { configuration, domains } = validateConfig(
+			{
+				...configurationInput(),
+				link_defaults: {
+					case_insensitive: false,
+					ignore_trailing_slash: false,
+					forward_path: false
+				}
+			},
+			options
+		);
+		expect(configuration.domains['go.example.com']?.link_defaults).toEqual({});
+		expect(domains['go.example.com']?.links['/docs']).toMatchObject({
+			case_insensitive: false,
+			ignore_trailing_slash: false,
+			forward_path: false,
+			provenance: {
+				case_insensitive: 'global',
+				ignore_trailing_slash: 'global',
+				forward_path: 'global'
+			}
+		});
+		expect(domains['go.example.com']?.caseInsensitivePaths).toEqual({});
+	});
+
 	it('resolves global, domain and link overrides, including explicit false', () => {
 		const input = configurationInput({
 			'/inherit': { url: 'https://example.com' },
-			'/override': { url: 'https://example.com', status_code: 308, forward_query: false }
+			'/override': {
+				url: 'https://example.com',
+				status_code: 308,
+				forward_query: false,
+				case_insensitive: false,
+				ignore_trailing_slash: false,
+				forward_path: false
+			}
 		});
 		const { domains } = validateConfig(
 			{
 				...input,
-				link_defaults: { status_code: 301, forward_query: true },
+				link_defaults: {
+					status_code: 301,
+					forward_query: true,
+					case_insensitive: true,
+					ignore_trailing_slash: true,
+					forward_path: true
+				},
 				fallback: { url: 'https://example.com' },
 				domains: {
 					global: input.domains['go.example.com'],
 					domain: {
-						link_defaults: { status_code: 307, forward_query: false },
+						link_defaults: {
+							status_code: 307,
+							forward_query: false,
+							case_insensitive: false,
+							ignore_trailing_slash: false,
+							forward_path: false
+						},
 						fallback: { url: 'https://example.com/domain-missing' },
 						links: input.domains['go.example.com'].links
 					}
@@ -159,11 +266,28 @@ describe('effective domains', () => {
 		expect(domains.global?.links['/inherit']).toMatchObject({
 			status_code: 301,
 			forward_query: true,
-			provenance: { status_code: 'global', forward_query: 'global' }
+			case_insensitive: true,
+			ignore_trailing_slash: true,
+			forward_path: true,
+			provenance: {
+				status_code: 'global',
+				forward_query: 'global',
+				case_insensitive: 'global',
+				ignore_trailing_slash: 'global',
+				forward_path: 'global'
+			}
 		});
 		expect(domains.global?.links['/override']).toMatchObject({
 			forward_query: false,
-			provenance: { forward_query: 'link' }
+			case_insensitive: false,
+			ignore_trailing_slash: false,
+			forward_path: false,
+			provenance: {
+				forward_query: 'link',
+				case_insensitive: 'link',
+				ignore_trailing_slash: 'link',
+				forward_path: 'link'
+			}
 		});
 		expect(domains.global).toMatchObject({
 			fallback: { url: 'https://example.com', status_code: 302, forward_query: false },
@@ -172,7 +296,16 @@ describe('effective domains', () => {
 		expect(domains.domain?.links['/inherit']).toMatchObject({
 			status_code: 307,
 			forward_query: false,
-			provenance: { status_code: 'domain', forward_query: 'domain' }
+			case_insensitive: false,
+			ignore_trailing_slash: false,
+			forward_path: false,
+			provenance: {
+				status_code: 'domain',
+				forward_query: 'domain',
+				case_insensitive: 'domain',
+				ignore_trailing_slash: 'domain',
+				forward_path: 'domain'
+			}
 		});
 		expect(domains.domain).toMatchObject({
 			fallback: {
@@ -185,7 +318,16 @@ describe('effective domains', () => {
 		expect(domains.domain?.links['/override']).toMatchObject({
 			status_code: 308,
 			forward_query: false,
-			provenance: { status_code: 'link', forward_query: 'link' }
+			case_insensitive: false,
+			ignore_trailing_slash: false,
+			forward_path: false,
+			provenance: {
+				status_code: 'link',
+				forward_query: 'link',
+				case_insensitive: 'link',
+				ignore_trailing_slash: 'link',
+				forward_path: 'link'
+			}
 		});
 		expect(domains.domain?.links['/override']).not.toHaveProperty('fallback');
 	});
@@ -211,14 +353,58 @@ describe('effective domains', () => {
 			root: null,
 			fallback: { url: 'https://example.com/global', status_code: 307, forward_query: true },
 			provenance: { fallback: 'global' },
-			links: {}
+			links: {},
+			caseInsensitivePaths: {}
 		});
 		expect(domains.replaced).toEqual({
 			root: { url: 'https://example.com/root', status_code: 301, forward_query: true },
 			fallback: { url: 'https://example.com/domain', status_code: 302, forward_query: false },
 			provenance: { fallback: 'domain' },
-			links: {}
+			links: {},
+			caseInsensitivePaths: {}
 		});
+	});
+
+	it.each([
+		[true, true],
+		[true, false],
+		[false, true]
+	])(
+		'rejects overlapping case identities with insensitive flags %s and %s in either order',
+		(first, second) => {
+			const links = {
+				'/Docs': { url: 'https://destination.example/first', case_insensitive: first },
+				'/docs': { url: 'https://destination.example/second', case_insensitive: second }
+			};
+			for (const entries of [Object.entries(links), Object.entries(links).reverse()]) {
+				expect(() =>
+					validateConfig(configurationInput(Object.fromEntries(entries)), options)
+				).toThrowError(new ConfigError());
+			}
+		}
+	);
+
+	it('keeps distinct strict case identities and non-ASCII spelling independent', () => {
+		const { domains } = validateConfig(
+			configurationInput({
+				'/Docs': { url: 'https://destination.example/first', case_insensitive: false },
+				'/docs': { url: 'https://destination.example/second', case_insensitive: false },
+				'/café': { url: 'https://destination.example/lower' },
+				'/CAFÉ': { url: 'https://destination.example/upper' }
+			}),
+			options
+		);
+		expect(Object.keys(domains['go.example.com']!.links)).toEqual([
+			'/Docs',
+			'/docs',
+			'/café',
+			'/CAFÉ'
+		]);
+		expect(domains['go.example.com']?.caseInsensitivePaths).toEqual({
+			'/café': '/café',
+			'/cafÉ': '/CAFÉ'
+		});
+		expect(Object.getPrototypeOf(domains['go.example.com']!.caseInsensitivePaths)).toBeNull();
 	});
 
 	it('rejects the root as a named link', () => {

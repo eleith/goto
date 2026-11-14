@@ -45,10 +45,14 @@ test('the compiled writer persists outcomes, isolates locks and drains visits be
 	try {
 		competingWriter.exec('PRAGMA busy_timeout = 1000');
 		competingWriter.exec('BEGIN IMMEDIATE');
-		for (let index = 0; index < 3; index++) {
-			const response = await request.get('/docs', options);
+		for (const [path, destination] of [
+			['/docs', 'https://example.org/first-domain'],
+			['/DOCS/', 'https://example.org/first-domain'],
+			['/DoCs/Install?from=browser', 'https://example.org/first-domain/Install?from=browser']
+		] as const) {
+			const response = await request.get(path, options);
 			expect(response.status()).toBe(302);
-			expect(response.headers().location).toBe('https://example.org/first-domain');
+			expect(response.headers().location).toBe(destination);
 		}
 		expect(visitCount(databasePath, '/docs')).toBe(0);
 	} finally {

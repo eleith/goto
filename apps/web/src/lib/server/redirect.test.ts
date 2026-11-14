@@ -1,4 +1,11 @@
-import type { PreparedDomain, PreparedLink, RedirectResponse, RedirectStatus } from '@goto/config';
+import {
+	validateConfig,
+	type LinkConfiguration,
+	type PreparedDomain,
+	type PreparedLink,
+	type RedirectResponse,
+	type RedirectStatus
+} from '@goto/config';
 import { describe, expect, test, vi } from 'vitest';
 import { resolveRedirect } from './redirect.js';
 
@@ -19,7 +26,16 @@ function preparedLink(overrides: Partial<PreparedLink> = {}): PreparedLink {
 		enabled: true,
 		status_code: 302,
 		forward_query: false,
-		provenance: { status_code: 'builtin', forward_query: 'builtin' },
+		case_insensitive: false,
+		ignore_trailing_slash: false,
+		forward_path: false,
+		provenance: {
+			status_code: 'builtin',
+			forward_query: 'builtin',
+			case_insensitive: 'link',
+			ignore_trailing_slash: 'link',
+			forward_path: 'builtin'
+		},
 		...overrides
 	};
 }
@@ -29,7 +45,7 @@ function preparedDomain(
 	fallback: PreparedDomain['fallback'] = null,
 	root: PreparedDomain['root'] = null
 ): PreparedDomain {
-	return { root, links, fallback, provenance: { fallback: 'builtin' } };
+	return { root, links, fallback, caseInsensitivePaths: {}, provenance: { fallback: 'builtin' } };
 }
 
 describe('exact single-decode lookup', () => {
@@ -112,6 +128,103 @@ describe('exact single-decode lookup', () => {
 
 		expect(resolveRedirect(first, host, '/docs', 'GET').response.status).toBe(302);
 		expect(resolveRedirect(second, 'other.example.test', '/docs', 'GET').response.status).toBe(404);
+	});
+});
+
+type LinkInput = Pick<LinkConfiguration, 'url'> & Partial<LinkConfiguration>;
+
+function matchingDomain(links: Record<string, LinkInput>): PreparedDomain {
+	return validateConfig(
+		{
+			auth: { credentials: { username: 'example', password: 'unit-only-password' } },
+			domains: { [host]: { links } }
+		},
+		{ env: {} }
+	).domains[host]!;
+}
+
+describe('flexible matching and forwarding', () => {
+	test('built-in aliases count against the authored key without enabling prefix matching', () => {
+		const domain = matchingDomain({ '/Docs': { url: destination } });
+		const matched = resolveRedirect(domain, host, '/DOCS/', 'GET');
+		expect(matched.response.headers.get('location')).toBe(destination);
+		expect(matched.visit).toMatchObject({ path: '/Docs', outcome: 'valid' });
+
+		const unmatched = resolveRedirect(domain, host, '/docs/install', 'GET');
+		expect(unmatched.response.status).toBe(404);
+		expect(unmatched.visit).toMatchObject({ path: '/docs/install', outcome: 'invalid' });
+	});
+
+	test('forwards encoded suffix segments before independently merging query parameters', () => {
+		const domain = matchingDomain({
+			'/docs': {
+				url: 'https://TARGET.example.test:443/base/?tag=old&keep=%2f#part',
+				forward_path: true,
+				forward_query: true
+			}
+		});
+		const target = '/DOCS/Install%20Guide/%252F?tag=one&tag=two';
+		const { response, visit } = resolveRedirect(domain, host, target, 'GET');
+		expect(response.headers.get('location')).toBe(
+			'https://target.example.test/base/Install%20Guide/%252F?keep=%2F&tag=one&tag=two#part'
+		);
+		expect(visit).toMatchObject({ path: '/docs', outcome: 'valid' });
+		const head = resolveRedirect(domain, host, target, 'HEAD');
+		expect([...head.response.headers]).toEqual([...response.headers]);
+		expect(head.visit).toBeUndefined();
+	});
+
+	test('path forwarding does not enable query forwarding or rewrite an exact destination', () => {
+		const authored = 'https://TARGET.example.test:443/base/?tag=old&keep=%2f#part';
+		const domain = matchingDomain({ '/docs': { url: authored, forward_path: true } });
+		expect(
+			resolveRedirect(domain, host, '/docs/Install?tag=new', 'GET').response.headers.get('location')
+		).toBe('https://target.example.test/base/Install?tag=old&keep=%2f#part');
+		expect(
+			resolveRedirect(domain, host, '/docs?tag=new', 'GET').response.headers.get('location')
+		).toBe(authored);
+	});
+
+	test('the most specific match owns its suffix and captured identity', () => {
+		const domain = matchingDomain({
+			'/docs': { url: destination, forward_path: true },
+			'/docs/api': { url: 'https://api.example.test/reference', forward_path: true }
+		});
+		const { response, visit } = resolveRedirect(domain, host, '/DOCS/api/Start', 'GET');
+		expect(response.headers.get('location')).toBe('https://api.example.test/reference/Start');
+		expect(visit).toMatchObject({ path: '/docs/api', outcome: 'valid' });
+	});
+
+	test('an inactive prefix winner uses fallback without forwarding its suffix or trying a parent', () => {
+		const domain = matchingDomain({
+			'/docs': { url: destination, forward_path: true },
+			'/docs/private': { url: destination, forward_path: true, enabled: false }
+		});
+		domain.fallback = fallback;
+		const { response, visit } = resolveRedirect(domain, host, '/DOCS/private/secret?x=1', 'GET');
+		expect(response.headers.get('location')).toBe(fallbackUrl);
+		expect(visit).toMatchObject({ path: '/docs/private', outcome: 'invalid' });
+	});
+
+	test.each(['/docs/%2E%2E/secret', '/docs/%5Csecret', '/docs/%00'])(
+		'does not turn dangerous decoded suffixes into forwarded paths: %s',
+		(target) => {
+			const domain = matchingDomain({ '/docs': { url: destination, forward_path: true } });
+			const { response, visit } = resolveRedirect(domain, host, target, 'GET');
+			expect(response.status).toBe(404);
+			expect(response.headers.has('location')).toBe(false);
+			expect(visit?.outcome).toBe('invalid');
+		}
+	);
+
+	test('runtime blocks recursion through an alias of the same prefix link', () => {
+		const domain = matchingDomain({ '/docs': { url: destination, forward_path: true } });
+		domain.links['/docs']!.url = 'https://go.example.test/DOCS/again';
+		const { response, visit } = resolveRedirect(domain, host, '/docs/start', 'GET');
+		expect(response.status).toBe(404);
+		expect(response.headers.has('location')).toBe(false);
+		expect(response.headers.get('cache-control')).toBe('no-store');
+		expect(visit).toMatchObject({ path: '/docs', outcome: 'invalid' });
 	});
 });
 

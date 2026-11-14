@@ -76,13 +76,31 @@ describe('Goto editor schema', () => {
 		}
 		for (const name of ['DomainLinkDefaults', 'LinkConfiguration']) {
 			const schema = definition(editor, name);
-			for (const field of ['status_code', 'forward_query']) {
+			for (const field of [
+				'status_code',
+				'forward_query',
+				'case_insensitive',
+				'ignore_trailing_slash',
+				'forward_path'
+			]) {
 				expect(property(schema, field)).not.toHaveProperty('default');
 				expect(schema.required ?? []).not.toContain(field);
 			}
 		}
 		expect(property(definition(editor, 'LinkDefaults'), 'status_code').default).toBe(302);
 		expect(property(definition(editor, 'LinkDefaults'), 'forward_query')).toEqual({
+			type: 'boolean',
+			default: false
+		});
+		expect(property(definition(editor, 'LinkDefaults'), 'case_insensitive')).toEqual({
+			type: 'boolean',
+			default: true
+		});
+		expect(property(definition(editor, 'LinkDefaults'), 'ignore_trailing_slash')).toEqual({
+			type: 'boolean',
+			default: true
+		});
+		expect(property(definition(editor, 'LinkDefaults'), 'forward_path')).toEqual({
 			type: 'boolean',
 			default: false
 		});

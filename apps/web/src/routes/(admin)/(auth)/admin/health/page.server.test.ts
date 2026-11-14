@@ -66,6 +66,9 @@ test('returns only allowlisted settings and the prepared report cutoff, without 
 		reportDelayed: false,
 		redirectStatusCode: 302,
 		forwardQuery: false,
+		caseInsensitive: true,
+		ignoreTrailingSlash: true,
+		forwardPath: false,
 		fallbackDestination: 404,
 		workerUrl: 'http://worker.example.test:9000/base'
 	});
@@ -88,7 +91,13 @@ test('projects OIDC mode and configured redirect defaults without exposing the p
 					client_secret: 'private-client-secret'
 				}
 			},
-			link_defaults: { status_code: 307, forward_query: true },
+			link_defaults: {
+				status_code: 307,
+				forward_query: true,
+				case_insensitive: false,
+				ignore_trailing_slash: false,
+				forward_path: true
+			},
 			fallback: { url: 'https://example.test/missing' }
 		})
 	);
@@ -102,6 +111,9 @@ test('projects OIDC mode and configured redirect defaults without exposing the p
 		reportDelayed: false,
 		redirectStatusCode: 307,
 		forwardQuery: true,
+		caseInsensitive: false,
+		ignoreTrailingSlash: false,
+		forwardPath: true,
 		fallbackDestination: 'https://example.test/missing',
 		workerUrl: 'http://worker.example.test:9000/base'
 	});
