@@ -8,6 +8,7 @@
 	import StatCard from '#lib/components/admin/StatCard.svelte';
 	import ReportNotice from '#lib/components/admin/ReportNotice.svelte';
 	import { formatUtc } from '#lib/components/admin/format.js';
+	import TagPills from '#lib/components/admin/TagPills.svelte';
 	import type { PageData } from './$types';
 	let { data }: { data: PageData } = $props();
 
@@ -89,7 +90,7 @@
 			{/if}
 			{#if data.tags.length > 0}
 				<dt>Tags</dt>
-				<dd>{data.tags.join(', ')}</dd>
+				<dd><TagPills tags={data.tags} {timeframe} /></dd>
 			{/if}
 		</dl>
 	</section>

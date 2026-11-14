@@ -6,7 +6,7 @@
 
 	let {
 		siteTitle,
-		title,
+		title: heading,
 		documentTitle,
 		context,
 		overviewHref = '/admin',
@@ -28,13 +28,13 @@
 	let compactUpdatedText = $derived(formatUpdatedCompact(updatedAt));
 </script>
 
-<svelte:head><title>{documentTitle ?? title} — {siteTitle}</title></svelte:head>
+<svelte:head><title>{documentTitle ?? heading} — {siteTitle}</title></svelte:head>
 <AdminNav title={siteTitle} {overviewHref} />
 <main class="admin-page">
 	<header class="admin-heading">
 		<div class="admin-title-row">
 			<div class="admin-title">
-				<h1>{title}</h1>
+				<h1 title={heading}>{heading}</h1>
 				{#if context}<div class="admin-context">{@render context()}</div>{/if}
 				{#if updatedAt !== null}
 					<time

@@ -19,6 +19,7 @@
 	gap: var(--space-4) var(--space-5);
 }
 .admin-title {
+	flex: 1 1 10rem;
 	min-width: 0;
 	display: flex;
 	flex-direction: column;
@@ -41,9 +42,11 @@
 	display: none;
 }
 .admin-heading h1 {
+	overflow: hidden;
 	font-size: var(--font-size-heading);
 	line-height: var(--line-height-heading);
-	overflow-wrap: anywhere;
+	text-overflow: ellipsis;
+	white-space: pre;
 }
 .admin-page h2 {
 	font-size: 1.25rem;
@@ -106,6 +109,12 @@
 }
 .admin-link-inventory.with-visits {
 	--inventory-columns: minmax(0, 1.2fr) minmax(0, 3fr) minmax(0, 1fr) minmax(5rem, 0.8fr);
+}
+.admin-link-inventory.with-domains {
+	--inventory-columns: minmax(0, 2fr) minmax(0, 2fr) minmax(0, 1fr);
+}
+.admin-link-inventory.with-domains.with-visits {
+	--inventory-columns: minmax(0, 2fr) minmax(0, 2fr) minmax(0, 1fr) minmax(5rem, 0.8fr);
 }
 .admin-inventory-heading,
 .admin-inventory-row {
@@ -221,9 +230,6 @@
 	}
 	.admin-updated-compact {
 		display: inline;
-	}
-	.admin-title {
-		flex: 1 1 10rem;
 	}
 	.admin-stat {
 		block-size: 7rem;

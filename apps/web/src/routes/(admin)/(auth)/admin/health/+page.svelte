@@ -4,6 +4,7 @@
 	import IconWarningCircle from 'virtual:icons/ph/warning-circle';
 	import IconSpinner from 'virtual:icons/ph/spinner';
 	import AdminPage from '#lib/components/admin/AdminPage.svelte';
+	import TagPills from '#lib/components/admin/TagPills.svelte';
 	import { formatUtc } from '#lib/components/admin/format.js';
 	import type { ActionData, PageData, SubmitFunction } from './$types';
 
@@ -49,6 +50,14 @@
 			<dt>Fallback</dt>
 			<dd>{data.fallbackDestination === 404 ? '404 Not found' : data.fallbackDestination}</dd>
 		</dl>
+	</section>
+	<section class="admin-info" aria-labelledby="tags-heading">
+		<h2 id="tags-heading">Tags</h2>
+		{#if data.tags.length > 0}
+			<TagPills tags={data.tags} />
+		{:else}
+			<p>No tags configured.</p>
+		{/if}
 	</section>
 	<section class="admin-info health-card" aria-labelledby="analytics-heading">
 		{#if data.retentionMonths !== 0 && (data.reportDelayed || data.reportDataAsOf === null)}

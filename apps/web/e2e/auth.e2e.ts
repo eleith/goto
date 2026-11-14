@@ -3,6 +3,9 @@ import { expect, test } from './support/test.ts';
 
 test.use({ withWorker: true });
 
+const sharedTag = 'Work/100%é';
+const tagPath = '/admin/tags/Work%2F100%25%C3%A9';
+
 test('shared credentials protect admin pages and sign-out removes access', async ({
 	page,
 	appServer
@@ -250,7 +253,13 @@ test('shared credentials protect admin pages and sign-out removes access', async
 		'datetime',
 		'2100-01-01T00:00:00Z'
 	);
-	await expect(linkDetails.getByText('work, docs', { exact: true })).toBeVisible();
+	await expect(
+		linkDetails.getByRole('list', { name: 'Tags', exact: true }).getByRole('link')
+	).toHaveText(['work', 'docs', sharedTag]);
+	await expect(linkDetails.getByRole('link', { name: sharedTag, exact: true })).toHaveAttribute(
+		'href',
+		`${tagPath}?period=all`
+	);
 	const linkField = linkDetails.locator('dd').first();
 	await expect(linkField).toHaveText('go.example.org/docs');
 	await expect(linkField.getByRole('link')).toHaveCount(0);
@@ -278,6 +287,36 @@ test('shared credentials protect admin pages and sign-out removes access', async
 	await expect(
 		page.getByRole('region', { name: 'Links on go.example.org', exact: true })
 	).toHaveCount(0);
+
+	await linkDetails.getByRole('link', { name: sharedTag, exact: true }).click();
+	await expect(page).toHaveURL(`${appServer.origin}${tagPath}?period=all`);
+	const tagHeading = page.getByRole('heading', { name: `Tag: ${sharedTag}`, exact: true });
+	await expect(tagHeading).toBeVisible();
+	await expect(tagHeading).toHaveAttribute('title', `Tag: ${sharedTag}`);
+	await expect(page).toHaveTitle(`Tag: ${sharedTag} — Goto`);
+	await expect(page.getByRole('region', { name: 'Tag details', exact: true })).toHaveCount(0);
+	const taggedLinks = page.getByRole('region', { name: `Links tagged ${sharedTag}`, exact: true });
+	await expect(taggedLinks.getByRole('link')).toHaveCount(2);
+	await expect(taggedLinks.locator('.admin-inventory-heading > span')).toHaveText([
+		'Domain',
+		'Path',
+		'State',
+		'Visits'
+	]);
+	const taggedDocs = taggedLinks.getByRole('link', { name: 'go.example.org/docs', exact: true });
+	await expect(taggedDocs.locator('.admin-inventory-primary')).toHaveText('go.example.org');
+	await expect(taggedDocs.locator('.admin-inventory-secondary')).toHaveText('/docs');
+	await expect(taggedDocs).toHaveAttribute('href', `${docsPath}?period=all`);
+	await expect(
+		taggedLinks.getByRole('link', { name: 'tiny.example.org/docs', exact: true })
+	).toBeVisible();
+	await expect(visitsValue).toHaveText('2');
+	await timeframe.getByRole('button', { name: '7 days', exact: true }).click();
+	await expect(page).toHaveURL(`${appServer.origin}${tagPath}?period=7d`);
+	await expect(visitsValue).toHaveText('1');
+	await taggedDocs.click();
+	await expect(page).toHaveURL(`${appServer.origin}${docsPath}?period=7d`);
+	await timeframe.getByRole('button', { name: '3 months', exact: true }).click();
 
 	await overviewLink.click();
 	await domainLink.click();
@@ -332,6 +371,11 @@ test('shared credentials protect admin pages and sign-out removes access', async
 	await expect(
 		page.getByRole('region', { name: 'Analytics', exact: true }).getByRole('alert')
 	).toHaveCount(0);
+	await expect(
+		page
+			.getByRole('region', { name: 'Tags', exact: true })
+			.getByRole('link', { name: sharedTag, exact: true })
+	).toHaveCount(1);
 	const workerHealth = page.getByRole('region', { name: 'Worker', exact: true });
 	await expect(workerHealth.getByRole('status')).toHaveText('Not checked');
 	await workerHealth.getByRole('button', { name: 'Test worker', exact: true }).click();
@@ -414,5 +458,28 @@ test.describe('analytics disabled', () => {
 		await expect(
 			page.getByRole('region', { name: 'Worker', exact: true }).getByRole('status')
 		).toHaveText('Not checked');
+		await page
+			.getByRole('region', { name: 'Tags', exact: true })
+			.getByRole('link', { name: sharedTag, exact: true })
+			.click();
+		await expect(page).toHaveURL(`${appServer.origin}${tagPath}`);
+		await expect(
+			page.getByRole('heading', { name: `Tag: ${sharedTag}`, exact: true })
+		).toBeVisible();
+		await expect(page.locator('.admin-cards .admin-stat-label')).toHaveText(['Links']);
+		await expect(page.getByRole('group', { name: 'Timeframe', exact: true })).toHaveCount(0);
+		await expect(page.getByRole('region', { name: 'Visits over time', exact: true })).toHaveCount(
+			0
+		);
+		const taggedLinks = page.getByRole('region', {
+			name: `Links tagged ${sharedTag}`,
+			exact: true
+		});
+		await expect(taggedLinks.getByRole('link')).toHaveCount(2);
+		await expect(taggedLinks.locator('.admin-inventory-heading > span')).toHaveText([
+			'Domain',
+			'Path',
+			'State'
+		]);
 	});
 });

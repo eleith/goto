@@ -40,12 +40,14 @@ const configuration = {
 					forward_query: true,
 					valid_from: '2020-01-01T00:00:00Z',
 					valid_until: '2100-01-01T00:00:00Z',
-					tags: ['work', 'docs']
+					tags: ['work', 'docs', 'Work/100%é']
 				},
 				'/healthz': { url: 'https://example.org/public-health' }
 			}
 		},
-		'tiny.example.org': { links: { '/docs': { url: 'https://example.org/second-domain' } } }
+		'tiny.example.org': {
+			links: { '/docs': { url: 'https://example.org/second-domain', tags: ['Work/100%é'] } }
+		}
 	}
 };
 await writeFile(join(runtimeDirectory, 'config/goto.yaml'), JSON.stringify(configuration));
