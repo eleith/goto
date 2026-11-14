@@ -103,6 +103,34 @@ describe('goto-cli config validate', () => {
 		expect(output.stderr).not.toHaveBeenCalled();
 	});
 
+	it('reports safe tag warnings on stderr and succeeds with a qualified stdout message', async () => {
+		const source = `${validYaml}        tags: [Work, "\${DUMMY_TAG}", work]\n`;
+		const privateTag = 'private-tag-do-not-print\u0000';
+		await writeConfiguration('config/goto.yaml', source);
+		const output = createOutput();
+
+		expect(
+			await runCli(['config', 'validate'], output, { cwd, env: { ...env, DUMMY_TAG: privateTag } })
+		).toBe(0);
+		expect(output.stdout).toHaveBeenCalledExactlyOnceWith(
+			'Configuration is valid with warnings.\n'
+		);
+		expect(output.stderr).toHaveBeenCalledExactlyOnceWith(
+			'Configuration warnings\n  /domains/*/links/*/tags/1: Dropped tag: ASCII control characters are not allowed\n'
+		);
+		const diagnostic = output.stderr.mock.calls[0]?.[0];
+		for (const sensitive of [
+			...Object.values(env),
+			'private-tag-do-not-print',
+			'go.example.test',
+			'/docs',
+			source,
+			cwd
+		]) {
+			expect(diagnostic).not.toContain(sensitive);
+		}
+	});
+
 	it.each([
 		{
 			name: 'invalid YAML with a secret parser snippet',
@@ -136,6 +164,21 @@ describe('goto-cli config validate', () => {
 			name: 'invalid resolved session secret',
 			source: validYaml,
 			environment: { ...env, DUMMY_SECRET: 'too-short' }
+		},
+		{
+			name: 'nonarray tags',
+			source: `${validYaml}        tags: Work\n`,
+			environment: env
+		},
+		{
+			name: 'nonstring tag item',
+			source: `${validYaml}        tags: [Work, 42]\n`,
+			environment: env
+		},
+		{
+			name: 'actual error alongside dropped tags',
+			source: `${validYaml}        tags: [., ""]\nsite: {title: null}\n`,
+			environment: env
 		}
 	])('reports $name without disclosing configuration', async ({ source, environment }) => {
 		await writeConfiguration('config/goto.yaml', source);

@@ -1,7 +1,12 @@
 import { mkdir } from 'node:fs/promises';
 import { once } from 'node:events';
 import { dirname } from 'node:path';
-import { loadConfigFile, resolveConfigPath, type ConfigOptions } from '@goto/config';
+import {
+	formatConfigWarnings,
+	loadConfigFile,
+	resolveConfigPath,
+	type ConfigOptions
+} from '@goto/config';
 import { openDb, runMigrations } from '@goto/db';
 import { OpenWorkflow } from 'openworkflow';
 import { BackendSqlite } from 'openworkflow/sqlite';
@@ -35,6 +40,7 @@ export async function startWorkerService(
 	const path = resolveConfigPath(captured);
 	const loadConfiguration = () => loadConfigFile(path, captured);
 	const prepared = await loadConfiguration();
+	if (prepared.warnings.length > 0) logger.warn(formatConfigWarnings(prepared.warnings));
 	const databasePath = prepared.configuration.database.worker_path;
 	const visitDatabasePath = prepared.configuration.database.path;
 	if (databasePath === visitDatabasePath) {

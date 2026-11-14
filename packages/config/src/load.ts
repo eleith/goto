@@ -8,6 +8,7 @@ import { interpolate } from './interpolate.js';
 import { resolveConfigPath, resolveDeploymentRoot } from './paths.js';
 import { prepareDomains } from './resolve.js';
 import { GotoConfigurationSchema, configurationReferences } from './schema.js';
+import { dropInvalidStringTags } from './tags.js';
 import type { ConfigEnvironment, ConfigOptions, PreparedConfiguration } from './types.js';
 
 export async function loadConfigFile(
@@ -75,6 +76,7 @@ export function validateConfig(raw: unknown, options: ConfigOptions = {}): Prepa
 		const expanded = interpolate(copy, env);
 		const defaulted = Value.Default(GotoConfigurationSchema, configurationReferences, expanded);
 		assertArrayShapesPreserved(raw, defaulted);
+		const warnings = dropInvalidStringTags(defaulted);
 		if (!Value.Check(GotoConfigurationSchema, configurationReferences, defaulted)) {
 			const issues = [
 				...Value.Errors(GotoConfigurationSchema, configurationReferences, defaulted)
@@ -84,7 +86,11 @@ export function validateConfig(raw: unknown, options: ConfigOptions = {}): Prepa
 		const configuration = defaulted;
 		const authoredLinkDefaults =
 			typeof raw.link_defaults === 'object' && raw.link_defaults !== null ? raw.link_defaults : {};
-		return { configuration, domains: prepareDomains(configuration, authoredLinkDefaults) };
+		return {
+			configuration,
+			domains: prepareDomains(configuration, authoredLinkDefaults),
+			warnings
+		};
 	} catch (error) {
 		if (error instanceof ConfigError) throw error;
 		throw new ConfigError();

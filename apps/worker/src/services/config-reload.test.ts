@@ -118,6 +118,22 @@ test('refreshes report inventory after an accepted domain/link change', async ()
 	expect(requestReportRefresh).toHaveBeenCalledOnce();
 });
 
+test('reports only new accepted tag warnings without requesting a report refresh', async () => {
+	const initial = configuration();
+	const next = {
+		...initial,
+		warnings: [{ path: '/domains/*/links/*/tags/0', message: 'Ignored blank tag' }]
+	};
+	const ctx = context();
+	expect(await applyConfig(next, initial, vi.fn(), ctx, engine)).toBe(true);
+	expect(logger.warn).toHaveBeenCalledExactlyOnceWith(
+		'Configuration warnings\n  /domains/*/links/*/tags/0: Ignored blank tag'
+	);
+	expect(await applyConfig(next, next, vi.fn(), ctx, engine)).toBe(true);
+	expect(logger.warn).toHaveBeenCalledOnce();
+	expect(requestReportRefresh).not.toHaveBeenCalled();
+});
+
 test('a failed refresh on positive policy reconciliation requests shutdown', async () => {
 	const initial = configuration(undefined, 9);
 	const ctx = context();

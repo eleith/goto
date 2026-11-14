@@ -1,4 +1,10 @@
-import { ConfigError, formatConfigError, loadConfigFile, type ConfigOptions } from '@goto/config';
+import {
+	ConfigError,
+	formatConfigError,
+	formatConfigWarnings,
+	loadConfigFile,
+	type ConfigOptions
+} from '@goto/config';
 import { cli, define, type CommandContext } from 'gunshi';
 
 interface CliOutput {
@@ -30,7 +36,11 @@ export async function runCli(
 			path: { type: 'positional', required: false, description: 'Path to the YAML configuration.' }
 		},
 		async run(context) {
-			await loadConfigFile(context.values.path, options);
+			const prepared = await loadConfigFile(context.values.path, options);
+			if (prepared.warnings.length > 0) {
+				output.stderr(`${formatConfigWarnings(prepared.warnings)}\n`);
+				return 'Configuration is valid with warnings.';
+			}
 			return 'Configuration is valid.';
 		}
 	});

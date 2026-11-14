@@ -18,7 +18,8 @@ describe('configuration loading', () => {
 		);
 		const input = configurationInput();
 		const original = structuredClone(input);
-		const { configuration } = validateConfig(input, options);
+		const { configuration, warnings } = validateConfig(input, options);
+		expect(warnings).toEqual([]);
 		expect(configuration).toMatchObject({
 			version: 1,
 			url: { app: 'http://localhost:3000', worker: 'http://goto-worker:9000' },
@@ -35,6 +36,91 @@ describe('configuration loading', () => {
 		});
 		expect(input).toEqual(original);
 	});
+
+	it('drops unusable string tags while preserving literal names, duplicates and the input', () => {
+		const tags = [
+			'Work',
+			'',
+			'work',
+			' ',
+			'.',
+			'..',
+			'bad\u0000tag',
+			'\ud800',
+			' Work ',
+			'Work/100%é',
+			'Work'
+		];
+		const input = configurationInput({ '/docs': { url: 'https://example.com/docs', tags } });
+		const original = structuredClone(input);
+		const prepared = validateConfig(input, options);
+		const retained = ['Work', 'work', ' Work ', 'Work/100%é', 'Work'];
+
+		expect(prepared.configuration.domains['go.example.com']?.links['/docs']?.tags).toEqual(
+			retained
+		);
+		expect(prepared.domains['go.example.com']?.links['/docs']?.tags).toEqual(retained);
+		expect(prepared.warnings).toEqual([
+			{ path: '/domains/*/links/*/tags/1', message: 'Dropped tag: expected nonblank text' },
+			{ path: '/domains/*/links/*/tags/3', message: 'Dropped tag: expected nonblank text' },
+			{ path: '/domains/*/links/*/tags/4', message: 'Dropped tag: dot segments are not allowed' },
+			{ path: '/domains/*/links/*/tags/5', message: 'Dropped tag: dot segments are not allowed' },
+			{
+				path: '/domains/*/links/*/tags/6',
+				message: 'Dropped tag: ASCII control characters are not allowed'
+			},
+			{
+				path: '/domains/*/links/*/tags/7',
+				message: 'Dropped tag: malformed Unicode is not allowed'
+			}
+		]);
+		expect(input).toEqual(original);
+	});
+
+	it('keeps links whose tags are all dropped and defaults omitted tags without warnings', () => {
+		const prepared = validateConfig(
+			configurationInput({
+				'/bad': { url: 'https://example.com/bad', tags: ['', '..'] },
+				'/omitted': { url: 'https://example.com/omitted' }
+			}),
+			options
+		);
+		expect(prepared.domains['go.example.com']?.links['/bad']?.tags).toEqual([]);
+		expect(prepared.domains['go.example.com']?.links['/omitted']?.tags).toEqual([]);
+		expect(prepared.warnings).toHaveLength(2);
+		expect(validateConfig(configurationInput(), options).warnings).toEqual([]);
+	});
+
+	it('cleans tags after interpolation without tolerating missing variables or unrelated errors', () => {
+		const input = configurationInput({
+			'/docs': { url: 'https://example.com/docs', tags: ['${TAG}', '${OTHER:- Work }'] }
+		});
+		const prepared = validateConfig(input, { env: { TAG: 'bad\u007ftag' } });
+		expect(prepared.domains['go.example.com']?.links['/docs']?.tags).toEqual([' Work ']);
+		expect(prepared.warnings).toEqual([
+			{
+				path: '/domains/*/links/*/tags/0',
+				message: 'Dropped tag: ASCII control characters are not allowed'
+			}
+		]);
+		expect(() => validateConfig(input, options)).toThrow(ConfigError);
+		expect(() => validateConfig({ ...input, site: null }, { env: { TAG: '.' } })).toThrow(
+			ConfigError
+		);
+	});
+
+	it.each([null, {}, 'work', ['work', 42], [false], [null], [{}]])(
+		'rejects malformed tag containers and nonstring items %j',
+		(tags) => {
+			const input = {
+				...configurationInput(),
+				domains: {
+					'go.example.com': { links: { '/docs': { url: 'https://example.com/docs', tags } } }
+				}
+			};
+			expect(() => validateConfig(input, options)).toThrow(ConfigError);
+		}
+	);
 
 	it.each([0, 3, 9, 12])('accepts the finite analytics retention %s', (retention_months) => {
 		const input = { ...configurationInput(), analytics: { retention_months } };

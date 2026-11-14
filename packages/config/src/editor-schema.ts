@@ -121,6 +121,8 @@ function adaptSchemaForEditor(
 		node.format = 'uri';
 	} else if (node.format === 'goto-instant') {
 		node.format = 'date-time';
+	} else if (node.format === 'goto-tag') {
+		delete node.format;
 	}
 	removeDefaultedPropertiesFromRequired(node, context);
 	for (const key of [

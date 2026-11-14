@@ -148,6 +148,29 @@ test('changes positive retention live without replacing the recorder', async () 
 	await application.close?.();
 });
 
+test('reports tag warnings at startup and only changed warnings on accepted reloads', async () => {
+	const warning = { path: '/domains/*/links/*/tags/0', message: 'Ignored blank tag' };
+	const initial = { ...prepared(), warnings: [warning] };
+	vi.mocked(loadConfigFile).mockResolvedValueOnce(initial);
+	const application = await createApplication(options);
+	expect(console.warn).toHaveBeenCalledExactlyOnceWith(
+		'Configuration warnings\n  /domains/*/links/*/tags/0: Ignored blank tag'
+	);
+	expect(reload.onChange(structuredClone(initial), initial)).toBe(true);
+	expect(console.warn).toHaveBeenCalledOnce();
+
+	const next = {
+		...prepared('https://example.org/second'),
+		warnings: [warning, { path: '/domains/*/links/*/tags/1', message: 'Ignored dot-segment tag' }]
+	};
+	expect(reload.onChange(next, initial)).toBe(true);
+	expect(console.warn).toHaveBeenCalledTimes(2);
+	expect(application.currentSnapshot().domains['go.example.test']?.links['/docs']?.url).toBe(
+		'https://example.org/second'
+	);
+	await application.close?.();
+});
+
 test('closes the recorder if configuration monitoring cannot start', async () => {
 	vi.mocked(startConfigReloading).mockRejectedValueOnce(new Error('Monitor startup failed'));
 	await expect(createApplication(options)).rejects.toThrow('Monitor startup failed');

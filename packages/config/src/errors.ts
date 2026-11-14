@@ -36,3 +36,10 @@ export function toConfigIssue(error: ValueError): ConfigIssue {
 export function formatConfigError(error: ConfigError, headline = error.message): string {
 	return [headline, ...error.issues.map((issue) => `  ${issue.path}: ${issue.message}`)].join('\n');
 }
+
+export function formatConfigWarnings(warnings: readonly ConfigIssue[]): string {
+	return [
+		'Configuration warnings',
+		...warnings.map((issue) => `  ${issue.path}: ${issue.message}`)
+	].join('\n');
+}

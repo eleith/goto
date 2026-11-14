@@ -1,3 +1,4 @@
+import type { ConfigIssue } from './errors.js';
 import type {
 	GotoConfiguration,
 	LinkConfiguration,
@@ -49,4 +50,5 @@ export interface PreparedDomain {
 export interface PreparedConfiguration {
 	configuration: GotoConfiguration;
 	domains: Record<string, PreparedDomain>;
+	warnings: readonly ConfigIssue[];
 }

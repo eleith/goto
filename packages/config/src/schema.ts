@@ -124,9 +124,20 @@ const HexColorSchema = Type.String({
 	pattern: `^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})${end}`
 });
 
-const TagsSchema = Type.Array(Type.String({ pattern: `^[^\\x00-\\x1f\\x7f]*${end}` }), {
-	$id: 'Tags'
-});
+FormatRegistry.Set('goto-tag', (value) => value.isWellFormed());
+
+const TagsSchema = Type.Array(
+	Type.String({
+		minLength: 1,
+		pattern: `^(?=[\\s\\S]*\\S)(?!\\.{1,2}${end})[^\\x00-\\x1f\\x7f]*${end}`,
+		format: 'goto-tag'
+	}),
+	{
+		$id: 'Tags',
+		description:
+			'Literal, case-sensitive labels. Unusable string labels are dropped with configuration warnings.'
+	}
+);
 
 const RedirectStatusSchema = Type.Union(
 	[Type.Literal(301), Type.Literal(302), Type.Literal(307), Type.Literal(308)],

@@ -167,6 +167,25 @@ describe('Goto editor schema', () => {
 		});
 	});
 
+	it('flags unusable literal tags while retaining interpolation and runtime-only Unicode validation', () => {
+		const canonical = configurationReferences.find((schema) => schema.$id === 'Tags')!;
+		const item = object(definition(createEditorSchema(), 'Tags').items);
+		const literal = branches(item)[0]!;
+		expect(literal).toEqual({ type: 'string', minLength: 1, pattern: expect.any(String) });
+		expect(item).not.toHaveProperty('format');
+		const pattern = new RegExp(String(literal.pattern));
+		for (const tag of ['', ' \u00a0', '.', '..', 'bad\ntag']) {
+			expect(pattern.test(tag)).toBe(false);
+			expect(Value.Check(canonical, [tag])).toBe(false);
+		}
+		for (const tag of ['Work', 'work', ' Work ', 'Work/100%é', '...']) {
+			expect(pattern.test(tag)).toBe(true);
+			expect(Value.Check(canonical, [tag, tag])).toBe(true);
+		}
+		expect(Value.Check(canonical, ['\ud800'])).toBe(false);
+		expect(interpolationPattern(item).test('${TAG}')).toBe(true);
+	});
+
 	it('produces self-contained local references with no publication ID', () => {
 		const editor = createEditorSchema();
 		expect(editor.$schema).toBe('https://json-schema.org/draft/2020-12/schema');

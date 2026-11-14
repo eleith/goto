@@ -1,4 +1,8 @@
-import { startConfigReloading, type PreparedConfiguration } from '@goto/config';
+import {
+	formatConfigWarnings,
+	startConfigReloading,
+	type PreparedConfiguration
+} from '@goto/config';
 import { isDeepStrictEqual } from 'node:util';
 import { logger } from './logger.js';
 import type { ShutdownResources } from './lifecycle.js';
@@ -51,6 +55,9 @@ export async function applyConfig(
 		logger.error('Unable to apply worker retention policy; stopping service');
 		onRestart();
 		throw error;
+	}
+	if (next.warnings.length > 0 && !isDeepStrictEqual(next.warnings, previous.warnings)) {
+		logger.warn(formatConfigWarnings(next.warnings));
 	}
 	logger.info('Worker configuration reloaded');
 	return true;

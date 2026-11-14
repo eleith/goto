@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { configurationInput } from '../test/configuration.js';
-import { ConfigError, formatConfigError, parseConfig, validateConfig } from './index.js';
+import {
+	ConfigError,
+	formatConfigError,
+	formatConfigWarnings,
+	parseConfig,
+	validateConfig
+} from './index.js';
 
 const options = { env: {} };
 const privateKey = 'private-authored-key-marker/~secret';
@@ -33,6 +39,41 @@ describe('configuration diagnostics', () => {
 		expect(formatConfigError(new ConfigError(), 'Configuration validation failed.')).toBe(
 			'Configuration validation failed.'
 		);
+	});
+
+	it('formats tag warnings with masked locations and static reasons without configuration values', () => {
+		const prepared = validateConfig(
+			{
+				...configurationInput(),
+				domains: {
+					'private-domain-marker.example.com': {
+						links: {
+							'/private-link-marker': {
+								url: 'https://example.com',
+								tags: ['Work', `${privateValue}\u0000`]
+							}
+						}
+					}
+				}
+			},
+			options
+		);
+		const warnings = Object.freeze(prepared.warnings);
+		expect(warnings).toEqual([
+			{
+				path: '/domains/*/links/*/tags/1',
+				message: 'Dropped tag: ASCII control characters are not allowed'
+			}
+		]);
+		expect(formatConfigWarnings(warnings)).toBe(
+			'Configuration warnings\n  /domains/*/links/*/tags/1: Dropped tag: ASCII control characters are not allowed'
+		);
+		expect(formatConfigWarnings([])).toBe('Configuration warnings');
+		for (const output of [JSON.stringify(warnings), formatConfigWarnings(warnings)]) {
+			expect(output).not.toContain('private-domain-marker');
+			expect(output).not.toContain('private-link-marker');
+			expect(output).not.toContain(privateValue);
+		}
 	});
 
 	it('identifies the site section and its allowed fields without echoing the old URL', () => {

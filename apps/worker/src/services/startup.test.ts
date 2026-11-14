@@ -10,6 +10,7 @@ import { Worker } from 'openworkflow';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { startWorkerService } from './startup.js';
 import { buildVisitReports } from './build-visit-reports.js';
+import { logger } from './logger.js';
 
 let directory: string;
 
@@ -23,25 +24,38 @@ afterEach(async () => {
 	await rm(directory, { recursive: true, force: true });
 });
 
-async function writeConfiguration(worker_path = './state/worker.sqlite'): Promise<void> {
+async function writeConfiguration(
+	worker_path = './state/worker.sqlite',
+	tags?: string[]
+): Promise<void> {
+	const domains: Record<string, unknown> = {};
+	if (tags !== undefined) {
+		domains['go.example.test'] = {
+			links: { '/docs': { url: 'https://example.test/docs', tags } }
+		};
+	}
 	const configuration = {
 		url: { app: 'http://admin.example.test' },
 		auth: { credentials: { username: 'test', password: 'worker-test-only-password' } },
 		database: { path: './data/visits.sqlite', worker_path },
 		analytics: { retention_months: 0 },
-		domains: {}
+		domains
 	};
 	await writeFile(join(directory, 'config/goto.yaml'), JSON.stringify(configuration));
 }
 
 const env = { HOST: '127.0.0.1', PORT: '0' };
 
-test('starts an idle zero-policy service, migrates visit storage, and exposes health', async () => {
-	await writeConfiguration();
+test('starts an idle zero-policy service with tag warnings and exposes health', async () => {
+	await writeConfiguration(undefined, ['', 'work']);
+	const warning = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
 	const start = vi.spyOn(Worker.prototype, 'start');
 	const service = await startWorkerService({ cwd: directory, env });
 	try {
 		expect(start).toHaveBeenCalledOnce();
+		expect(warning).toHaveBeenCalledExactlyOnceWith(
+			expect.stringContaining('/domains/*/links/*/tags/0')
+		);
 		const response = await fetch(`http://127.0.0.1:${service.port}/healthz`, {
 			signal: AbortSignal.timeout(2000)
 		});

@@ -4,6 +4,7 @@ import type { NewVisit } from '@goto/db';
 import {
 	ConfigError,
 	formatConfigError,
+	formatConfigWarnings,
 	loadConfigFile,
 	resolveConfigPath,
 	startConfigReloading,
@@ -29,6 +30,10 @@ function reportReloadIssue(message: string): void {
 	}
 }
 
+function reportConfigurationWarnings({ warnings }: PreparedConfiguration): void {
+	if (warnings.length > 0) reportReloadIssue(formatConfigWarnings(warnings));
+}
+
 function startupSettings({ configuration }: PreparedConfiguration) {
 	return {
 		appUrl: configuration.url.app,
@@ -48,6 +53,7 @@ export async function createApplication(options: ConfigOptions = {}): Promise<Ap
 		if (error instanceof ConfigError) console.error(formatConfigError(error));
 		throw error;
 	});
+	reportConfigurationWarnings(initial);
 	const initialSettings = startupSettings(initial);
 	const startup = structuredClone(initialSettings);
 	let snapshot = prepareSnapshot(initial);
@@ -77,6 +83,9 @@ export async function createApplication(options: ConfigOptions = {}): Promise<Ap
 		if (!isDeepStrictEqual(next, previous)) {
 			const candidate = prepareSnapshot(next);
 			snapshot = candidate;
+		}
+		if (!isDeepStrictEqual(next.warnings, previous.warnings)) {
+			reportConfigurationWarnings(next);
 		}
 		return true;
 	}
