@@ -36,6 +36,11 @@ const configuration = {
 				'/a%2Fb': { url: 'https://example.org/literal-percent' },
 				'/docs': {
 					url: 'https://example.org/first-domain',
+					redirect: [
+						{ if: { language: 'fr', os: 'linux' }, to: 'https://example.org/french-linux' },
+						{ if: { language: 'fr' }, to: 'https://example.org/french' },
+						{ if: { os: 'ios' }, to: 'https://example.org/ios' }
+					],
 					forward_path: true,
 					forward_query: true,
 					valid_from: '2020-01-01T00:00:00Z',

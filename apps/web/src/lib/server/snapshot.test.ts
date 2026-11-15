@@ -1,9 +1,9 @@
-import { validateConfig } from '@goto/config';
+import { loadConfig } from '@goto/config';
 import { expect, test } from 'vitest';
 import { prepareSnapshot } from './snapshot.js';
 
 test('publishes a deep-frozen copy without changing the loaded configuration', () => {
-	const prepared = validateConfig(
+	const prepared = loadConfig(
 		{
 			auth: { credentials: { username: 'example', password: 'test-only-password' } },
 			link_defaults: { forward_query: true },

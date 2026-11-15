@@ -2,6 +2,7 @@ import type { IncomingMessage } from 'node:http';
 import type { Application } from './application.js';
 import { isLocalProbe, readIngress } from './ingress.js';
 import { resolveRedirect } from './redirect.js';
+import type { RedirectRequestHeaders } from './redirects/conditions.js';
 import { bindApplication } from './request-context.js';
 import { captureVisit } from './visits/capture.js';
 
@@ -23,7 +24,8 @@ export function handleIngress(
 			snapshot.domains[ingress.host]!,
 			ingress.host,
 			request.url!,
-			request.method ?? 'GET'
+			request.method ?? 'GET',
+			readRedirectRequestHeaders(request)
 		);
 		if (snapshot.configuration.analytics.retention_months !== 0) {
 			captureVisit(request, redirect.visit, application.recordVisit);
@@ -36,4 +38,13 @@ export function handleIngress(
 	}
 	if (isLocalProbe(request, ingress.url)) return response(200);
 	return response(404);
+}
+
+function readRedirectRequestHeaders(request: IncomingMessage): RedirectRequestHeaders {
+	const acceptLanguage = request.headers['accept-language'];
+	const userAgent = request.headers['user-agent'];
+	return {
+		acceptLanguage: typeof acceptLanguage === 'string' ? acceptLanguage : undefined,
+		userAgent: typeof userAgent === 'string' ? userAgent : undefined
+	};
 }

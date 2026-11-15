@@ -1,5 +1,5 @@
 import {
-	validateConfig,
+	loadConfig,
 	type LinkConfiguration,
 	type PreparedDomain,
 	type PreparedLink,
@@ -134,7 +134,7 @@ describe('exact single-decode lookup', () => {
 type LinkInput = Pick<LinkConfiguration, 'url'> & Partial<LinkConfiguration>;
 
 function matchingDomain(links: Record<string, LinkInput>): PreparedDomain {
-	return validateConfig(
+	return loadConfig(
 		{
 			auth: { credentials: { username: 'example', password: 'unit-only-password' } },
 			domains: { [host]: { links } }
@@ -149,27 +149,40 @@ describe('flexible matching and forwarding', () => {
 		const matched = resolveRedirect(domain, host, '/DOCS/', 'GET');
 		expect(matched.response.headers.get('location')).toBe(destination);
 		expect(matched.visit).toMatchObject({ path: '/Docs', outcome: 'valid' });
+		expect(matched.response.headers.has('vary')).toBe(false);
 
 		const unmatched = resolveRedirect(domain, host, '/docs/install', 'GET');
 		expect(unmatched.response.status).toBe(404);
 		expect(unmatched.visit).toMatchObject({ path: '/docs/install', outcome: 'invalid' });
 	});
 
-	test('forwards encoded suffix segments before independently merging query parameters', () => {
+	test('forwards a conditional destination path before independently merging query parameters', () => {
 		const domain = matchingDomain({
 			'/docs': {
-				url: 'https://TARGET.example.test:443/base/?tag=old&keep=%2f#part',
+				url: destination,
+				redirect: [
+					{
+						if: { language: 'fr' },
+						to: 'https://TARGET.example.test:443/base/?tag=old&keep=%2f#part'
+					},
+					{ if: { os: 'ios' }, to: 'https://destination.example.test/ios' }
+				],
+				status_code: 308,
 				forward_path: true,
 				forward_query: true
 			}
 		});
 		const target = '/DOCS/Install%20Guide/%252F?tag=one&tag=two';
-		const { response, visit } = resolveRedirect(domain, host, target, 'GET');
+		const options = { acceptLanguage: 'fr-CA,en;q=0.5' };
+		const { response, visit } = resolveRedirect(domain, host, target, 'GET', options);
 		expect(response.headers.get('location')).toBe(
 			'https://target.example.test/base/Install%20Guide/%252F?keep=%2F&tag=one&tag=two#part'
 		);
 		expect(visit).toMatchObject({ path: '/docs', outcome: 'valid' });
-		const head = resolveRedirect(domain, host, target, 'HEAD');
+		expect(response.status).toBe(308);
+		expect(response.headers.get('cache-control')).toBe('no-store');
+		expect(response.headers.get('vary')).toBe('Accept-Language, User-Agent');
+		const head = resolveRedirect(domain, host, target, 'HEAD', options);
 		expect([...head.response.headers]).toEqual([...response.headers]);
 		expect(head.visit).toBeUndefined();
 	});
@@ -198,11 +211,19 @@ describe('flexible matching and forwarding', () => {
 	test('an inactive prefix winner uses fallback without forwarding its suffix or trying a parent', () => {
 		const domain = matchingDomain({
 			'/docs': { url: destination, forward_path: true },
-			'/docs/private': { url: destination, forward_path: true, enabled: false }
+			'/docs/private': {
+				url: destination,
+				redirect: [{ if: { language: 'fr' }, to: 'https://destination.example.test/private' }],
+				forward_path: true,
+				enabled: false
+			}
 		});
 		domain.fallback = fallback;
-		const { response, visit } = resolveRedirect(domain, host, '/DOCS/private/secret?x=1', 'GET');
+		const { response, visit } = resolveRedirect(domain, host, '/DOCS/private/secret?x=1', 'GET', {
+			acceptLanguage: 'fr'
+		});
 		expect(response.headers.get('location')).toBe(fallbackUrl);
+		expect(response.headers.has('vary')).toBe(false);
 		expect(visit).toMatchObject({ path: '/docs/private', outcome: 'invalid' });
 	});
 
@@ -217,18 +238,47 @@ describe('flexible matching and forwarding', () => {
 		}
 	);
 
-	test('runtime blocks recursion through an alias of the same prefix link', () => {
+	test('a selected conditional loop is blocked without trying the next matching rule', () => {
 		const domain = matchingDomain({ '/docs': { url: destination, forward_path: true } });
-		domain.links['/docs']!.url = 'https://go.example.test/DOCS/again';
-		const { response, visit } = resolveRedirect(domain, host, '/docs/start', 'GET');
+		domain.links['/docs']!.redirect = [
+			{ if: { language: 'fr' }, to: 'https://go.example.test/DOCS/again' },
+			{ if: { os: 'ios' }, to: destination }
+		];
+		const { response, visit } = resolveRedirect(domain, host, '/docs/start', 'GET', {
+			acceptLanguage: 'fr',
+			userAgent: 'iPhone'
+		});
 		expect(response.status).toBe(404);
 		expect(response.headers.has('location')).toBe(false);
 		expect(response.headers.get('cache-control')).toBe('no-store');
+		expect(response.headers.get('vary')).toBe('Accept-Language, User-Agent');
 		expect(visit).toMatchObject({ path: '/docs', outcome: 'invalid' });
 	});
 });
 
 describe('HTTP responses', () => {
+	test('a conditional miss keeps the link default and varies on every configured predicate', () => {
+		const domain = preparedDomain(
+			{
+				'/docs': preparedLink({
+					redirect: [
+						{ if: { language: 'fr' }, to: 'https://destination.example.test/french' },
+						{ if: { os: 'ios' }, to: 'https://destination.example.test/ios' }
+					]
+				})
+			},
+			fallback
+		);
+		const { response, visit } = resolveRedirect(domain, host, '/docs', 'GET', {
+			acceptLanguage: 'en',
+			userAgent: 'Unknown agent'
+		});
+
+		expect(response.headers.get('location')).toBe(destination);
+		expect(response.headers.get('vary')).toBe('Accept-Language, User-Agent');
+		expect(visit).toMatchObject({ path: '/docs', outcome: 'valid' });
+	});
+
 	test('serializes Unicode destinations as valid Location URLs without forwarding', () => {
 		const url = 'https://例え.test/café?q=☕#完成';
 		const domain = preparedDomain({ '/docs': preparedLink({ url }) });
@@ -363,7 +413,9 @@ describe('validity and fallback', () => {
 			},
 			fallback
 		);
-		const { response, visit } = resolveRedirect(domain, host, '/docs?incoming=ignored', 'GET', now);
+		const { response, visit } = resolveRedirect(domain, host, '/docs?incoming=ignored', 'GET', {
+			now
+		});
 
 		expect(response.status).toBe(status);
 		expect(visit).toEqual({ domain: host, path: '/docs', outcome, visitedAt: now });
@@ -398,7 +450,7 @@ describe('validity and fallback', () => {
 		'inactive links can fall back to 404',
 		(link) => {
 			const domain = preparedDomain({ '/docs': link });
-			const { response, visit } = resolveRedirect(domain, host, '/docs', 'GET', end);
+			const { response, visit } = resolveRedirect(domain, host, '/docs', 'GET', { now: end });
 
 			expect(response.status).toBe(404);
 			expect(visit?.outcome).toBe('invalid');

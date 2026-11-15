@@ -1,4 +1,4 @@
-import { validateConfig, type DomainConfiguration, type RedirectResponse } from '@goto/config';
+import { loadConfig, type DomainConfiguration, type RedirectResponse } from '@goto/config';
 import { createVisitPeriod, visitDays, type ReportScope, type VisitDetails } from '@goto/analytics';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { prepareSnapshot } from '#lib/server/snapshot.js';
@@ -37,7 +37,7 @@ function request(
 		domains: { [domain]: domainConfiguration }
 	};
 	if (settings.globalFallback) configuration.fallback = settings.globalFallback;
-	const prepared = validateConfig(configuration, { env: {} });
+	const prepared = loadConfig(configuration, { env: {} });
 	return {
 		locals: { snapshot: prepareSnapshot(prepared) },
 		params: { domain: host }

@@ -1,6 +1,6 @@
 import { IncomingMessage } from 'node:http';
 import { Socket } from 'node:net';
-import { validateConfig } from '@goto/config';
+import { loadConfig } from '@goto/config';
 import type { Handle } from '@sveltejs/kit/hooks';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import type { Application } from '#lib/server/application.js';
@@ -28,7 +28,7 @@ function event(
 }
 
 function application(): Application {
-	const prepared = validateConfig(
+	const prepared = loadConfig(
 		{
 			url: { app: 'https://admin.example.org' },
 			auth: { credentials: { username: 'example', password: 'test-password' } },

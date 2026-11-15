@@ -2,14 +2,15 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { Value } from '@sinclair/typebox/value';
 import { LineCounter, parseAllDocuments } from 'yaml';
-import { ConfigError, toConfigIssue } from './errors.js';
+import { ConfigError } from './errors.js';
 import { assertArrayShapesPreserved, assertSafeInput } from './input.js';
 import { interpolate } from './interpolate.js';
 import { resolveConfigPath, resolveDeploymentRoot } from './paths.js';
-import { prepareDomains } from './resolve.js';
+import { buildRedirectDomainLookup } from './resolve.js';
 import { GotoConfigurationSchema, configurationReferences } from './schema.js';
 import { dropInvalidStringTags } from './tags.js';
 import type { ConfigEnvironment, ConfigOptions, PreparedConfiguration } from './types.js';
+import { validateConfig, validateRedirectDomainLookup } from './validation.js';
 
 export async function loadConfigFile(
 	path?: string,
@@ -64,37 +65,34 @@ export function parseConfig(source: string, options: ConfigOptions = {}): Prepar
 		if (error instanceof ConfigError) throw error;
 		throw new ConfigError();
 	}
-	return validateConfig(raw, options);
+	return loadConfig(raw, options);
 }
 
-export function validateConfig(raw: unknown, options: ConfigOptions = {}): PreparedConfiguration {
+export function loadConfig(raw: unknown, options: ConfigOptions = {}): PreparedConfiguration {
 	try {
-		assertSafeInput(raw);
-		const copy = structuredClone(raw);
-		const env = options.env ?? process.env;
-		defaultAppUrl(copy, env);
-		const expanded = interpolate(copy, env);
-		const defaulted = Value.Default(GotoConfigurationSchema, configurationReferences, expanded);
-		assertArrayShapesPreserved(raw, defaulted);
-		const warnings = dropInvalidStringTags(defaulted);
-		if (!Value.Check(GotoConfigurationSchema, configurationReferences, defaulted)) {
-			const issues = [
-				...Value.Errors(GotoConfigurationSchema, configurationReferences, defaulted)
-			].map(toConfigIssue);
-			throw new ConfigError(issues);
-		}
-		const configuration = defaulted;
-		const authoredLinkDefaults =
-			typeof raw.link_defaults === 'object' && raw.link_defaults !== null ? raw.link_defaults : {};
-		return {
-			configuration,
-			domains: prepareDomains(configuration, authoredLinkDefaults),
-			warnings
-		};
+		const { configuration, authoredLinkDefaults, warnings } = resolveConfigValues(raw, options);
+		validateConfig(configuration);
+		const domains = buildRedirectDomainLookup(configuration, authoredLinkDefaults);
+		validateRedirectDomainLookup(domains);
+		return { configuration, domains, warnings };
 	} catch (error) {
 		if (error instanceof ConfigError) throw error;
 		throw new ConfigError();
 	}
+}
+
+function resolveConfigValues(raw: unknown, options: ConfigOptions) {
+	assertSafeInput(raw);
+	const copy = structuredClone(raw);
+	const env = options.env ?? process.env;
+	defaultAppUrl(copy, env);
+	const expanded = interpolate(copy, env);
+	const configuration = Value.Default(GotoConfigurationSchema, configurationReferences, expanded);
+	assertArrayShapesPreserved(raw, configuration);
+	const warnings = dropInvalidStringTags(configuration);
+	const authoredLinkDefaults =
+		typeof raw.link_defaults === 'object' && raw.link_defaults !== null ? raw.link_defaults : {};
+	return { configuration, authoredLinkDefaults, warnings };
 }
 
 function defaultAppUrl(raw: Record<string, unknown>, env: ConfigEnvironment): void {

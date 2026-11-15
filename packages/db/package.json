@@ -9,6 +9,11 @@
 			"development": "./src/index.ts",
 			"import": "./dist/index.js"
 		},
+		"./user-agent": {
+			"development": "./src/classify-user-agent.ts",
+			"types": "./dist/classify-user-agent.d.ts",
+			"import": "./dist/classify-user-agent.js"
+		},
 		"./visit-worker": "./dist/visit-worker.js",
 		"./visit-reports": {
 			"development": "./src/visit-reports/index.ts",

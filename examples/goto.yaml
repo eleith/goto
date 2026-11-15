@@ -55,6 +55,16 @@ domains:
         tags: [work]
         forward_path: true
         forward_query: false
+      /download:
+        url: https://example.org/download
+        redirect:
+          - if:
+              language: fr
+              os: ios
+            to: https://apps.example.org/fr/ios
+          - if:
+              os: ios
+            to: https://apps.example.org/ios
       /café:
         url: https://example.org/cafe
       /paused:

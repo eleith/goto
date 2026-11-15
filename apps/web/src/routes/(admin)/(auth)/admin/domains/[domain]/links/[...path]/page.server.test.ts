@@ -1,4 +1,4 @@
-import { validateConfig, type DomainConfiguration } from '@goto/config';
+import { loadConfig, type DomainConfiguration } from '@goto/config';
 import { createVisitPeriod, visitDays, type VisitDetails } from '@goto/analytics';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { prepareSnapshot } from '#lib/server/snapshot.js';
@@ -37,7 +37,7 @@ function request(path = '/docs', options: { host?: string; retentionMonths?: num
 			'/a%2Fb': { url: 'https://example.test/percent', enabled: false, tags: [] }
 		}
 	};
-	const prepared = validateConfig(
+	const prepared = loadConfig(
 		{
 			auth: { credentials: { username: 'test', password: 'link-test-password' } },
 			analytics: { retention_months: options.retentionMonths ?? 3 },

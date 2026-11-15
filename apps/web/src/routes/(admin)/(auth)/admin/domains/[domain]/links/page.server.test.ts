@@ -1,4 +1,4 @@
-import { validateConfig, type DomainConfiguration, type RedirectResponse } from '@goto/config';
+import { loadConfig, type DomainConfiguration, type RedirectResponse } from '@goto/config';
 import { createVisitPeriod, visitDays, type VisitDetails } from '@goto/analytics';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { prepareSnapshot } from '#lib/server/snapshot.js';
@@ -22,7 +22,7 @@ function request(options: { host?: string; root?: RedirectResponse } = {}) {
 		links: {}
 	};
 	if (options.root) domainConfiguration.root = options.root;
-	const prepared = validateConfig(
+	const prepared = loadConfig(
 		{
 			auth: { credentials: { username: 'test', password: 'link-test-password' } },
 			analytics: { retention_months: 3 },
@@ -112,7 +112,7 @@ test('keeps root HTTP settings independent of link defaults and fallback with hi
 });
 
 test('keeps absent root and default or global fallback metadata usable without analytics', async () => {
-	const prepared = validateConfig(
+	const prepared = loadConfig(
 		{
 			auth: { credentials: { username: 'test', password: 'link-test-password' } },
 			analytics: { retention_months: 0 },
@@ -131,7 +131,7 @@ test('keeps absent root and default or global fallback metadata usable without a
 		fallback: null,
 		fallbackSource: 'builtin'
 	});
-	const global = validateConfig(
+	const global = loadConfig(
 		{
 			auth: { credentials: { username: 'test', password: 'link-test-password' } },
 			analytics: { retention_months: 0 },

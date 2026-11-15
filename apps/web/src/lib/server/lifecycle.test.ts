@@ -1,11 +1,11 @@
-import { ConfigError, validateConfig } from '@goto/config';
+import { ConfigError, loadConfig } from '@goto/config';
 import { describe, expect, test, vi } from 'vitest';
 import { createApplicationLifecycle } from '../../../server/lifecycle.js';
 import type { Application } from './application.js';
 import { prepareSnapshot } from './snapshot.js';
 
 function application(): Application {
-	const prepared = validateConfig(
+	const prepared = loadConfig(
 		{
 			url: { app: 'https://admin.example.org' },
 			auth: { credentials: { username: 'example', password: 'test-password' } },

@@ -2,7 +2,7 @@ import {
 	ConfigError,
 	loadConfigFile,
 	startConfigReloading,
-	validateConfig,
+	loadConfig,
 	type PreparedConfiguration
 } from '@goto/config';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
@@ -30,7 +30,7 @@ function prepared(
 	destination = 'https://example.org/first',
 	changes: Record<string, unknown> = {}
 ) {
-	return validateConfig(
+	return loadConfig(
 		{
 			url: { app: 'https://admin.example.test' },
 			auth: { credentials: { username: 'example', password: 'test-only-password' } },

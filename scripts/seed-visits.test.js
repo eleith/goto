@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { validateConfig } from '../packages/config/src/index.ts';
+import { loadConfig } from '../packages/config/src/index.ts';
 import { openDb, insertVisit, runMigrations } from '../packages/db/src/index.ts';
 import { classifyUserAgent } from '../packages/db/src/classify-user-agent.ts';
 import { generateVisits, seedWindowStart } from './seed-visits-data.js';
@@ -61,7 +61,7 @@ test('fixed inputs produce repeatable retained traffic with request-time outcome
 		'/disabled': { url: 'https://example.org/off', enabled: false },
 		'/future': { url: 'https://example.org/future', valid_from: '2027-01-01T00:00:00Z' }
 	};
-	const { domains } = validateConfig(source, { env: {} });
+	const { domains } = loadConfig(source, { env: {} });
 	const asOf = Date.parse('2026-05-31T12:00:00Z');
 	const since = seedWindowStart(3, asOf);
 	const options = { domains, since, asOf, visitsPerDomain: 300, seed: 42 };

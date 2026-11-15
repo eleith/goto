@@ -1,5 +1,5 @@
 import { createVisitPeriod, encodeVisitReports } from '@goto/analytics';
-import { validateConfig } from '@goto/config';
+import { loadConfig } from '@goto/config';
 import { openDb, runMigrations } from '@goto/db';
 import { publishVisitReports } from '@goto/db/visit-reports';
 import type { OpenWorkflow } from 'openworkflow';
@@ -10,7 +10,7 @@ import { configureReportSchedule, requestReportRefresh } from './report-schedule
 import { refreshVisitReports, reportSchedule } from '../workflows/specs.js';
 
 async function context(): Promise<WorkerContext> {
-	const prepared = validateConfig(
+	const prepared = loadConfig(
 		{
 			auth: { credentials: { username: 'test', password: 'schedule-test-password' } },
 			domains: {}

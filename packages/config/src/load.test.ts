@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { configurationInput } from '../test/configuration.js';
 import { ConfigError } from './errors.js';
-import { loadConfigFile, parseConfig, validateConfig } from './load.js';
+import { loadConfigFile, parseConfig, loadConfig } from './load.js';
 
 const options = { env: {} };
 const yaml = 'auth: {credentials: {username: admin, password: test-password}}\ndomains: {}';
@@ -18,7 +18,7 @@ describe('configuration loading', () => {
 		);
 		const input = configurationInput();
 		const original = structuredClone(input);
-		const { configuration, warnings } = validateConfig(input, options);
+		const { configuration, warnings } = loadConfig(input, options);
 		expect(warnings).toEqual([]);
 		expect(configuration).toMatchObject({
 			version: 1,
@@ -37,6 +37,62 @@ describe('configuration loading', () => {
 		expect(input).toEqual(original);
 	});
 
+	it('loads ordered conditional destinations with nested interpolation and accepts an empty list', () => {
+		const prepared = parseConfig(
+			`auth: {credentials: {username: admin, password: test-password}}
+domains:
+  go.example.com:
+    links:
+      /docs:
+        url: https://example.com/docs
+        redirect:
+          - if: {language: "\${LANGUAGE}", os: ios}
+            to: "\${DESTINATION}"
+          - if: {os: linux}
+            to: https://example.com/linux
+      /ordinary:
+        url: https://example.com/ordinary
+        redirect: []`,
+			{ env: { LANGUAGE: 'fr-CA', DESTINATION: 'https://example.com/fr-ios' } }
+		);
+		expect(prepared.configuration.domains['go.example.com']?.links['/docs']?.redirect).toEqual([
+			{ if: { language: 'fr-CA', os: 'ios' }, to: 'https://example.com/fr-ios' },
+			{ if: { os: 'linux' }, to: 'https://example.com/linux' }
+		]);
+		expect(prepared.domains['go.example.com']?.links['/ordinary']?.redirect).toEqual([]);
+	});
+
+	it('rejects an empty condition instead of making a rule unconditional', () => {
+		expect(() =>
+			loadConfig(
+				configurationInput({
+					'/docs': {
+						url: 'https://example.com/docs',
+						redirect: [{ if: {}, to: 'https://example.com/conditional' }]
+					}
+				}),
+				options
+			)
+		).toThrow(ConfigError);
+	});
+
+	it('rejects unsupported conditions instead of silently dropping a routing predicate', () => {
+		const input = {
+			...configurationInput(),
+			domains: {
+				'go.example.com': {
+					links: {
+						'/docs': {
+							url: 'https://example.com/docs',
+							redirect: [{ if: { language: 'fr', country: 'FR' }, to: 'https://example.com/fr' }]
+						}
+					}
+				}
+			}
+		};
+		expect(() => loadConfig(input, options)).toThrow(ConfigError);
+	});
+
 	it('drops unusable string tags while preserving literal names, duplicates and the input', () => {
 		const tags = [
 			'Work',
@@ -53,7 +109,7 @@ describe('configuration loading', () => {
 		];
 		const input = configurationInput({ '/docs': { url: 'https://example.com/docs', tags } });
 		const original = structuredClone(input);
-		const prepared = validateConfig(input, options);
+		const prepared = loadConfig(input, options);
 		const retained = ['Work', 'work', ' Work ', 'Work/100%é', 'Work'];
 
 		expect(prepared.configuration.domains['go.example.com']?.links['/docs']?.tags).toEqual(
@@ -78,7 +134,7 @@ describe('configuration loading', () => {
 	});
 
 	it('keeps links whose tags are all dropped and defaults omitted tags without warnings', () => {
-		const prepared = validateConfig(
+		const prepared = loadConfig(
 			configurationInput({
 				'/bad': { url: 'https://example.com/bad', tags: ['', '..'] },
 				'/omitted': { url: 'https://example.com/omitted' }
@@ -88,14 +144,14 @@ describe('configuration loading', () => {
 		expect(prepared.domains['go.example.com']?.links['/bad']?.tags).toEqual([]);
 		expect(prepared.domains['go.example.com']?.links['/omitted']?.tags).toEqual([]);
 		expect(prepared.warnings).toHaveLength(2);
-		expect(validateConfig(configurationInput(), options).warnings).toEqual([]);
+		expect(loadConfig(configurationInput(), options).warnings).toEqual([]);
 	});
 
 	it('cleans tags after interpolation without tolerating missing variables or unrelated errors', () => {
 		const input = configurationInput({
 			'/docs': { url: 'https://example.com/docs', tags: ['${TAG}', '${OTHER:- Work }'] }
 		});
-		const prepared = validateConfig(input, { env: { TAG: 'bad\u007ftag' } });
+		const prepared = loadConfig(input, { env: { TAG: 'bad\u007ftag' } });
 		expect(prepared.domains['go.example.com']?.links['/docs']?.tags).toEqual([' Work ']);
 		expect(prepared.warnings).toEqual([
 			{
@@ -103,10 +159,8 @@ describe('configuration loading', () => {
 				message: 'Dropped tag: ASCII control characters are not allowed'
 			}
 		]);
-		expect(() => validateConfig(input, options)).toThrow(ConfigError);
-		expect(() => validateConfig({ ...input, site: null }, { env: { TAG: '.' } })).toThrow(
-			ConfigError
-		);
+		expect(() => loadConfig(input, options)).toThrow(ConfigError);
+		expect(() => loadConfig({ ...input, site: null }, { env: { TAG: '.' } })).toThrow(ConfigError);
 	});
 
 	it.each([null, {}, 'work', ['work', 42], [false], [null], [{}]])(
@@ -118,13 +172,13 @@ describe('configuration loading', () => {
 					'go.example.com': { links: { '/docs': { url: 'https://example.com/docs', tags } } }
 				}
 			};
-			expect(() => validateConfig(input, options)).toThrow(ConfigError);
+			expect(() => loadConfig(input, options)).toThrow(ConfigError);
 		}
 	);
 
 	it.each([0, 3, 9, 12])('accepts the finite analytics retention %s', (retention_months) => {
 		const input = { ...configurationInput(), analytics: { retention_months } };
-		expect(validateConfig(input, options).configuration.analytics.retention_months).toBe(
+		expect(loadConfig(input, options).configuration.analytics.retention_months).toBe(
 			retention_months
 		);
 	});
@@ -133,14 +187,14 @@ describe('configuration loading', () => {
 		'rejects unsupported analytics retention %j',
 		(retention_months) => {
 			expect(() =>
-				validateConfig({ ...configurationInput(), analytics: { retention_months } }, options)
+				loadConfig({ ...configurationInput(), analytics: { retention_months } }, options)
 			).toThrow(ConfigError);
 		}
 	);
 
 	it('rejects the replaced analytics switches instead of silently ignoring them', () => {
 		expect(() =>
-			validateConfig(
+			loadConfig(
 				{
 					...configurationInput(),
 					analytics: { enabled: false, retention_days: 90 }
@@ -157,7 +211,7 @@ describe('configuration loading', () => {
 		[{ PORT: '4321' }, 'http://localhost:4321'],
 		[{ PORT: '80' }, 'http://localhost']
 	])('derives an omitted origin from injected environment %j', (env, url) => {
-		expect(validateConfig(configurationInput(), { env }).configuration.url.app).toBe(url);
+		expect(loadConfig(configurationInput(), { env }).configuration.url.app).toBe(url);
 	});
 
 	it('validates interpolated values and preserves an explicit canonical origin', () => {
@@ -173,11 +227,11 @@ describe('configuration loading', () => {
 			SECRET: 's'.repeat(32),
 			PORT: 'invalid'
 		};
-		const { configuration } = validateConfig(input, { env });
+		const { configuration } = loadConfig(input, { env });
 		expect(configuration.url).toEqual({ app: env.ADMIN_ORIGIN, worker: env.WORKER_BASE });
 		expect(configuration.auth.secret).toBe(env.SECRET);
 		expect(() =>
-			validateConfig(input, { env: { ...env, WORKER_BASE: 'http://worker.example.com?secret' } })
+			loadConfig(input, { env: { ...env, WORKER_BASE: 'http://worker.example.com?secret' } })
 		).toThrowError(
 			expect.objectContaining({ constructor: ConfigError, message: 'Invalid configuration' })
 		);
@@ -185,29 +239,27 @@ describe('configuration loading', () => {
 			'https://private:secret@example.com',
 			'https://example.com/\r\nsecret'
 		]) {
-			expect(() =>
-				validateConfig(input, { env: { ...env, DESTINATION: destination } })
-			).toThrowError(
+			expect(() => loadConfig(input, { env: { ...env, DESTINATION: destination } })).toThrowError(
 				expect.objectContaining({ constructor: ConfigError, message: 'Invalid configuration' })
 			);
 		}
 		expect(() =>
-			validateConfig({ ...input, auth: { ...input.auth, secret: '${MISSING}' } }, { env })
+			loadConfig({ ...input, auth: { ...input.auth, secret: '${MISSING}' } }, { env })
 		).toThrowError(new ConfigError());
 	});
 
 	it('defaults omitted URL fields independently', () => {
 		const input = configurationInput();
-		expect(validateConfig({ ...input, url: {} }, options).configuration.url).toEqual({
+		expect(loadConfig({ ...input, url: {} }, options).configuration.url).toEqual({
 			app: 'http://localhost:3000',
 			worker: 'http://goto-worker:9000'
 		});
 		expect(
-			validateConfig({ ...input, url: { app: 'https://admin.example.com' } }, options).configuration
-				.url.worker
+			loadConfig({ ...input, url: { app: 'https://admin.example.com' } }, options).configuration.url
+				.worker
 		).toBe('http://goto-worker:9000');
 		expect(
-			validateConfig(
+			loadConfig(
 				{ ...input, url: { worker: 'https://worker.example.com/private/' } },
 				{ env: { NODE_ENV: 'development' } }
 			).configuration.url
@@ -224,7 +276,7 @@ describe('configuration loading', () => {
 		'http://worker.example.com#',
 		'http://worker.example.com/private path'
 	])('rejects invalid worker base URLs %j', (worker) => {
-		expect(() => validateConfig({ ...configurationInput(), url: { worker } }, options)).toThrow(
+		expect(() => loadConfig({ ...configurationInput(), url: { worker } }, options)).toThrow(
 			ConfigError
 		);
 	});
@@ -232,7 +284,7 @@ describe('configuration loading', () => {
 	it('rejects the old site URL key without accepting it as an app URL', () => {
 		for (const url of [undefined, { app: 'https://admin.example.com' }]) {
 			expect(() =>
-				validateConfig(
+				loadConfig(
 					{
 						...configurationInput(),
 						...(url === undefined ? {} : { url }),
@@ -251,7 +303,7 @@ describe('configuration loading', () => {
 			CLIENT_ID: 'goto',
 			CLIENT_SECRET: 'test-client-secret'
 		};
-		const { configuration } = validateConfig(
+		const { configuration } = loadConfig(
 			{
 				...configurationInput(),
 				auth: {
@@ -277,7 +329,7 @@ describe('configuration loading', () => {
 	});
 
 	it.each(['0', '65536', 'abc', '3000\n'])('rejects invalid inferred ports %j', (PORT) => {
-		expect(() => validateConfig(configurationInput(), { env: { PORT } })).toThrowError(
+		expect(() => loadConfig(configurationInput(), { env: { PORT } })).toThrowError(
 			new ConfigError()
 		);
 	});
@@ -296,7 +348,7 @@ describe('configuration loading', () => {
 			}
 		};
 		const original = structuredClone(input);
-		const { configuration, domains } = validateConfig(input, {
+		const { configuration, domains } = loadConfig(input, {
 			env: { ROOT: 'https://example.com', FALLBACK: 'https://example.com/missing' }
 		});
 		expect(configuration.fallback).toEqual({
@@ -323,9 +375,7 @@ describe('configuration loading', () => {
 		{ url: 'https://example.com', action: 'not_found' },
 		{ url: 'https://example.com', forward_path: true }
 	])('rejects non-response fallback values %j', (fallback) => {
-		expect(() => validateConfig({ ...configurationInput(), fallback }, options)).toThrow(
-			ConfigError
-		);
+		expect(() => loadConfig({ ...configurationInput(), fallback }, options)).toThrow(ConfigError);
 	});
 
 	it('restricts root and domain fallback to redirect responses and rejects old defaults', () => {
@@ -340,7 +390,7 @@ describe('configuration loading', () => {
 			{ link_defaults: { fallback: 'https://example.com' } }
 		]) {
 			expect(() =>
-				validateConfig(
+				loadConfig(
 					{
 						...input,
 						domains: { 'go.example.com': { ...domain, links: {} } }
@@ -349,10 +399,10 @@ describe('configuration loading', () => {
 				)
 			).toThrow(ConfigError);
 		}
-		expect(() => validateConfig({ ...input, defaults: { status_code: 307 } }, options)).toThrow(
+		expect(() => loadConfig({ ...input, defaults: { status_code: 307 } }, options)).toThrow(
 			ConfigError
 		);
-		expect(() => validateConfig({ ...input, link_defaults: { fallback: 404 } }, options)).toThrow(
+		expect(() => loadConfig({ ...input, link_defaults: { fallback: 404 } }, options)).toThrow(
 			ConfigError
 		);
 	});
@@ -400,7 +450,7 @@ describe('configuration loading', () => {
 			}
 		}
 	])('rejects strict schema violations %j', (override) => {
-		expect(() => validateConfig({ ...configurationInput(), ...override }, options)).toThrow(
+		expect(() => loadConfig({ ...configurationInput(), ...override }, options)).toThrow(
 			ConfigError
 		);
 	});
@@ -417,7 +467,7 @@ describe('configuration loading', () => {
 	])('keeps authored keys out of generic errors for $name', ({ override }) => {
 		let error: unknown;
 		try {
-			validateConfig({ ...configurationInput(), ...override }, options);
+			loadConfig({ ...configurationInput(), ...override }, options);
 		} catch (caught) {
 			error = caught;
 		}
@@ -479,7 +529,7 @@ describe('configuration loading', () => {
 				return {};
 			}
 		};
-		expect(() => validateConfig(getter, options)).toThrow(ConfigError);
+		expect(() => loadConfig(getter, options)).toThrow(ConfigError);
 		expect(calls).toBe(0);
 		const cycle = configurationInput();
 		Object.assign(cycle, { site: cycle });
@@ -490,7 +540,7 @@ describe('configuration loading', () => {
 			null,
 			[]
 		]) {
-			expect(() => validateConfig(input, options)).toThrow(ConfigError);
+			expect(() => loadConfig(input, options)).toThrow(ConfigError);
 		}
 	});
 

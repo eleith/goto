@@ -1,6 +1,6 @@
 import packageJson from '../../../../../../package.json' with { type: 'json' };
 import { createVisitPeriod, visitDays, type VisitDetails } from '@goto/analytics';
-import { validateConfig } from '@goto/config';
+import { loadConfig } from '@goto/config';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { prepareSnapshot } from '#lib/server/snapshot.js';
 import { readOverviewDetails } from '#lib/server/visits/reports.js';
@@ -17,7 +17,7 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 function request(overrides: Record<string, unknown> = {}) {
-	const configuration = validateConfig(
+	const configuration = loadConfig(
 		{
 			url: { app: 'https://admin.example.test', worker: 'http://worker.example.test:9000/base' },
 			auth: {

@@ -361,6 +361,95 @@
 				"forward_path": { "type": "boolean" }
 			}
 		},
+		"RedirectRule": {
+			"additionalProperties": false,
+			"type": "object",
+			"required": ["if", "to"],
+			"properties": {
+				"if": {
+					"additionalProperties": false,
+					"minProperties": 1,
+					"type": "object",
+					"properties": {
+						"language": {
+							"type": "string",
+							"anyOf": [
+								{ "type": "string", "pattern": "^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*(?![\\s\\S])" },
+								{
+									"type": "string",
+									"pattern": "(?:^|[^$])(?:\\$\\$)*\\$\\{[A-Z_][A-Z0-9_]*(?::-[^}]*)?\\}"
+								}
+							]
+						},
+						"os": {
+							"anyOf": [
+								{
+									"type": "string",
+									"anyOf": [
+										{ "type": "string", "const": "ios" },
+										{
+											"type": "string",
+											"pattern": "(?:^|[^$])(?:\\$\\$)*\\$\\{[A-Z_][A-Z0-9_]*(?::-[^}]*)?\\}"
+										}
+									]
+								},
+								{
+									"type": "string",
+									"anyOf": [
+										{ "type": "string", "const": "android" },
+										{
+											"type": "string",
+											"pattern": "(?:^|[^$])(?:\\$\\$)*\\$\\{[A-Z_][A-Z0-9_]*(?::-[^}]*)?\\}"
+										}
+									]
+								},
+								{
+									"type": "string",
+									"anyOf": [
+										{ "type": "string", "const": "windows" },
+										{
+											"type": "string",
+											"pattern": "(?:^|[^$])(?:\\$\\$)*\\$\\{[A-Z_][A-Z0-9_]*(?::-[^}]*)?\\}"
+										}
+									]
+								},
+								{
+									"type": "string",
+									"anyOf": [
+										{ "type": "string", "const": "macos" },
+										{
+											"type": "string",
+											"pattern": "(?:^|[^$])(?:\\$\\$)*\\$\\{[A-Z_][A-Z0-9_]*(?::-[^}]*)?\\}"
+										}
+									]
+								},
+								{
+									"type": "string",
+									"anyOf": [
+										{ "type": "string", "const": "linux" },
+										{
+											"type": "string",
+											"pattern": "(?:^|[^$])(?:\\$\\$)*\\$\\{[A-Z_][A-Z0-9_]*(?::-[^}]*)?\\}"
+										}
+									]
+								},
+								{
+									"type": "string",
+									"anyOf": [
+										{ "type": "string", "const": "chromeos" },
+										{
+											"type": "string",
+											"pattern": "(?:^|[^$])(?:\\$\\$)*\\$\\{[A-Z_][A-Z0-9_]*(?::-[^}]*)?\\}"
+										}
+									]
+								}
+							]
+						}
+					}
+				},
+				"to": { "$ref": "#/$defs/LinkUrl" }
+			}
+		},
 		"LinkConfiguration": {
 			"additionalProperties": false,
 			"description": "Omitted response and matching settings inherit domain link_defaults, then global link_defaults.",
@@ -368,6 +457,7 @@
 			"required": ["url"],
 			"properties": {
 				"url": { "$ref": "#/$defs/LinkUrl" },
+				"redirect": { "type": "array", "items": { "$ref": "#/$defs/RedirectRule" } },
 				"title": {
 					"type": "string",
 					"anyOf": [

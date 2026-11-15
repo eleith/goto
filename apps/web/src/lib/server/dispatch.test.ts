@@ -1,4 +1,4 @@
-import { validateConfig } from '@goto/config';
+import { loadConfig } from '@goto/config';
 import type { IncomingMessage } from 'node:http';
 import { expect, test, vi } from 'vitest';
 import type { Application } from './application.js';
@@ -6,14 +6,22 @@ import { handleIngress } from './dispatch.js';
 import { requestApplication } from './request-context.js';
 import { prepareSnapshot } from './snapshot.js';
 
-const prepared = validateConfig(
+const prepared = loadConfig(
 	{
 		url: { app: 'https://admin.example.test' },
 		auth: { credentials: { username: 'example', password: 'unit-only-password' } },
 		domains: {
 			'go.example.test': {
 				links: {
-					'/schema.json': { url: 'https://destination.example.test/schema' },
+					'/schema.json': {
+						url: 'https://destination.example.test/schema',
+						redirect: [
+							{
+								if: { language: 'fr', os: 'ios' },
+								to: 'https://destination.example.test/french-ios-schema'
+							}
+						]
+					},
 					'/_app/version.json': { url: 'https://destination.example.test/asset' }
 				}
 			},
@@ -101,28 +109,49 @@ test('rejects malformed ingress without reaching either handler', () => {
 	expect(requestApplication(incoming)).toBeUndefined();
 });
 
-test('captures the request outcome, logical path and raw fields using the trusted IP header', () => {
+test('captures one canonical visit and original request headers for a conditional redirect using the trusted IP', () => {
 	const recordVisit = vi.fn();
 	const tracked = { ...application, recordVisit };
 	const incoming = request('go.example.test', '/%73chema.json?private=not-collected');
 	Object.assign(incoming.headers, {
 		'x-real-ip': '2001:db8::1',
-		'user-agent': 'Example agent',
-		'accept-language': 'en-US,en;q=0.9',
+		'user-agent': 'Example agent (iPhone)',
+		'accept-language': 'fr-CA,en;q=0.9',
 		cookie: 'private-cookie',
 		referer: 'https://private.example.test/'
 	});
 
-	expect(handleIngress(tracked, incoming, {})?.status).toBe(302);
+	const response = handleIngress(tracked, incoming, {});
+	expect(response?.status).toBe(302);
+	expect(response?.headers.get('location')).toBe(
+		'https://destination.example.test/french-ios-schema'
+	);
+	expect(response?.headers.get('vary')).toBe('Accept-Language, User-Agent');
 	expect(recordVisit).toHaveBeenCalledExactlyOnceWith({
 		domain: 'go.example.test',
 		path: '/schema.json',
 		outcome: 'valid',
 		visited_at: expect.any(Number),
 		ip: '2001:db8::1',
-		user_agent: 'Example agent',
-		accept_language: 'en-US,en;q=0.9'
+		user_agent: 'Example agent (iPhone)',
+		accept_language: 'fr-CA,en;q=0.9'
 	});
+});
+
+test('array-valued request headers neither select a conditional destination nor enter raw capture', () => {
+	const recordVisit = vi.fn();
+	const tracked = { ...application, recordVisit };
+	const incoming = request('go.example.test');
+	Object.assign(incoming.headers, {
+		'accept-language': ['fr'],
+		'user-agent': ['iPhone']
+	});
+
+	const response = handleIngress(tracked, incoming, {});
+	expect(response?.headers.get('location')).toBe('https://destination.example.test/schema');
+	expect(recordVisit).toHaveBeenCalledExactlyOnceWith(
+		expect.objectContaining({ user_agent: null, accept_language: null })
+	);
 });
 
 test('captures invalid decoded paths even when the fallback redirects', () => {
@@ -160,7 +189,13 @@ test('does not record HEAD, malformed, admin, unknown-host or disabled-analytics
 	const tracked = { ...application, recordVisit };
 	const head = request('go.example.test');
 	head.method = 'HEAD';
-	expect(handleIngress(tracked, head, {})?.status).toBe(302);
+	head.headers['accept-language'] = 'fr-CA,en;q=0.9';
+	head.headers['user-agent'] = 'Example agent (iPhone)';
+	const headResponse = handleIngress(tracked, head, {});
+	expect(headResponse?.status).toBe(302);
+	expect(headResponse?.headers.get('location')).toBe(
+		'https://destination.example.test/french-ios-schema'
+	);
 	expect(handleIngress(tracked, request('go.example.test', '/%'), {})?.status).toBe(400);
 	expect(handleIngress(tracked, request('unknown.example.test'), {})?.status).toBe(404);
 	expect(handleIngress(tracked, request('admin.example.test'), {})).toBeUndefined();

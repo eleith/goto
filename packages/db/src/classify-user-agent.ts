@@ -1,3 +1,19 @@
+export function classifyOperatingSystem(userAgent: string | null | undefined): string {
+	const normalizedUserAgent = userAgent?.toLowerCase() ?? '';
+	return operatingSystemName(normalizedUserAgent);
+}
+
+export function classifyUserAgent(userAgent: string | null | undefined): {
+	browser: string;
+	os: string;
+} {
+	const normalizedUserAgent = userAgent?.toLowerCase() ?? '';
+	return {
+		browser: browserName(normalizedUserAgent),
+		os: operatingSystemName(normalizedUserAgent)
+	};
+}
+
 function browserName(userAgent: string): string {
 	if (
 		userAgent.includes('edg/') ||
@@ -27,15 +43,4 @@ function operatingSystemName(userAgent: string): string {
 	if (userAgent.includes('cros ')) return 'ChromeOS';
 	if (userAgent.includes('linux')) return 'Linux';
 	return 'Other';
-}
-
-export function classifyUserAgent(userAgent: string | null | undefined): {
-	browser: string;
-	os: string;
-} {
-	const normalizedUserAgent = userAgent?.toLowerCase() ?? '';
-	return {
-		browser: browserName(normalizedUserAgent),
-		os: operatingSystemName(normalizedUserAgent)
-	};
 }

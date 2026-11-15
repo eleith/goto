@@ -1,11 +1,11 @@
-import { validateConfig } from '@goto/config';
+import { loadConfig } from '@goto/config';
 import { expect, test } from 'vitest';
 import { prepareSnapshot } from '../snapshot.js';
 import { currentTags, tagMembers } from './inventory.js';
 
 test('uses exact current labels across domains, once per named link regardless of state', () => {
 	const snapshot = prepareSnapshot(
-		validateConfig(
+		loadConfig(
 			{
 				auth: { credentials: { username: 'test', password: 'tag-inventory-test-password' } },
 				domains: {

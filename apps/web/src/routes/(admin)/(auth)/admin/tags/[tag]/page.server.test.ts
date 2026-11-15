@@ -1,5 +1,5 @@
 import { createVisitPeriod, visitDays, type VisitDetails } from '@goto/analytics';
-import { validateConfig } from '@goto/config';
+import { loadConfig } from '@goto/config';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { prepareSnapshot } from '#lib/server/snapshot.js';
 import { readLinkDetails } from '#lib/server/visits/reports.js';
@@ -37,7 +37,7 @@ function request(
 	selectedTag = tag,
 	settings: { retentionMonths?: number; domains?: Record<string, unknown> } = {}
 ) {
-	const prepared = validateConfig(
+	const prepared = loadConfig(
 		{
 			auth: { credentials: { username: 'test', password: 'tag-page-test-password' } },
 			analytics: { retention_months: settings.retentionMonths ?? 3 },

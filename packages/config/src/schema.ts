@@ -5,6 +5,7 @@ import {
 	type Static,
 	type TSchema
 } from '@sinclair/typebox';
+import { languageTagPattern } from './languages.js';
 import { hasControlCharacters } from './text.js';
 
 const ref = <T extends TSchema>(schema: T, options?: SchemaOptions) => {
@@ -266,9 +267,33 @@ const DomainLinkDefaultsSchema = Type.Object(
 	}
 );
 
+const RedirectRuleSchema = Type.Object(
+	{
+		if: Type.Object(
+			{
+				language: Type.Optional(Type.String({ pattern: languageTagPattern })),
+				os: Type.Optional(
+					Type.Union([
+						Type.Literal('ios'),
+						Type.Literal('android'),
+						Type.Literal('windows'),
+						Type.Literal('macos'),
+						Type.Literal('linux'),
+						Type.Literal('chromeos')
+					])
+				)
+			},
+			{ additionalProperties: false, minProperties: 1 }
+		),
+		to: ref(LinkUrlSchema)
+	},
+	{ $id: 'RedirectRule', additionalProperties: false }
+);
+
 const LinkConfigurationSchema = Type.Object(
 	{
 		url: ref(LinkUrlSchema),
+		redirect: Type.Optional(Type.Array(ref(RedirectRuleSchema))),
 		title: Type.Optional(Type.String(nonBlankText)),
 		description: Type.Optional(Type.String()),
 		tags: ref(TagsSchema, { default: [] }),
@@ -347,6 +372,7 @@ export const configurationReferences: TSchema[] = [
 	AnalyticsSchema,
 	LinkDefaultsSchema,
 	DomainLinkDefaultsSchema,
+	RedirectRuleSchema,
 	LinkConfigurationSchema,
 	DomainConfigurationSchema
 ];
@@ -356,3 +382,4 @@ export type LinkConfiguration = Static<typeof LinkConfigurationSchema>;
 export type DomainConfiguration = Static<typeof DomainConfigurationSchema>;
 export type RedirectStatus = Static<typeof RedirectStatusSchema>;
 export type RedirectResponse = Static<typeof RedirectResponseSchema>;
+export type RedirectRule = Static<typeof RedirectRuleSchema>;

@@ -4,6 +4,7 @@ import { Value } from '@sinclair/typebox/value';
 import { describe, expect, it } from 'vitest';
 import { createEditorSchema } from './editor-schema.js';
 import { interpolate } from './interpolate.js';
+import { languageTagPattern } from './languages.js';
 import { configurationReferences, GotoConfigurationSchema } from './schema.js';
 
 type ObjectSchema = Record<string, unknown>;
@@ -61,6 +62,29 @@ describe('Goto editor schema', () => {
 			expect(branch.additionalProperties).toBe(false);
 		}
 		expect(definition(editor, 'AuthSecret')).not.toHaveProperty('default');
+	});
+
+	it('keeps named-link rules optional while requiring a destination and nonempty strict conditions', () => {
+		const editor = createEditorSchema();
+		const link = definition(editor, 'LinkConfiguration');
+		const rule = definition(editor, 'RedirectRule');
+		const condition = property(rule, 'if');
+		expect(link.required).not.toContain('redirect');
+		expect(property(link, 'redirect')).toEqual({
+			type: 'array',
+			items: { $ref: '#/$defs/RedirectRule' }
+		});
+		expect(rule.required).toEqual(['if', 'to']);
+		expect(rule.additionalProperties).toBe(false);
+		expect(property(rule, 'to')).toEqual({ $ref: '#/$defs/LinkUrl' });
+		expect(condition).toMatchObject({ additionalProperties: false, minProperties: 1 });
+		expect(condition.required).toBeUndefined();
+		expect(Object.keys(object(condition.properties))).toEqual(['language', 'os']);
+		expect(branches(property(condition, 'language'))[0]).toEqual({
+			type: 'string',
+			pattern: languageTagPattern
+		});
+		expect(interpolationPattern(property(condition, 'language')).test('${LANGUAGE}')).toBe(true);
 	});
 
 	it('preserves traversal defaults on record values without inventing inherited overrides', () => {

@@ -5,7 +5,7 @@ import {
 	formatConfigError,
 	formatConfigWarnings,
 	parseConfig,
-	validateConfig
+	loadConfig
 } from './index.js';
 
 const options = { env: {} };
@@ -42,7 +42,7 @@ describe('configuration diagnostics', () => {
 	});
 
 	it('formats tag warnings with masked locations and static reasons without configuration values', () => {
-		const prepared = validateConfig(
+		const prepared = loadConfig(
 			{
 				...configurationInput(),
 				domains: {
@@ -78,7 +78,7 @@ describe('configuration diagnostics', () => {
 
 	it('identifies the site section and its allowed fields without echoing the old URL', () => {
 		const error = captureConfigError(() =>
-			validateConfig(
+			loadConfig(
 				{
 					...configurationInput(),
 					site: { url: `https://${privateValue}.example.com` }
@@ -102,7 +102,7 @@ describe('configuration diagnostics', () => {
 		{ override: { site: { [privateKey]: privateValue } }, path: '/site' }
 	])('omits unknown property names and values at $path', ({ override, path }) => {
 		const error = captureConfigError(() =>
-			validateConfig({ ...configurationInput(), ...override }, options)
+			loadConfig({ ...configurationInput(), ...override }, options)
 		);
 		expect(error.issues).toEqual([
 			{ path, message: expect.stringContaining('Unexpected property') }
@@ -115,7 +115,7 @@ describe('configuration diagnostics', () => {
 
 	it('redacts domain and link keys and reports invalid resolved values without printing them', () => {
 		const error = captureConfigError(() =>
-			validateConfig(
+			loadConfig(
 				{
 					...configurationInput(),
 					domains: {
@@ -138,7 +138,7 @@ describe('configuration diagnostics', () => {
 		});
 		expect(error.issues).toContainEqual({
 			path: '/domains/*/links/*',
-			message: expect.stringContaining('Unexpected property. Allowed fields: url, title')
+			message: expect.stringContaining('Unexpected property. Allowed fields: url, redirect, title')
 		});
 		for (const output of [JSON.stringify(error), formatConfigError(error)]) {
 			for (const marker of [
@@ -153,9 +153,49 @@ describe('configuration diagnostics', () => {
 		}
 	});
 
+	it('keeps conditional routing failures fatal with masked rule locations and no authored values', () => {
+		const error = captureConfigError(() =>
+			loadConfig(
+				{
+					...configurationInput(),
+					domains: {
+						'private-domain-marker.example.com': {
+							links: {
+								'/private-link-marker': {
+									url: 'https://example.com',
+									redirect: [
+										{
+											if: { language: 'fr', [privateKey]: privateValue },
+											to: `https://user:${privateValue}@example.com`
+										}
+									]
+								}
+							}
+						}
+					}
+				},
+				options
+			)
+		);
+		expect(error.issues).toContainEqual({
+			path: '/domains/*/links/*/redirect/0/to',
+			message: "Expected string to match 'goto-link-url' format"
+		});
+		expect(error.issues).toContainEqual({
+			path: '/domains/*/links/*/redirect/0/if',
+			message: 'Unexpected property. Allowed fields: language, os'
+		});
+		for (const output of [JSON.stringify(error), formatConfigError(error)]) {
+			expect(output).not.toContain('private-domain-marker');
+			expect(output).not.toContain('private-link-marker');
+			expect(output).not.toContain('private-authored-key-marker');
+			expect(output).not.toContain(privateValue);
+		}
+	});
+
 	it('keeps response diagnostics secret-safe and redacts their domain keys', () => {
 		const error = captureConfigError(() =>
-			validateConfig(
+			loadConfig(
 				{
 					...configurationInput(),
 					fallback: { url: `https://user:${privateValue}@example.com` },
@@ -206,7 +246,7 @@ describe('configuration diagnostics', () => {
 
 	it('leaves errors without safe context generic', () => {
 		const error = captureConfigError(() =>
-			validateConfig({ ...configurationInput(), [privateKey]: '${MISSING}' }, options)
+			loadConfig({ ...configurationInput(), [privateKey]: '${MISSING}' }, options)
 		);
 		expect(error.issues).toEqual([]);
 		expect(formatConfigError(error)).toBe('Invalid configuration');

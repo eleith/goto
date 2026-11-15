@@ -1,4 +1,4 @@
-import { validateConfig } from '@goto/config';
+import { loadConfig } from '@goto/config';
 import {
 	createVisitPeriod,
 	visitDays,
@@ -19,7 +19,7 @@ const emptyDomain = 'empty.example.test';
 const newDomain = 'new.example.test';
 
 function request(retention_months = 3) {
-	const prepared = validateConfig(
+	const prepared = loadConfig(
 		{
 			auth: { credentials: { username: 'test', password: 'overview-test-password' } },
 			analytics: { retention_months },

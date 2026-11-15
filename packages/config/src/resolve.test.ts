@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { configurationInput } from '../test/configuration.js';
 import { ConfigError } from './errors.js';
-import { validateConfig } from './load.js';
+import { loadConfig } from './load.js';
 
 const options = { env: {} };
 const redirectHost = 'go.example.test';
@@ -23,14 +23,14 @@ describe('direct self-loop validation', () => {
 		const input = configurationInput();
 
 		expect(() =>
-			validateConfig({ ...input, domains: { [host]: { links: { [path]: { url } } } } }, options)
+			loadConfig({ ...input, domains: { [host]: { links: { [path]: { url } } } } }, options)
 		).toThrowError(new ConfigError());
 	});
 
 	it('rejects a direct root self-loop and allows a different path on the same domain', () => {
 		const input = configurationInput();
 		expect(() =>
-			validateConfig(
+			loadConfig(
 				{
 					...input,
 					domains: {
@@ -43,7 +43,7 @@ describe('direct self-loop validation', () => {
 				options
 			)
 		).toThrowError(new ConfigError());
-		const { domains } = validateConfig(
+		const { domains } = loadConfig(
 			{
 				...input,
 				domains: {
@@ -60,7 +60,7 @@ describe('direct self-loop validation', () => {
 		const url = 'https://go.example.test/docs?private=dummy-value';
 
 		expect(() =>
-			validateConfig(
+			loadConfig(
 				{ ...input, domains: { [redirectHost]: { links: { '/docs': { url, enabled: false } } } } },
 				options
 			)
@@ -79,7 +79,7 @@ describe('direct self-loop validation', () => {
 		'http://OTHER.example.test:80/p%61th?owned=%2f#fragment'
 	])('preserves distinct authored destinations: %s', (url) => {
 		const input = configurationInput();
-		const { domains } = validateConfig(
+		const { domains } = loadConfig(
 			{
 				...input,
 				domains: {
@@ -100,7 +100,7 @@ describe('direct self-loop validation', () => {
 		'rejects a destination matching the same link: %s',
 		(path) => {
 			expect(() =>
-				validateConfig(
+				loadConfig(
 					{
 						...configurationInput(),
 						domains: {
@@ -121,14 +121,44 @@ describe('direct self-loop validation', () => {
 		}
 	);
 
+	it('rejects self-looping targets even in a disabled link and a shadowed rule', () => {
+		expect(() =>
+			loadConfig(
+				{
+					...configurationInput(),
+					domains: {
+						[redirectHost]: {
+							links: {
+								'/docs': {
+									url: 'https://destination.example/docs',
+									enabled: false,
+									forward_path: true,
+									redirect: [
+										{ if: { language: 'fr' }, to: 'https://destination.example/fr' },
+										{ if: { language: 'fr' }, to: `https://${redirectHost}/DOCS/Install` }
+									]
+								}
+							}
+						}
+					}
+				},
+				options
+			)
+		).toThrowError(new ConfigError());
+	});
+
 	it('uses all prepared links to distinguish destination identity from its parent prefix', () => {
-		const { domains } = validateConfig(
+		const { domains } = loadConfig(
 			{
 				...configurationInput(),
 				domains: {
 					[redirectHost]: {
 						links: {
-							'/docs': { url: `https://${redirectHost}/DOCS/API/`, forward_path: true },
+							'/docs': {
+								url: `https://${redirectHost}/DOCS/API/`,
+								forward_path: true,
+								redirect: [{ if: { os: 'ios' }, to: `https://${redirectHost}/DOCS/API/?from=ios` }]
+							},
 							'/docs/api': { url: 'https://destination.example/api' }
 						}
 					}
@@ -137,12 +167,15 @@ describe('direct self-loop validation', () => {
 			options
 		);
 		expect(domains[redirectHost]?.links['/docs']?.url).toBe(`https://${redirectHost}/DOCS/API/`);
+		expect(domains[redirectHost]?.links['/docs']?.redirect).toEqual([
+			{ if: { os: 'ios' }, to: `https://${redirectHost}/DOCS/API/?from=ios` }
+		]);
 	});
 
 	it('allows local fallback URLs without graph analysis', () => {
 		const input = configurationInput();
 		const fallback = { url: 'https://go.example.test/landing' };
-		const { domains } = validateConfig(
+		const { domains } = loadConfig(
 			{
 				...input,
 				domains: { [redirectHost]: { fallback, links: {} } }
@@ -159,8 +192,32 @@ describe('direct self-loop validation', () => {
 });
 
 describe('effective domains', () => {
+	it('normalizes prepared language conditions without changing authored rules or adding conditions', () => {
+		const input = configurationInput({
+			'/docs': {
+				url: 'https://example.com/docs',
+				redirect: [
+					{ if: { language: 'FR-ca', os: 'ios' }, to: 'https://example.com/fr-ios' },
+					{ if: { os: 'linux' }, to: 'https://example.com/linux' },
+					{ if: { language: 'EN' }, to: 'https://example.com/en' }
+				]
+			}
+		});
+		const original = structuredClone(input);
+		const { configuration, domains } = loadConfig(input, options);
+		expect(domains['go.example.com']?.links['/docs']?.redirect).toEqual([
+			{ if: { language: 'fr-ca', os: 'ios' }, to: 'https://example.com/fr-ios' },
+			{ if: { os: 'linux' }, to: 'https://example.com/linux' },
+			{ if: { language: 'en' }, to: 'https://example.com/en' }
+		]);
+		expect(configuration.domains['go.example.com']?.links['/docs']?.redirect).toEqual(
+			original.domains['go.example.com'].links['/docs']?.redirect
+		);
+		expect(input).toEqual(original);
+	});
+
 	it('keeps omissions in configuration and records built-in defaults separately', () => {
-		const { configuration, domains } = validateConfig(configurationInput(), options);
+		const { configuration, domains } = loadConfig(configurationInput(), options);
 		expect(configuration.domains['go.example.com']).toEqual({
 			link_defaults: {},
 			links: { '/docs': { url: 'https://example.com/docs', tags: [], enabled: true } }
@@ -198,7 +255,7 @@ describe('effective domains', () => {
 	});
 
 	it('records explicit global false matching defaults instead of treating them as omissions', () => {
-		const { configuration, domains } = validateConfig(
+		const { configuration, domains } = loadConfig(
 			{
 				...configurationInput(),
 				link_defaults: {
@@ -235,7 +292,7 @@ describe('effective domains', () => {
 				forward_path: false
 			}
 		});
-		const { domains } = validateConfig(
+		const { domains } = loadConfig(
 			{
 				...input,
 				link_defaults: {
@@ -333,7 +390,7 @@ describe('effective domains', () => {
 	});
 
 	it('replaces a global fallback as a whole and keeps root response options independent', () => {
-		const { domains } = validateConfig(
+		const { domains } = loadConfig(
 			{
 				...configurationInput(),
 				link_defaults: { status_code: 308, forward_query: true },
@@ -378,14 +435,14 @@ describe('effective domains', () => {
 			};
 			for (const entries of [Object.entries(links), Object.entries(links).reverse()]) {
 				expect(() =>
-					validateConfig(configurationInput(Object.fromEntries(entries)), options)
+					loadConfig(configurationInput(Object.fromEntries(entries)), options)
 				).toThrowError(new ConfigError());
 			}
 		}
 	);
 
 	it('keeps distinct strict case identities and non-ASCII spelling independent', () => {
-		const { domains } = validateConfig(
+		const { domains } = loadConfig(
 			configurationInput({
 				'/Docs': { url: 'https://destination.example/first', case_insensitive: false },
 				'/docs': { url: 'https://destination.example/second', case_insensitive: false },
@@ -409,13 +466,13 @@ describe('effective domains', () => {
 
 	it('rejects the root as a named link', () => {
 		expect(() =>
-			validateConfig(configurationInput({ '/': { url: 'https://example.com' } }), options)
+			loadConfig(configurationInput({ '/': { url: 'https://example.com' } }), options)
 		).toThrow(ConfigError);
 	});
 
 	it('normalizes domain identities while keeping their path namespaces independent', () => {
 		const input = configurationInput();
-		const { domains } = validateConfig(
+		const { domains } = loadConfig(
 			{
 				...input,
 				domains: {
@@ -439,7 +496,7 @@ describe('effective domains', () => {
 		const input = configurationInput();
 		const domain = input.domains['go.example.com'];
 		expect(() =>
-			validateConfig({ ...input, domains: { [first]: domain, [second]: domain } }, options)
+			loadConfig({ ...input, domains: { [first]: domain, [second]: domain } }, options)
 		).toThrow(ConfigError);
 	});
 
@@ -448,7 +505,7 @@ describe('effective domains', () => {
 		(instant) => {
 			for (const field of ['valid_from', 'valid_until']) {
 				expect(() =>
-					validateConfig(
+					loadConfig(
 						configurationInput({ '/docs': { url: 'https://example.com', [field]: instant } }),
 						options
 					)
@@ -462,7 +519,7 @@ describe('effective domains', () => {
 	it.each(['2028-02-29T00:00:00Z', '2028-02-29T23:30:00-02:00'])(
 		'accepts valid leap-day boundaries and timezone offsets %s',
 		(instant) => {
-			const { domains } = validateConfig(
+			const { domains } = loadConfig(
 				configurationInput({ '/docs': { url: 'https://example.com', valid_from: instant } }),
 				options
 			);
@@ -472,15 +529,15 @@ describe('effective domains', () => {
 
 	it('rejects the admin host, noncanonical paths and reversed or empty validity windows', () => {
 		const input = configurationInput();
+		expect(() => loadConfig({ ...input, url: { app: 'https://go.example.com' } }, options)).toThrow(
+			ConfigError
+		);
 		expect(() =>
-			validateConfig({ ...input, url: { app: 'https://go.example.com' } }, options)
-		).toThrow(ConfigError);
-		expect(() =>
-			validateConfig(configurationInput({ '/docs/': { url: 'https://example.com' } }), options)
+			loadConfig(configurationInput({ '/docs/': { url: 'https://example.com' } }), options)
 		).toThrow(ConfigError);
 		for (const end of ['2027-01-01T00:00:00Z', '2026-12-31T23:59:59Z']) {
 			expect(() =>
-				validateConfig(
+				loadConfig(
 					configurationInput({
 						'/docs': {
 							url: 'https://example.com',

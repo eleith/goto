@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { configurationInput } from '../test/configuration.js';
-import { isSelfRedirect, matchLink, validateConfig } from './index.js';
+import { isSelfRedirect, matchLink, loadConfig } from './index.js';
 
 function prepareDomain(links: Parameters<typeof configurationInput>[0]) {
-	return validateConfig(configurationInput(links), { env: {} }).domains['go.example.com']!;
+	return loadConfig(configurationInput(links), { env: {} }).domains['go.example.com']!;
 }
 
 const destination = 'https://destination.example/base';

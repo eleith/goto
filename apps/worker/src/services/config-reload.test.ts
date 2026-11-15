@@ -1,4 +1,4 @@
-import { startConfigReloading, validateConfig } from '@goto/config';
+import { startConfigReloading, loadConfig } from '@goto/config';
 import type { OpenWorkflow } from 'openworkflow';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { applyConfig, watchConfiguration } from './config-reload.js';
@@ -19,7 +19,7 @@ function configuration(
 	retention_months = 3,
 	path = './data/goto.sqlite'
 ) {
-	return validateConfig(
+	return loadConfig(
 		{
 			auth: { credentials: { username: 'test', password: 'config-test-password' } },
 			database: { worker_path, path },

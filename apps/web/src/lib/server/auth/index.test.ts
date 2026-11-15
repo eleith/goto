@@ -1,4 +1,4 @@
-import { validateConfig } from '@goto/config';
+import { loadConfig } from '@goto/config';
 import { parseSetCookieHeader } from 'better-auth/cookies';
 import { expect, test, vi } from 'vitest';
 import { createAuthentication } from './index.js';
@@ -10,7 +10,7 @@ const foreignCookies =
 	'better-auth.session_token=other-app-token; better-auth.session_data=other-app-data';
 
 function authentication(origin: string) {
-	const { configuration } = validateConfig(
+	const { configuration } = loadConfig(
 		{
 			url: { app: origin },
 			auth: { secret: 'cookie-test-secret-with-at-least-thirty-two-characters', credentials },

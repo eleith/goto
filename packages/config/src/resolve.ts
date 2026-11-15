@@ -1,37 +1,49 @@
-import { ConfigError } from './errors.js';
+import { normalizeLanguageTag } from './languages.js';
 import { foldAsciiCase } from './matching.js';
-import { isCanonicalPath, normalizeHost } from './paths.js';
-import { isSelfRedirect } from './redirect.js';
-import type { DomainConfiguration, GotoConfiguration, LinkConfiguration } from './schema.js';
+import { normalizeHost } from './paths.js';
+import type {
+	DomainConfiguration,
+	GotoConfiguration,
+	LinkConfiguration,
+	RedirectRule
+} from './schema.js';
 import type { PreparedDomain, PreparedLink, SettingSource } from './types.js';
 
-function linkSettingSource(
-	key: keyof GotoConfiguration['link_defaults'],
-	global: object,
-	domain: DomainConfiguration,
-	link?: LinkConfiguration
-): SettingSource {
-	if (link && Object.hasOwn(link, key)) return 'link';
-	if (Object.hasOwn(domain.link_defaults, key)) return 'domain';
-	return Object.hasOwn(global, key) ? 'global' : 'builtin';
+export function buildRedirectDomainLookup(
+	configuration: GotoConfiguration,
+	authoredLinkDefaults: object
+): Record<string, PreparedDomain> {
+	const domains: Record<string, PreparedDomain> = Object.create(null);
+	for (const [key, domain] of Object.entries(configuration.domains)) {
+		const host = normalizeHost(key)!;
+		const links: Record<string, PreparedLink> = Object.create(null);
+		for (const [path, link] of Object.entries(domain.links)) {
+			links[path] = buildRedirectLink(path, link, domain, configuration, authoredLinkDefaults);
+		}
+		const caseInsensitivePaths = buildCaseInsensitivePathLookup(links);
+		let fallbackSource: SettingSource = 'builtin';
+		if (domain.fallback) fallbackSource = 'domain';
+		else if (configuration.fallback) fallbackSource = 'global';
+		const prepared: PreparedDomain = {
+			root: domain.root ?? null,
+			fallback: domain.fallback ?? configuration.fallback ?? null,
+			provenance: { fallback: fallbackSource },
+			links,
+			caseInsensitivePaths
+		};
+		domains[host] = prepared;
+	}
+	return domains;
 }
 
-function prepareLink(
+function buildRedirectLink(
 	path: string,
 	link: LinkConfiguration,
 	domain: DomainConfiguration,
 	configuration: GotoConfiguration,
 	global: object
 ): PreparedLink {
-	if (path === '/' || !isCanonicalPath(path)) throw new ConfigError();
-	if (
-		link.valid_from !== undefined &&
-		link.valid_until !== undefined &&
-		Date.parse(link.valid_from) >= Date.parse(link.valid_until)
-	) {
-		throw new ConfigError();
-	}
-	return {
+	const prepared: PreparedLink = {
 		...link,
 		title: link.title ?? path,
 		status_code:
@@ -62,54 +74,36 @@ function prepareLink(
 			forward_path: linkSettingSource('forward_path', global, domain, link)
 		}
 	};
+	if (link.redirect !== undefined) prepared.redirect = link.redirect.map(normalizeRedirectRule);
+	return prepared;
 }
 
-export function prepareDomains(
-	configuration: GotoConfiguration,
-	authoredLinkDefaults: object
-): Record<string, PreparedDomain> {
-	const domains: Record<string, PreparedDomain> = Object.create(null);
-	const adminHost = normalizeHost(new URL(configuration.url.app).host);
-	for (const [key, domain] of Object.entries(configuration.domains)) {
-		const host = normalizeHost(key);
-		if (!host || host === adminHost || Object.hasOwn(domains, host)) {
-			throw new ConfigError();
-		}
-		if (domain.root && isSelfRedirect(domain.root.url, host, '/')) throw new ConfigError();
-		const links: Record<string, PreparedLink> = Object.create(null);
-		for (const [path, link] of Object.entries(domain.links)) {
-			links[path] = prepareLink(path, link, domain, configuration, authoredLinkDefaults);
-		}
-		const caseInsensitivePaths = prepareCaseInsensitivePaths(links);
-		let fallbackSource: SettingSource = 'builtin';
-		if (domain.fallback) fallbackSource = 'domain';
-		else if (configuration.fallback) fallbackSource = 'global';
-		const prepared: PreparedDomain = {
-			root: domain.root ?? null,
-			fallback: domain.fallback ?? configuration.fallback ?? null,
-			provenance: { fallback: fallbackSource },
-			links,
-			caseInsensitivePaths
-		};
-		for (const [path, link] of Object.entries(links)) {
-			if (isSelfRedirect(link.url, host, path, prepared)) throw new ConfigError();
-		}
-		domains[host] = prepared;
-	}
-	return domains;
+function normalizeRedirectRule(rule: RedirectRule): RedirectRule {
+	if (rule.if.language === undefined) return rule;
+	return {
+		...rule,
+		if: { ...rule.if, language: normalizeLanguageTag(rule.if.language) }
+	};
 }
 
-function prepareCaseInsensitivePaths(links: Record<string, PreparedLink>): Record<string, string> {
+function linkSettingSource(
+	key: keyof GotoConfiguration['link_defaults'],
+	global: object,
+	domain: DomainConfiguration,
+	link?: LinkConfiguration
+): SettingSource {
+	if (link && Object.hasOwn(link, key)) return 'link';
+	if (Object.hasOwn(domain.link_defaults, key)) return 'domain';
+	return Object.hasOwn(global, key) ? 'global' : 'builtin';
+}
+
+function buildCaseInsensitivePathLookup(
+	links: Record<string, PreparedLink>
+): Record<string, string> {
 	const paths: Record<string, string> = Object.create(null);
 	for (const [path, link] of Object.entries(links)) {
 		if (!link.case_insensitive) continue;
-		const folded = foldAsciiCase(path);
-		if (Object.hasOwn(paths, folded)) throw new ConfigError();
-		paths[folded] = path;
-	}
-	for (const path of Object.keys(links)) {
-		const alias = paths[foldAsciiCase(path)];
-		if (alias !== undefined && alias !== path) throw new ConfigError();
+		paths[foldAsciiCase(path)] = path;
 	}
 	return paths;
 }

@@ -1,4 +1,4 @@
-import { validateConfig } from '@goto/config';
+import { loadConfig } from '@goto/config';
 import { afterEach, expect, test, vi } from 'vitest';
 import type { WorkerContext } from '../services/context.js';
 import { prepareVisitReports } from '../services/prepare-visit-reports.js';
@@ -10,7 +10,7 @@ vi.mock('../services/prepare-visit-reports.js', () => ({
 afterEach(() => vi.clearAllMocks());
 
 function context(): WorkerContext {
-	const prepared = validateConfig(
+	const prepared = loadConfig(
 		{ auth: { credentials: { username: 'test', password: 'jitter-test-password' } }, domains: {} },
 		{ env: {} }
 	);

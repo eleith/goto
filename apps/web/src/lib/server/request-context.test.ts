@@ -1,6 +1,6 @@
 import { IncomingMessage } from 'node:http';
 import { Socket } from 'node:net';
-import { validateConfig } from '@goto/config';
+import { loadConfig } from '@goto/config';
 import { describe, expect, test } from 'vitest';
 import type { Application } from './application.js';
 import {
@@ -12,7 +12,7 @@ import {
 import { prepareSnapshot } from './snapshot.js';
 
 function application(): Application {
-	const prepared = validateConfig(
+	const prepared = loadConfig(
 		{
 			url: { app: 'https://admin.example.org' },
 			auth: { credentials: { username: 'example', password: 'test-password' } },
@@ -109,7 +109,7 @@ test('an existing request retains its snapshot when the application publishes an
 	const first = request('web');
 	bindApplication(first, runtime);
 	current = prepareSnapshot(
-		validateConfig(
+		loadConfig(
 			{
 				url: { app: 'https://admin.example.org' },
 				site: { title: 'Updated' },

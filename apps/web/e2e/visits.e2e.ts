@@ -41,16 +41,24 @@ test('the compiled writer persists outcomes, isolates locks and drains visits be
 		)
 		.toBeGreaterThan(0);
 
+	const conditionalOptions = {
+		...options,
+		headers: { ...options.headers, 'accept-language': 'fr-CA,en;q=0.9' }
+	};
 	const competingWriter = new DatabaseSync(databasePath);
 	try {
 		competingWriter.exec('PRAGMA busy_timeout = 1000');
 		competingWriter.exec('BEGIN IMMEDIATE');
-		for (const [path, destination] of [
-			['/docs', 'https://example.org/first-domain'],
-			['/DOCS/', 'https://example.org/first-domain'],
-			['/DoCs/Install?from=browser', 'https://example.org/first-domain/Install?from=browser']
+		for (const [path, destination, requestOptions] of [
+			['/docs', 'https://example.org/first-domain', options],
+			['/DOCS/', 'https://example.org/french-linux', conditionalOptions],
+			[
+				'/DoCs/Install?from=browser',
+				'https://example.org/first-domain/Install?from=browser',
+				options
+			]
 		] as const) {
-			const response = await request.get(path, options);
+			const response = await request.get(path, requestOptions);
 			expect(response.status()).toBe(302);
 			expect(response.headers().location).toBe(destination);
 		}
@@ -72,6 +80,13 @@ test('the compiled writer persists outcomes, isolates locks and drains visits be
 		expect(
 			db.prepare('SELECT DISTINCT outcome, browser, os FROM visits WHERE path = ?').all('/docs')
 		).toEqual([{ outcome: 'valid', browser: 'Firefox', os: 'Linux' }]);
+		expect(
+			db
+				.prepare(
+					'SELECT accept_language FROM visits WHERE path = ? AND accept_language IS NOT NULL'
+				)
+				.all('/docs')
+		).toEqual([{ accept_language: 'fr-CA,en;q=0.9' }]);
 		expect(
 			db
 				.prepare(

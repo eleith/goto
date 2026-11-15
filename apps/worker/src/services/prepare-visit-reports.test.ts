@@ -1,5 +1,5 @@
 import { encodeVisitReports, type VisitTotals } from '@goto/analytics';
-import { validateConfig } from '@goto/config';
+import { loadConfig } from '@goto/config';
 import { openDb, runMigrations, insertVisit, pruneVisits, type ClassifiedVisit } from '@goto/db';
 import { readVisitSummary, readVisitDetails } from '@goto/db/visit-reports';
 import { afterEach, expect, test, vi } from 'vitest';
@@ -22,7 +22,7 @@ afterEach(() => {
 });
 
 async function context(): Promise<WorkerContext> {
-	const prepared = validateConfig(
+	const prepared = loadConfig(
 		{
 			auth: { credentials: { username: 'test', password: 'prepare-test-password' } },
 			domains: { 'go.example.test': { links: { '/docs': { url: 'https://example.test/docs' } } } }

@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { classifyUserAgent } from './classify-user-agent.js';
+import { classifyOperatingSystem, classifyUserAgent } from './classify-user-agent.js';
 
 test('recognizes Edge before the generic Chrome and Safari tokens', () => {
 	for (const token of ['Edg', 'EdgA', 'EdgiOS', 'Edge']) {
@@ -43,4 +43,5 @@ test.each([
 	{ ua: 'curl/8.12.0', browser: 'Other', os: 'Other' }
 ])('classifies $browser on $os without parsing versions', ({ ua, browser, os }) => {
 	expect(classifyUserAgent(ua)).toEqual({ browser, os });
+	expect(classifyOperatingSystem(ua)).toBe(os);
 });
