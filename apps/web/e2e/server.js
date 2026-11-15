@@ -75,6 +75,7 @@ async function seedVisits() {
 				path: '/docs',
 				outcome: 'valid',
 				visited_at: Date.now() - 14 * 86_400_000,
+				accept_language: 'fr-CA,fr,en;q=0.9,de,es,it,pt',
 				browser: 'Firefox',
 				os: 'Linux'
 			},
@@ -87,7 +88,7 @@ async function seedVisits() {
 				outcome: 'valid',
 				visited_at: Date.now() - 45 * 86_400_000
 			},
-			{ domain: 'tiny.example.org', path: '/docs', outcome: 'valid' }
+			{ domain: 'tiny.example.org', path: '/docs', outcome: 'valid', accept_language: 'en' }
 		];
 		for (const visit of visits) await insertVisit(db, { ...common, ...visit });
 	} finally {

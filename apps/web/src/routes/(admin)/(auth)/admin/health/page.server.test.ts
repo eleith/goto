@@ -42,12 +42,13 @@ function request(overrides: Record<string, unknown> = {}) {
 function emptyOverview(): VisitDetails {
 	const period = createVisitPeriod(3, Date.parse('2026-06-15T12:34:56.000Z'));
 	return {
-		version: 3,
+		version: 4,
 		scope: { kind: 'overview' },
 		period,
 		daily: visitDays(period).map((day) => ({ ...day, validVisits: 0, invalidVisits: 0 })),
 		browsers: [],
-		operatingSystems: []
+		operatingSystems: [],
+		acceptedLanguages: []
 	};
 }
 

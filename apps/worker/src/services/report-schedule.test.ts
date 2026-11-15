@@ -51,7 +51,7 @@ test('zero pauses hourly scheduling and purges prepared output even if raw histo
 		expect(engine.runWorkflow).not.toHaveBeenCalled();
 		const period = createVisitPeriod(3, Date.now());
 		const reports = buildVisitReports(
-			{ daily: [], browsers: [], operatingSystems: [] },
+			{ daily: [], browsers: [], operatingSystems: [], languageHeaders: [] },
 			[],
 			period
 		);

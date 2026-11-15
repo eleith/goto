@@ -68,13 +68,24 @@ test('publishes summary/detail pairs for all scopes, deletes expired history and
 			.insertInto('visits')
 			.values(Array.from({ length: 1001 }, () => ({ ...visit, visited_at: cutoff - 1 })))
 			.execute();
-		await insertVisit(ctx.db, { ...visit, visited_at: cutoff });
-		await insertVisit(ctx.db, { ...visit, path: '/', outcome: 'invalid', visited_at: now - 2000 });
+		await insertVisit(ctx.db, {
+			...visit,
+			visited_at: cutoff,
+			accept_language: 'fr-CA,fr,en;q=0.9'
+		});
+		await insertVisit(ctx.db, {
+			...visit,
+			path: '/',
+			outcome: 'invalid',
+			visited_at: now - 2000,
+			accept_language: 'DE'
+		});
 		await insertVisit(ctx.db, {
 			...visit,
 			path: '/missing',
 			outcome: 'invalid',
-			visited_at: now - 1000
+			visited_at: now - 1000,
+			accept_language: 'en;q=0.8'
 		});
 		await prepareVisitReports(ctx, now);
 		const summary = await readVisitSummary(ctx.db, domain);
@@ -90,7 +101,7 @@ test('publishes summary/detail pairs for all scopes, deletes expired history and
 			invalidVisits: 0
 		});
 		expect(sum(details!.daily)).toEqual(summary?.totals);
-		expect(details?.version).toBe(3);
+		expect(details?.version).toBe(4);
 		expect(details?.browsers).toEqual([
 			{ day: '2026-02-28', name: 'Firefox', validVisits: 1, invalidVisits: 0 },
 			{ day: '2026-05-31', name: 'Firefox', validVisits: 1, invalidVisits: 1 }
@@ -98,6 +109,17 @@ test('publishes summary/detail pairs for all scopes, deletes expired history and
 		expect(details?.operatingSystems).toEqual([
 			{ day: '2026-02-28', name: 'Linux', validVisits: 1, invalidVisits: 0 },
 			{ day: '2026-05-31', name: 'Linux', validVisits: 1, invalidVisits: 1 }
+		]);
+		expect(details?.acceptedLanguages).toEqual([
+			{ day: '2026-02-28', name: 'en', validVisits: 1, invalidVisits: 0 },
+			{ day: '2026-02-28', name: 'fr', validVisits: 1, invalidVisits: 0 },
+			{ day: '2026-05-31', name: 'de', validVisits: 1, invalidVisits: 0 },
+			{ day: '2026-05-31', name: 'Other', validVisits: 0, invalidVisits: 1 }
+		]);
+		expect(JSON.stringify(details)).not.toContain('fr-CA,fr,en;q=0.9');
+		expect((await readVisitDetails(ctx.db, docs))?.acceptedLanguages).toEqual([
+			{ day: '2026-02-28', name: 'en', validVisits: 1, invalidVisits: 0 },
+			{ day: '2026-02-28', name: 'fr', validVisits: 1, invalidVisits: 0 }
 		]);
 		expect(await ctx.db.selectFrom('analytics_reports').select('id').execute()).toHaveLength(4);
 		expect(await ctx.db.selectFrom('visits').select('id').execute()).toHaveLength(3);
@@ -113,6 +135,9 @@ test('publishes summary/detail pairs for all scopes, deletes expired history and
 		expect(rootDetails?.operatingSystems).toEqual([
 			{ day: '2026-05-31', name: 'Linux', validVisits: 1, invalidVisits: 0 }
 		]);
+		expect(rootDetails?.acceptedLanguages).toEqual([
+			{ day: '2026-05-31', name: 'de', validVisits: 1, invalidVisits: 0 }
+		]);
 		expect(
 			await ctx.db
 				.selectFrom('visits')
@@ -122,6 +147,9 @@ test('publishes summary/detail pairs for all scopes, deletes expired history and
 		).toEqual([{ path: '/', outcome: 'invalid' }]);
 		await prepareVisitReports(ctx, now);
 		expect((await readVisitSummary(ctx.db, overview))?.totals).toEqual(summary?.totals);
+		expect((await readVisitDetails(ctx.db, overview))?.acceptedLanguages).toEqual(
+			details?.acceptedLanguages
+		);
 	} finally {
 		await ctx.db.destroy();
 	}

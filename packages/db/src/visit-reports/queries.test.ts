@@ -160,6 +160,17 @@ test('aggregates explicit UTC scopes with legacy Root outcomes normalized only i
 			}
 		])
 	);
+	expect(result.languageHeaders).toEqual(
+		result.daily.map(({ scopeKind, domain, path, day, validVisits, invalidVisits }) => ({
+			scopeKind,
+			domain,
+			path,
+			day,
+			acceptLanguage: null,
+			validVisits,
+			invalidVisits
+		}))
+	);
 	expect(result.browsers.filter(({ scopeKind }) => scopeKind === 'overview')).toEqual([
 		{
 			scopeKind: 'overview',
@@ -332,6 +343,32 @@ test('aggregates explicit UTC scopes with legacy Root outcomes normalized only i
 	]);
 });
 
+test('groups exact raw language headers by scope and UTC day within retained boundaries', async () => {
+	const acceptLanguage = 'fr-CA,fr,en;q=0.9';
+	await db
+		.insertInto('visits')
+		.values([
+			{ ...visit, accept_language: acceptLanguage },
+			{ ...visit, accept_language: acceptLanguage, outcome: 'invalid' },
+			{ ...visit, visited_at: nextDay },
+			{ ...visit, visited_at: nextDay, accept_language: '' },
+			{ ...visit, visited_at: since - 1, accept_language: 'outside' },
+			{ ...visit, visited_at: asOf, accept_language: 'outside' }
+		])
+		.execute();
+	const result = await aggregateVisitReports(db, since, asOf, inventory);
+	const groups = [
+		{ day: '2026-01-31', acceptLanguage, validVisits: 1, invalidVisits: 1 },
+		{ day: '2026-02-01', acceptLanguage: null, validVisits: 1, invalidVisits: 0 },
+		{ day: '2026-02-01', acceptLanguage: '', validVisits: 1, invalidVisits: 0 }
+	];
+	expect(result.languageHeaders).toEqual([
+		...groups.map((counts) => ({ scopeKind: 'domain', domain, path: null, ...counts })),
+		...groups.map((counts) => ({ scopeKind: 'link', domain, path: '/docs', ...counts })),
+		...groups.map((counts) => ({ scopeKind: 'overview', domain: null, path: null, ...counts }))
+	]);
+});
+
 test('empty inventory keeps historical overview traffic but no domain or link scopes', async () => {
 	await seedVisits();
 	const result = await aggregateVisitReports(db, since, asOf, []);
@@ -359,7 +396,7 @@ test('empty inventory keeps historical overview traffic but no domain or link sc
 		}
 	]);
 	expect(
-		[...result.browsers, ...result.operatingSystems].every(
+		[...result.browsers, ...result.operatingSystems, ...result.languageHeaders].every(
 			(row) => row.scopeKind === 'overview' && row.domain === null && row.path === null
 		)
 	).toBe(true);
@@ -389,6 +426,7 @@ test('no visits produces no aggregate rows for configured scopes', async () => {
 	expect(await aggregateVisitReports(db, since, asOf, inventory)).toEqual({
 		daily: [],
 		browsers: [],
-		operatingSystems: []
+		operatingSystems: [],
+		languageHeaders: []
 	});
 });

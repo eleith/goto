@@ -3,17 +3,15 @@
 	import { formatCount } from './format.js';
 
 	let {
-		title,
+		title: heading,
 		nameColumnTitle,
 		visitCounts,
-		totalVisits,
-		description
+		totalVisits
 	}: {
 		title: string;
 		nameColumnTitle: string;
 		visitCounts: VisitCountByName[];
 		totalVisits: number;
-		description?: string;
 	} = $props();
 
 	const percentFormat = new Intl.NumberFormat('en', {
@@ -22,43 +20,45 @@
 	});
 </script>
 
-<section class="breakdown-card" aria-label={title}>
-	<h2>{title}</h2>
-	{#if description}
-		<p>{description}</p>
-	{/if}
-	{#if totalVisits === 0}
-		<p>No visits in this period.</p>
-	{:else}
-		<table aria-label={title}>
-			<thead>
-				<tr>
-					<th scope="col">{nameColumnTitle}</th>
-					<th scope="col">Visits</th>
-					<th scope="col">Share</th>
-				</tr>
-			</thead>
-			<tbody>
-				{#each visitCounts as visitCount (visitCount.name)}
-					{@const share = visitCount.visits / totalVisits}
+<section class="breakdown-card" aria-label={heading}>
+	<h2 title={heading}>{heading}</h2>
+	<!-- svelte-ignore a11y_no_noninteractive_tabindex (Keyboard scrolling needs a focusable region.) -->
+	<div class="table-scroll" role="region" aria-label={`${heading} data`} tabindex="0">
+		{#if totalVisits === 0}
+			<p>No visits in this period.</p>
+		{:else}
+			<table aria-label={heading}>
+				<thead>
 					<tr>
-						<th scope="row">
-							{visitCount.name}
-							<span class="bar-track" aria-hidden="true">
-								<span class="bar-fill" style:width={`${share * 100}%`}></span>
-							</span>
-						</th>
-						<td>{formatCount(visitCount.visits)}</td>
-						<td>{percentFormat.format(share)}</td>
+						<th scope="col" title={nameColumnTitle}>{nameColumnTitle}</th>
+						<th scope="col">Visits</th>
+						<th scope="col">Share</th>
 					</tr>
-				{/each}
-			</tbody>
-		</table>
-	{/if}
+				</thead>
+				<tbody>
+					{#each visitCounts as visitCount (visitCount.name)}
+						{@const share = visitCount.visits / totalVisits}
+						<tr>
+							<th scope="row">
+								<span class="breakdown-name" title={visitCount.name}>{visitCount.name}</span>
+								<span class="bar-track" aria-hidden="true">
+									<span class="bar-fill" style:width={`${share * 100}%`}></span>
+								</span>
+							</th>
+							<td title={formatCount(visitCount.visits)}>{formatCount(visitCount.visits)}</td>
+							<td title={percentFormat.format(share)}>{percentFormat.format(share)}</td>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+		{/if}
+	</div>
 </section>
 
 <style>
 	.breakdown-card {
+		--breakdown-header-height: 3rem;
+		--breakdown-row-height: 3.5rem;
 		min-width: 0;
 		padding: var(--space-5);
 		background: var(--color-surface-card);
@@ -68,6 +68,20 @@
 
 	h2 {
 		margin: 0 0 var(--space-5);
+		line-height: var(--line-height-heading);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.table-scroll {
+		block-size: calc(var(--breakdown-header-height) + 5 * var(--breakdown-row-height));
+		overflow: auto;
+	}
+
+	.table-scroll:focus-visible {
+		outline: var(--outline-focus);
+		outline-offset: calc(-1 * var(--space-1));
 	}
 
 	table {
@@ -82,10 +96,27 @@
 		padding: var(--space-4) var(--space-1);
 		text-align: start;
 		vertical-align: top;
-		overflow-wrap: anywhere;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
-	thead {
+	thead tr {
+		height: var(--breakdown-header-height);
+	}
+
+	thead th {
+		position: sticky;
+		top: 0;
+		z-index: 1;
+		background: var(--color-surface-muted);
+	}
+
+	tbody tr {
+		height: var(--breakdown-row-height);
+	}
+
+	tbody tr:nth-child(even) {
 		background: var(--color-surface-muted);
 	}
 
@@ -103,6 +134,12 @@
 	td {
 		text-align: end;
 		font-variant-numeric: tabular-nums;
+	}
+
+	.breakdown-name {
+		display: block;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 
 	.bar-track {

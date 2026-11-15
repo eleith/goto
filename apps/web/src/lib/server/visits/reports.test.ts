@@ -41,7 +41,7 @@ test('reads prepared output and hides snapshots from a different retention polic
 	};
 	const days = visitDays(period);
 	const details: VisitDetails = {
-		version: 3,
+		version: 4,
 		scope: summary.scope,
 		period,
 		daily: days.map((day, index) => ({
@@ -50,7 +50,8 @@ test('reads prepared output and hides snapshots from a different retention polic
 			invalidVisits: index === days.length - 1 ? totals.invalidVisits : 0
 		})),
 		browsers: [{ day: period.asOf.slice(0, 10), name: 'Other', ...totals }],
-		operatingSystems: [{ day: period.asOf.slice(0, 10), name: 'Other', ...totals }]
+		operatingSystems: [{ day: period.asOf.slice(0, 10), name: 'Other', ...totals }],
+		acceptedLanguages: [{ day: period.asOf.slice(0, 10), name: 'Other', ...totals }]
 	};
 	const domain = 'go.example.test';
 	const domainScope = { kind: 'domain', domain } as const;
@@ -131,7 +132,7 @@ test('reads prepared output and hides snapshots from a different retention polic
 	}
 });
 
-test('invalid prepared output is unavailable, sanitized and closed', async () => {
+test('old or invalid prepared output is unavailable, sanitized and closed', async () => {
 	const directory = await mkdtemp(join(tmpdir(), 'goto-invalid-reports-'));
 	const configuration = {
 		database: {
@@ -139,6 +140,15 @@ test('invalid prepared output is unavailable, sanitized and closed', async () =>
 			worker_path: join(directory, 'worker.sqlite')
 		},
 		analytics: { retention_months: 3 as const }
+	};
+	const period = createVisitPeriod(3, Date.parse('2026-06-15T12:00:00.000Z'));
+	const oldOverview = {
+		version: 3,
+		scope: { kind: 'overview' },
+		period,
+		daily: visitDays(period).map((day) => ({ ...day, validVisits: 0, invalidVisits: 0 })),
+		browsers: [],
+		operatingSystems: []
 	};
 	const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
 	try {
@@ -152,8 +162,15 @@ test('invalid prepared output is unavailable, sanitized and closed', async () =>
 						scope_kind: 'overview',
 						domain: null,
 						path: null,
-						summary_json: '{"private":"not-for-browser"}',
-						details_json: '{}'
+						summary_json: JSON.stringify({
+							version: 1,
+							scope: oldOverview.scope,
+							period,
+							totals: { validVisits: 0, invalidVisits: 0 },
+							base: { validVisits: 0, invalidVisits: 0 },
+							domains: []
+						}),
+						details_json: JSON.stringify(oldOverview)
 					},
 					{
 						scope_kind: 'domain',

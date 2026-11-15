@@ -58,12 +58,16 @@ function details(
 			invalidVisits
 		}));
 	return {
-		version: 3,
+		version: 4,
 		scope,
 		period,
 		daily,
 		browsers: browserOsCounts,
-		operatingSystems: browserOsCounts
+		operatingSystems: browserOsCounts,
+		acceptedLanguages: browserOsCounts.flatMap((row) => [
+			{ ...row, name: 'en' },
+			{ ...row, name: 'fr' }
+		])
 	};
 }
 
@@ -114,6 +118,20 @@ test('projects compact global window counts while inventory stays current and hi
 			'7d': { validVisits: 3, invalidVisits: 7 },
 			'30d': { validVisits: 11, invalidVisits: 30 },
 			all: { validVisits: 42, invalidVisits: 93 }
+		},
+		acceptedLanguageVisitsByTimeframe: {
+			'7d': [
+				{ name: 'en', visits: 3 },
+				{ name: 'fr', visits: 3 }
+			],
+			'30d': [
+				{ name: 'en', visits: 11 },
+				{ name: 'fr', visits: 11 }
+			],
+			all: [
+				{ name: 'en', visits: 42 },
+				{ name: 'fr', visits: 42 }
+			]
 		},
 		chart: { daily: overview.daily, period },
 		domains: [
@@ -181,6 +199,7 @@ test('missing preparation keeps inventory usable without substituting zero count
 	expect(data.asOf).toBeNull();
 	expect(data.chart).toBeNull();
 	expect(data.countsByTimeframe).toEqual({});
+	expect(data.acceptedLanguageVisitsByTimeframe).toEqual({});
 	expect(data.domains.map((row) => row.countsByTimeframe)).toEqual([{}, {}, {}]);
 });
 
@@ -193,6 +212,7 @@ test('disabled collection reads no analytics and exposes only inventory with emp
 	expect(data.linkCount).toBe(3);
 	expect(data.timeframes).toEqual([]);
 	expect(data.countsByTimeframe).toEqual({});
+	expect(data.acceptedLanguageVisitsByTimeframe).toEqual({});
 	expect(data.chart).toBeNull();
 	expect(data.domains.map((row) => row.countsByTimeframe)).toEqual([{}, {}, {}]);
 	expect(readOverviewDetails).not.toHaveBeenCalled();

@@ -9,6 +9,11 @@
 			"types": "./dist/index.d.ts",
 			"import": "./dist/index.js"
 		},
+		"./languages": {
+			"development": "./src/languages.ts",
+			"types": "./dist/languages.d.ts",
+			"import": "./dist/languages.js"
+		},
 		"./schema.json": "./src/config.schema.json"
 	},
 	"files": [

@@ -14,7 +14,7 @@ const summary: OverviewSummary = {
 	domains: []
 };
 const details: VisitDetails = {
-	version: 3,
+	version: 4,
 	scope,
 	period,
 	daily: visitDays(period).map((day, index) => ({
@@ -22,7 +22,11 @@ const details: VisitDetails = {
 		...(index === 0 ? summary.totals : zeroVisitTotals())
 	})),
 	browsers: [{ day: period.from.slice(0, 10), name: 'Firefox', ...summary.totals }],
-	operatingSystems: [{ day: period.from.slice(0, 10), name: 'Linux', ...summary.totals }]
+	operatingSystems: [{ day: period.from.slice(0, 10), name: 'Linux', ...summary.totals }],
+	acceptedLanguages: [
+		{ day: period.from.slice(0, 10), name: 'fr', ...summary.totals },
+		{ day: period.from.slice(0, 10), name: 'en', ...summary.totals }
+	]
 };
 
 test('readers decode their self-contained document independently', () => {
@@ -30,8 +34,8 @@ test('readers decode their self-contained document independently', () => {
 	expect(parseVisitDetails(JSON.stringify(details), scope)).toEqual(details);
 });
 
-test('details reader rejects version 2 reports with legacy Root classification', () => {
-	expect(() => parseVisitDetails(JSON.stringify({ ...details, version: 2 }), scope)).toThrow(
+test('details reader rejects the previous report version even with the current language field', () => {
+	expect(() => parseVisitDetails(JSON.stringify({ ...details, version: 3 }), scope)).toThrow(
 		'Invalid analytics report'
 	);
 });
@@ -44,7 +48,8 @@ test('details reader can require the same reporting policy and window', () => {
 		period: nextPeriod,
 		daily: visitDays(nextPeriod).map((day) => ({ ...day, ...zeroVisitTotals() })),
 		browsers: [],
-		operatingSystems: []
+		operatingSystems: [],
+		acceptedLanguages: []
 	};
 	expect(parseVisitDetails(JSON.stringify(nextDetails), scope)).toEqual(nextDetails);
 	expect(() => parseVisitDetails(JSON.stringify(nextDetails), scope, period)).toThrow(
@@ -115,7 +120,7 @@ test('details reader checks daily instants, window safety, counts and scope', ()
 	expect(() => parseVisitDetails('{private', scope)).toThrow('Invalid analytics report');
 });
 
-test('details reader requires canonical UTC browser/OS days intersecting the retained reporting period', () => {
+test('details reader requires canonical UTC breakdown days intersecting the retained reporting period', () => {
 	for (const day of [
 		'2026-1-01',
 		'2026-02-30',
@@ -126,7 +131,8 @@ test('details reader requires canonical UTC browser/OS days intersecting the ret
 		const rows = [{ day, name: 'Other', validVisits: 1, invalidVisits: 0 }];
 		for (const invalid of [
 			{ ...details, browsers: rows },
-			{ ...details, operatingSystems: rows }
+			{ ...details, operatingSystems: rows },
+			{ ...details, acceptedLanguages: rows }
 		]) {
 			expect(() => parseVisitDetails(JSON.stringify(invalid), scope)).toThrow(
 				'Invalid analytics report'
@@ -144,6 +150,23 @@ test('details reader requires canonical UTC browser/OS days intersecting the ret
 			}),
 			scope
 		)
+	).toThrow('Invalid analytics report');
+});
+
+test('details reader requires language primary codes or Other and the version 4 field', () => {
+	for (const name of ['FR', 'fr-ca', 'x', 'fr\n']) {
+		expect(() =>
+			parseVisitDetails(
+				JSON.stringify({
+					...details,
+					acceptedLanguages: [{ day: '2026-01-01', name, validVisits: 1, invalidVisits: 0 }]
+				}),
+				scope
+			)
+		).toThrow('Invalid analytics report');
+	}
+	expect(() =>
+		parseVisitDetails(JSON.stringify({ ...details, acceptedLanguages: undefined }), scope)
 	).toThrow('Invalid analytics report');
 });
 

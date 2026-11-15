@@ -4,6 +4,7 @@
 	import AdminPage from '#lib/components/admin/AdminPage.svelte';
 	import StatCard from '#lib/components/admin/StatCard.svelte';
 	import ReportNotice from '#lib/components/admin/ReportNotice.svelte';
+	import VisitBreakdown from '#lib/components/admin/VisitBreakdown.svelte';
 	import VisitsChart from '#lib/components/admin/VisitsChart.svelte';
 	import BrowserOsBreakdowns from '#lib/components/admin/BrowserOsBreakdowns.svelte';
 	import VisitTimeframes from '#lib/components/admin/VisitTimeframes.svelte';
@@ -20,6 +21,7 @@
 		data.chart ? visitGranularity(timeframe, data.chart.period.retentionMonths) : 'day'
 	);
 	let visits = $derived(data.countsByTimeframe[timeframe]?.validVisits ?? null);
+	let acceptedLanguageVisits = $derived(data.acceptedLanguageVisitsByTimeframe[timeframe] ?? null);
 	let invalidClicks = $derived(data.countsByTimeframe[timeframe]?.invalidVisits ?? null);
 	let browserOsVisits = $derived(data.browserOsVisitsByTimeframe[timeframe] ?? null);
 </script>
@@ -70,8 +72,16 @@
 	{#if data.chart && window}
 		<VisitsChart daily={data.chart.daily} {window} {granularity} />
 	{/if}
-	{#if browserOsVisits && visits !== null}
-		<BrowserOsBreakdowns {browserOsVisits} totalVisits={visits} />
+	{#if browserOsVisits && acceptedLanguageVisits && visits !== null}
+		<div class="admin-breakdowns">
+			<BrowserOsBreakdowns {browserOsVisits} totalVisits={visits} />
+			<VisitBreakdown
+				title="Accepted languages"
+				nameColumnTitle="Language"
+				visitCounts={acceptedLanguageVisits}
+				totalVisits={visits}
+			/>
+		</div>
 	{/if}
 	<section>
 		<h2>Links</h2>

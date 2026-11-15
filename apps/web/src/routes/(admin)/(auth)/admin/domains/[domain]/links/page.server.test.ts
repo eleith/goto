@@ -42,7 +42,7 @@ const rootBrowserOsCounts = [
 	{ day: period.from.slice(0, 10), name: 'Other', validVisits: 7, invalidVisits: 0 }
 ];
 const rootDetails: VisitDetails = {
-	version: 3,
+	version: 4,
 	period,
 	scope: { kind: 'link', domain, path: '/' },
 	daily: visitDays(period).map((day, index) => ({
@@ -51,10 +51,14 @@ const rootDetails: VisitDetails = {
 		invalidVisits: 0
 	})),
 	browsers: rootBrowserOsCounts,
-	operatingSystems: rootBrowserOsCounts
+	operatingSystems: rootBrowserOsCounts,
+	acceptedLanguages: rootBrowserOsCounts.flatMap((row) => [
+		{ ...row, name: 'en' },
+		{ ...row, name: 'fr' }
+	])
 };
 
-test('supports historical root traffic without a configured root', async () => {
+test('supports historical root traffic without a configured root and preserves unavailable metadata', async () => {
 	vi.mocked(readVisitDetails).mockResolvedValue(rootDetails);
 	const data = await load(request());
 	expect(readVisitDetails).toHaveBeenCalledExactlyOnceWith(expect.any(Object), {
@@ -70,6 +74,20 @@ test('supports historical root traffic without a configured root', async () => {
 		fallbackSource: 'domain'
 	});
 	expect(data.countsByTimeframe.all?.validVisits).toBe(7);
+	expect(data.acceptedLanguageVisitsByTimeframe).toEqual({
+		'7d': [],
+		'30d': [],
+		all: [
+			{ name: 'en', visits: 7 },
+			{ name: 'fr', visits: 7 }
+		]
+	});
+	vi.mocked(readVisitDetails).mockResolvedValue(null);
+	const unavailable = await load(request());
+	expect(unavailable.available).toBe(false);
+	expect(unavailable.chart).toBeNull();
+	expect(unavailable.acceptedLanguageVisitsByTimeframe).toEqual({});
+	expect(unavailable.fallback).toEqual(fallback);
 });
 
 test('keeps root HTTP settings independent of link defaults and fallback with historical analytics scope', async () => {
@@ -107,6 +125,7 @@ test('keeps absent root and default or global fallback metadata usable without a
 		params: { domain }
 	} as Parameters<typeof load>[0];
 	const root = await load(event);
+	expect(root.acceptedLanguageVisitsByTimeframe).toEqual({});
 	expect(root).toMatchObject({
 		response: null,
 		fallback: null,
@@ -123,6 +142,7 @@ test('keeps absent root and default or global fallback metadata usable without a
 	);
 	event.locals.snapshot = prepareSnapshot(global);
 	const inherited = await load(event);
+	expect(inherited.acceptedLanguageVisitsByTimeframe).toEqual({});
 	expect(inherited).toMatchObject({
 		response: null,
 		fallback,

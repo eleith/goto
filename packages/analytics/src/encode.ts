@@ -55,6 +55,7 @@ export function encodeVisitReports(reports: PreparedVisitReport[]): SerializedVi
 		if (!equalTotals(summary.totals, totals)) throw invalidReport();
 		checkDailyBrowserOsTotals(details.browsers, details.daily);
 		checkDailyBrowserOsTotals(details.operatingSystems, details.daily);
+		checkDailyAcceptedLanguageTotals(details.acceptedLanguages, details.daily);
 		checkChildren(summary);
 	}
 
@@ -97,6 +98,21 @@ function checkDailyBrowserOsTotals(
 	for (const day of dailyVisits) {
 		const totals = sumTotals(countsByDay.get(day.start.slice(0, 10)) ?? []);
 		if (!equalTotals(totals, day)) throw invalidReport();
+	}
+}
+
+function checkDailyAcceptedLanguageTotals(
+	rows: VisitDetails['acceptedLanguages'],
+	dailyVisits: VisitDetails['daily']
+): void {
+	const visitsByDay = new Map(dailyVisits.map((day) => [day.start.slice(0, 10), day]));
+	const seenDayAndNamePairs = new Set<string>();
+	for (const row of rows) {
+		const dayAndName = `${row.day}:${row.name}`;
+		if (seenDayAndNamePairs.has(dayAndName)) throw invalidReport();
+		seenDayAndNamePairs.add(dayAndName);
+		const dailyTotals = visitsByDay.get(row.day);
+		if (!dailyTotals || !withinTotals(row, dailyTotals)) throw invalidReport();
 	}
 }
 

@@ -61,6 +61,11 @@
 	grid-template-columns: repeat(4, minmax(0, 1fr));
 	gap: var(--space-5);
 }
+.admin-breakdowns {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: var(--space-5);
+}
 .admin-stat,
 .admin-info {
 	background: var(--color-surface-card);
@@ -178,6 +183,11 @@
 	margin: 0;
 	overflow-wrap: anywhere;
 }
+@media (max-width: 960px) {
+	.admin-breakdowns {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
 @media (min-width: 641px) {
 	.admin-inventory-label {
 		position: absolute;
@@ -191,6 +201,9 @@
 	}
 }
 @media (max-width: 640px) {
+	.admin-breakdowns {
+		grid-template-columns: minmax(0, 1fr);
+	}
 	.admin-title-row {
 		align-items: flex-start;
 	}

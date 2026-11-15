@@ -3,6 +3,7 @@ import type { Database } from '../types.js';
 import type {
 	AggregatedVisitReports,
 	DailyVisitCounts,
+	DailyLanguageHeaderCounts,
 	ReportInventory,
 	DailyBrowserOsCounts
 } from './types.js';
@@ -44,10 +45,19 @@ export async function aggregateVisitReports(
 			GROUP BY scope_kind, domain, path, day, os
 			ORDER BY scope_kind, domain, path, day, name
 		`.execute(transaction);
+		const languageHeaders = await sql<DailyLanguageHeaderCounts>`
+			${scopes}
+			SELECT ${identity}, date(visited_at / 1000.0, 'unixepoch') AS day,
+				accept_language AS "acceptLanguage", ${counts}
+			FROM scoped_visits
+			GROUP BY scope_kind, domain, path, day, accept_language
+			ORDER BY scope_kind, domain, path, day, accept_language
+		`.execute(transaction);
 		return {
 			daily: daily.rows,
 			browsers: browsers.rows,
-			operatingSystems: operatingSystems.rows
+			operatingSystems: operatingSystems.rows,
+			languageHeaders: languageHeaders.rows
 		};
 	});
 }
@@ -63,21 +73,21 @@ function scopedVisits(since: number, asOf: number, inventory: ReportInventory) {
 	return sql`
 		WITH retained_visits AS (
 			SELECT domain, path, CASE WHEN path = '/' THEN 'valid' ELSE outcome END AS outcome,
-				visited_at, browser, os
+				visited_at, browser, os, accept_language
 			FROM visits
 			WHERE visited_at >= ${since} AND visited_at < ${asOf}
 		), scoped_visits AS (
 			SELECT 'overview' AS scope_kind, NULL AS domain, NULL AS path,
-				path AS visit_path, outcome, visited_at, browser, os
+				path AS visit_path, outcome, visited_at, browser, os, accept_language
 			FROM retained_visits
 			UNION ALL
 			SELECT 'domain' AS scope_kind, domain, NULL AS path,
-				path AS visit_path, outcome, visited_at, browser, os
+				path AS visit_path, outcome, visited_at, browser, os, accept_language
 			FROM retained_visits
 			WHERE ${currentDomain}
 			UNION ALL
 			SELECT 'link' AS scope_kind, domain, path,
-				path AS visit_path, outcome, visited_at, browser, os
+				path AS visit_path, outcome, visited_at, browser, os, accept_language
 			FROM retained_visits
 			WHERE ${currentLink}
 		)

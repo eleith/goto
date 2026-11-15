@@ -1,5 +1,8 @@
 import { error } from '@sveltejs/kit';
-import { countBrowserOsVisitsByTimeframe } from '@goto/analytics';
+import {
+	countAcceptedLanguageVisitsByTimeframe,
+	countBrowserOsVisitsByTimeframe
+} from '@goto/analytics';
 import { availableVisitTimeframes, countVisitWindows, visitWindow } from '@goto/analytics/daily';
 import { linkHref } from '#lib/components/admin/urls.js';
 import { currentLinkState } from '#lib/server/link-state.js';
@@ -28,6 +31,10 @@ export const load = (async ({ locals, params }) => {
 		: [];
 	const detailsByPath = new Map(report?.links.map(({ path, details }) => [path, details]));
 	const countsByTimeframe = countVisitWindows(domainDetails?.daily, windows);
+	const acceptedLanguageVisitsByTimeframe = countAcceptedLanguageVisitsByTimeframe(
+		domainDetails ?? undefined,
+		windows
+	);
 	const browserOsVisitsByTimeframe = countBrowserOsVisitsByTimeframe(
 		domainDetails ?? undefined,
 		windows
@@ -69,6 +76,7 @@ export const load = (async ({ locals, params }) => {
 		linkCount: currentPaths.length,
 		timeframes,
 		countsByTimeframe,
+		acceptedLanguageVisitsByTimeframe,
 		browserOsVisitsByTimeframe,
 		chart,
 		root: prepared.root,

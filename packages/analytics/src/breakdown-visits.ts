@@ -7,6 +7,7 @@ export type BrowserOsVisits = {
 	operatingSystems: VisitCountByName[];
 };
 export type BrowserOsVisitsByTimeframe = Partial<Record<VisitTimeframe, BrowserOsVisits>>;
+export type AcceptedLanguageVisitsByTimeframe = Partial<Record<VisitTimeframe, VisitCountByName[]>>;
 
 export function countBrowserOsVisitsByTimeframe(
 	details: Pick<VisitDetails, 'browsers' | 'operatingSystems'> | undefined,
@@ -22,6 +23,22 @@ export function countBrowserOsVisitsByTimeframe(
 		};
 	}
 	return browserOsVisitsByTimeframe;
+}
+
+export function countAcceptedLanguageVisitsByTimeframe(
+	details: Pick<VisitDetails, 'acceptedLanguages'> | undefined,
+	windows: Array<{ timeframe: VisitTimeframe; window: VisitWindow }>
+): AcceptedLanguageVisitsByTimeframe {
+	const acceptedLanguageVisitsByTimeframe: AcceptedLanguageVisitsByTimeframe = {};
+	if (details === undefined) return acceptedLanguageVisitsByTimeframe;
+
+	for (const { timeframe, window } of windows) {
+		acceptedLanguageVisitsByTimeframe[timeframe] = countVisitsByName(
+			details.acceptedLanguages,
+			window
+		);
+	}
+	return acceptedLanguageVisitsByTimeframe;
 }
 
 function countVisitsByName(

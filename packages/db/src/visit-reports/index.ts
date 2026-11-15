@@ -12,6 +12,7 @@ export type { OverviewVisitDetails, DomainVisitDetails, LinkVisitDetails } from 
 export type {
 	AggregatedVisitReports,
 	DailyVisitCounts,
+	DailyLanguageHeaderCounts,
 	ReportInventory,
 	DailyBrowserOsCounts
 } from './types.js';

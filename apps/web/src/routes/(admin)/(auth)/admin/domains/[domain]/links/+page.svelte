@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { resolveVisitTimeframe, visitGranularity, visitWindow } from '@goto/analytics/daily';
+	import VisitBreakdown from '#lib/components/admin/VisitBreakdown.svelte';
 	import VisitsChart from '#lib/components/admin/VisitsChart.svelte';
 	import BrowserOsBreakdowns from '#lib/components/admin/BrowserOsBreakdowns.svelte';
 	import VisitTimeframes from '#lib/components/admin/VisitTimeframes.svelte';
@@ -19,6 +20,7 @@
 		data.chart ? visitGranularity(timeframe, data.chart.period.retentionMonths) : 'day'
 	);
 	let visits = $derived(data.countsByTimeframe[timeframe]?.validVisits ?? null);
+	let acceptedLanguageVisits = $derived(data.acceptedLanguageVisitsByTimeframe[timeframe] ?? null);
 	let browserOsVisits = $derived(data.browserOsVisitsByTimeframe[timeframe] ?? null);
 </script>
 
@@ -97,7 +99,15 @@
 	{#if data.chart && window}
 		<VisitsChart daily={data.chart.daily} {window} {granularity} />
 	{/if}
-	{#if browserOsVisits && visits !== null}
-		<BrowserOsBreakdowns {browserOsVisits} totalVisits={visits} />
+	{#if browserOsVisits && acceptedLanguageVisits && visits !== null}
+		<div class="admin-breakdowns">
+			<BrowserOsBreakdowns {browserOsVisits} totalVisits={visits} />
+			<VisitBreakdown
+				title="Accepted languages"
+				nameColumnTitle="Language"
+				visitCounts={acceptedLanguageVisits}
+				totalVisits={visits}
+			/>
+		</div>
 	{/if}
 </AdminPage>

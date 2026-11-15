@@ -58,12 +58,16 @@ function details(scope: ReportScope, counts: Record<string, [number, number]>): 
 			invalidVisits
 		}));
 	return {
-		version: 3,
+		version: 4,
 		scope,
 		period,
 		daily,
 		browsers: browserOsCounts,
-		operatingSystems: browserOsCounts
+		operatingSystems: browserOsCounts,
+		acceptedLanguages: browserOsCounts.flatMap((row) => [
+			{ ...row, name: 'en' },
+			{ ...row, name: 'fr' }
+		])
 	};
 }
 
@@ -109,7 +113,7 @@ const rootCounts = {
 	all: { validVisits: 7, invalidVisits: 0 }
 };
 
-test('projects domain counts and browser/OS visits without exposing link series or dated browser/OS counts', async () => {
+test('projects compact domain breakdowns without exposing link series or dated named counts', async () => {
 	vi.mocked(readDomainDetails).mockResolvedValue(report);
 	const data = await load(request());
 	expect(readDomainDetails).toHaveBeenCalledExactlyOnceWith(expect.any(Object), domain, [
@@ -129,6 +133,20 @@ test('projects domain counts and browser/OS visits without exposing link series 
 			'7d': { validVisits: 7, invalidVisits: 3 },
 			'30d': { validVisits: 10, invalidVisits: 5 },
 			all: { validVisits: 19, invalidVisits: 10 }
+		},
+		acceptedLanguageVisitsByTimeframe: {
+			'7d': [
+				{ name: 'en', visits: 7 },
+				{ name: 'fr', visits: 7 }
+			],
+			'30d': [
+				{ name: 'en', visits: 10 },
+				{ name: 'fr', visits: 10 }
+			],
+			all: [
+				{ name: 'en', visits: 19 },
+				{ name: 'fr', visits: 19 }
+			]
 		},
 		browserOsVisitsByTimeframe: {
 			'7d': {
@@ -278,6 +296,7 @@ test('rejects unknown domains before reading and keeps unavailable inventory usa
 	expect(data.browserOsVisitsByTimeframe).toEqual({});
 	expect(data.chart).toBeNull();
 	expect(data.countsByTimeframe).toEqual({});
+	expect(data.acceptedLanguageVisitsByTimeframe).toEqual({});
 	expect(data.links[0]).toEqual({
 		path: '/',
 		url: fallback.url,
@@ -306,6 +325,7 @@ test('disabled collection reads no reports and preserves current inventory', asy
 	expect(data.timeframes).toEqual([]);
 	expect(data.chart).toBeNull();
 	expect(data.countsByTimeframe).toEqual({});
+	expect(data.acceptedLanguageVisitsByTimeframe).toEqual({});
 	expect(data.root).toEqual(root);
 	expect(data.fallback).toEqual(fallback);
 	expect(data.links[0]).toEqual({

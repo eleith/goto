@@ -32,7 +32,7 @@ export function checkDetails(value: unknown): VisitDetails {
 			throw invalidReport();
 		}
 	}
-	for (const row of [...value.browsers, ...value.operatingSystems]) {
+	for (const row of [...value.browsers, ...value.operatingSystems, ...value.acceptedLanguages]) {
 		const start = Date.parse(`${row.day}T00:00:00.000Z`);
 		if (start >= asOf || start + dayMilliseconds <= from) throw invalidReport();
 	}

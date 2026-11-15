@@ -34,7 +34,7 @@ function report(
 	return {
 		summary,
 		details: {
-			version: 3,
+			version: 4,
 			scope,
 			period,
 			daily: visitDays(period).map((day, index) => ({
@@ -44,6 +44,9 @@ function report(
 			browsers: populated ? [{ day: period.from.slice(0, 10), name: 'Firefox', ...totals }] : [],
 			operatingSystems: populated
 				? [{ day: period.from.slice(0, 10), name: 'Linux', ...totals }]
+				: [],
+			acceptedLanguages: populated
+				? [{ day: period.from.slice(0, 10), name: 'Other', ...totals }]
 				: []
 		}
 	};
@@ -175,6 +178,7 @@ test('producer permits the same browser/OS name on different days but rejects mo
 	];
 	prepared.details.browsers = browserOsCounts;
 	prepared.details.operatingSystems = browserOsCounts;
+	prepared.details.acceptedLanguages = browserOsCounts;
 	expect(encodeVisitReports([prepared])).toHaveLength(1);
 	const shifted = browserOsCounts.map((row, index) => ({
 		...row,
@@ -188,6 +192,36 @@ test('producer permits the same browser/OS name on different days but rejects mo
 			'Invalid analytics report'
 		);
 	}
+});
+
+test('producer permits overlapping language counts while bounding each bucket to its day', () => {
+	const prepared = report();
+	const day = prepared.details.period.from.slice(0, 10);
+	const rows = [
+		{ day, name: 'fr', validVisits: 2, invalidVisits: 1 },
+		{ day, name: 'en', validVisits: 2, invalidVisits: 1 }
+	];
+	prepared.details.acceptedLanguages = rows;
+	const [encoded] = encodeVisitReports([prepared]);
+	if (!encoded) throw new Error('Expected a serialized fixture');
+	expect(parseVisitDetails(encoded.detailsJson, overview).acceptedLanguages).toEqual(rows);
+	expect(parseVisitSummary(encoded.summaryJson, overview).totals).toEqual({
+		validVisits: 2,
+		invalidVisits: 1
+	});
+
+	for (const acceptedLanguages of [
+		[...rows, ...rows],
+		[{ day, name: 'fr', validVisits: 3, invalidVisits: 1 }],
+		[{ day, name: 'fr', validVisits: 2, invalidVisits: 2 }],
+		[{ day: '2026-01-02', name: 'fr', validVisits: 1, invalidVisits: 0 }]
+	]) {
+		expect(() =>
+			encodeVisitReports([{ ...prepared, details: { ...prepared.details, acceptedLanguages } }])
+		).toThrow('Invalid analytics report');
+	}
+
+	expect(encodeVisitReports([report(overview, asOf, zeroVisitTotals())])).toHaveLength(1);
 });
 
 test('producer rejects base or compact child subsets above totals and duplicate children', () => {

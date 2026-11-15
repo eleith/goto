@@ -70,12 +70,16 @@ function details(
 			invalidVisits
 		}));
 	return {
-		version: 3,
+		version: 4,
 		scope: { kind: 'link', domain, path },
 		period,
 		daily,
 		browsers,
-		operatingSystems: browsers.map((row) => ({ ...row, name: 'Other' }))
+		operatingSystems: browsers.map((row) => ({ ...row, name: 'Other' })),
+		acceptedLanguages: browsers.flatMap((row) => [
+			{ ...row, name: 'en' },
+			{ ...row, name: 'fr' }
+		])
 	};
 }
 
@@ -124,6 +128,20 @@ test('projects complete tag traffic and globally distinct member rows without le
 			'7d': { validVisits: 7, invalidVisits: 3 },
 			'30d': { validVisits: 9, invalidVisits: 4 },
 			all: { validVisits: 14, invalidVisits: 7 }
+		},
+		acceptedLanguageVisitsByTimeframe: {
+			'7d': [
+				{ name: 'en', visits: 7 },
+				{ name: 'fr', visits: 7 }
+			],
+			'30d': [
+				{ name: 'en', visits: 9 },
+				{ name: 'fr', visits: 9 }
+			],
+			all: [
+				{ name: 'en', visits: 14 },
+				{ name: 'fr', visits: 14 }
+			]
 		},
 		browserOsVisitsByTimeframe: {
 			'7d': {
@@ -213,6 +231,7 @@ test('uses the already decoded literal parameter without decoding percent escape
 	const data = await load(request('%2F'));
 	expect(data.tag).toBe('%2F');
 	expect(data.countsByTimeframe.all).toEqual({ validVisits: 0, invalidVisits: 0 });
+	expect(data.acceptedLanguageVisitsByTimeframe).toEqual({ '7d': [], '30d': [], all: [] });
 	expect(data.links[0]?.href).toBe('/admin/domains/go.example.test/links/a%252Fb');
 });
 
@@ -227,6 +246,7 @@ test('unavailable reports preserve all current members but expose no partial tra
 	expect(data.available).toBe(false);
 	expect(data.asOf).toBeNull();
 	expect(data.countsByTimeframe).toEqual({});
+	expect(data.acceptedLanguageVisitsByTimeframe).toEqual({});
 	expect(data.browserOsVisitsByTimeframe).toEqual({});
 	expect(data.chart).toBeNull();
 	expect(data.linkCount).toBe(2);
@@ -245,6 +265,7 @@ test('zero retention skips the report reader and keeps tag inventory without tra
 	expect(data.asOf).toBeNull();
 	expect(data.timeframes).toEqual([]);
 	expect(data.countsByTimeframe).toEqual({});
+	expect(data.acceptedLanguageVisitsByTimeframe).toEqual({});
 	expect(data.browserOsVisitsByTimeframe).toEqual({});
 	expect(data.chart).toBeNull();
 	expect(data.linkCount).toBe(2);

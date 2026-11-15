@@ -86,7 +86,7 @@ test('a real zero-policy startup workflow purges raw history and prepared output
 		await runMigrations(db);
 		const period = createVisitPeriod(3, Date.now() - 1000);
 		const reports = buildVisitReports(
-			{ daily: [], browsers: [], operatingSystems: [] },
+			{ daily: [], browsers: [], operatingSystems: [], languageHeaders: [] },
 			[],
 			period
 		);

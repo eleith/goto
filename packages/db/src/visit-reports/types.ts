@@ -17,8 +17,12 @@ export type DailyVisitCounts = DiscriminatedAggregateScope &
 export type DailyBrowserOsCounts = DiscriminatedAggregateScope &
 	VisitTotals & { day: string; name: string };
 
+export type DailyLanguageHeaderCounts = DiscriminatedAggregateScope &
+	VisitTotals & { day: string; acceptLanguage: string | null };
+
 export interface AggregatedVisitReports {
 	daily: DailyVisitCounts[];
 	browsers: DailyBrowserOsCounts[];
 	operatingSystems: DailyBrowserOsCounts[];
+	languageHeaders: DailyLanguageHeaderCounts[];
 }

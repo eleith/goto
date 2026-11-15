@@ -79,7 +79,7 @@ export const VisitSummarySchema = Type.Union([
 ]);
 export type VisitSummary = Static<typeof VisitSummarySchema>;
 
-const dailyBrowserOsCounts = Type.Object(
+const dailyNamedCounts = Type.Object(
 	{
 		day,
 		name: Type.String({ minLength: 1 }),
@@ -91,7 +91,7 @@ const dailyBrowserOsCounts = Type.Object(
 
 export const VisitDetailsSchema = Type.Object(
 	{
-		version: Type.Literal(3),
+		version: Type.Literal(4),
 		scope: ReportScopeSchema,
 		period: ReportPeriodSchema,
 		daily: Type.Array(
@@ -106,8 +106,17 @@ export const VisitDetailsSchema = Type.Object(
 				exact
 			)
 		),
-		browsers: Type.Array(dailyBrowserOsCounts),
-		operatingSystems: Type.Array(dailyBrowserOsCounts)
+		browsers: Type.Array(dailyNamedCounts),
+		operatingSystems: Type.Array(dailyNamedCounts),
+		acceptedLanguages: Type.Array(
+			Type.Object(
+				{
+					...dailyNamedCounts.properties,
+					name: Type.String({ pattern: '^(?:[a-z]{2,8}|Other)(?![\\s\\S])' })
+				},
+				exact
+			)
+		)
 	},
 	exact
 );

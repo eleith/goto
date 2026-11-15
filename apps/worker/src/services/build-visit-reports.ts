@@ -10,9 +10,11 @@ import {
 	type VisitDetails,
 	type VisitTotals
 } from '@goto/analytics';
+import { parseAcceptedLanguages } from '@goto/config/languages';
 import type {
 	AggregatedVisitReports,
 	DailyVisitCounts,
+	DailyLanguageHeaderCounts,
 	ReportInventory,
 	DailyBrowserOsCounts
 } from '@goto/db/visit-reports';
@@ -21,6 +23,7 @@ interface ScopeCounts {
 	daily: DailyVisitCounts[];
 	browsers: DailyBrowserOsCounts[];
 	operatingSystems: DailyBrowserOsCounts[];
+	languageHeaders: DailyLanguageHeaderCounts[];
 }
 
 interface DomainCounts {
@@ -76,12 +79,14 @@ function indexCounts(aggregates: AggregatedVisitReports): ReportCounts {
 	for (const row of aggregates.browsers) countsForScope(indexed, row).browsers.push(row);
 	for (const row of aggregates.operatingSystems)
 		countsForScope(indexed, row).operatingSystems.push(row);
+	for (const row of aggregates.languageHeaders)
+		countsForScope(indexed, row).languageHeaders.push(row);
 	return indexed;
 }
 
 function countsForScope(
 	indexed: ReportCounts,
-	scope: DailyVisitCounts | DailyBrowserOsCounts
+	scope: DailyVisitCounts | DailyBrowserOsCounts | DailyLanguageHeaderCounts
 ): ScopeCounts {
 	if (scope.scopeKind === 'overview') return indexed.overview;
 	let domain = indexed.domains.get(scope.domain);
@@ -99,7 +104,7 @@ function countsForScope(
 }
 
 function emptyCounts(): ScopeCounts {
-	return { daily: [], browsers: [], operatingSystems: [] };
+	return { daily: [], browsers: [], operatingSystems: [], languageHeaders: [] };
 }
 
 function buildOverviewSummary(
@@ -153,12 +158,13 @@ function buildDetails(
 	days: ReturnType<typeof visitDays>
 ): VisitDetails {
 	return {
-		version: 3,
+		version: 4,
 		scope,
 		period,
 		daily: buildDailyDetails(counts.daily, days),
 		browsers: buildDailyBrowserOsDetails(counts.browsers),
-		operatingSystems: buildDailyBrowserOsDetails(counts.operatingSystems)
+		operatingSystems: buildDailyBrowserOsDetails(counts.operatingSystems),
+		acceptedLanguages: buildAcceptedLanguageDetails(counts.languageHeaders)
 	};
 }
 
@@ -184,4 +190,27 @@ function buildDailyBrowserOsDetails(rows: DailyBrowserOsCounts[]): VisitDetails[
 		validVisits,
 		invalidVisits
 	}));
+}
+
+function buildAcceptedLanguageDetails(
+	rows: DailyLanguageHeaderCounts[]
+): VisitDetails['acceptedLanguages'] {
+	const countsByDayAndLanguage = new Map<string, VisitDetails['acceptedLanguages'][number]>();
+	for (const row of rows) {
+		const { primaryLanguages } = parseAcceptedLanguages(row.acceptLanguage);
+		const names = primaryLanguages.length === 0 ? ['Other'] : primaryLanguages;
+		for (const name of names) {
+			const key = `${row.day}:${name}`;
+			let counts = countsByDayAndLanguage.get(key);
+			if (!counts) {
+				counts = { day: row.day, name, validVisits: 0, invalidVisits: 0 };
+				countsByDayAndLanguage.set(key, counts);
+			}
+			counts.validVisits += row.validVisits;
+			counts.invalidVisits += row.invalidVisits;
+		}
+	}
+	return [...countsByDayAndLanguage.values()].sort(
+		(left, right) => left.day.localeCompare(right.day) || left.name.localeCompare(right.name, 'en')
+	);
 }

@@ -4,6 +4,7 @@
 	import AdminPage from '#lib/components/admin/AdminPage.svelte';
 	import StatCard from '#lib/components/admin/StatCard.svelte';
 	import ReportNotice from '#lib/components/admin/ReportNotice.svelte';
+	import VisitBreakdown from '#lib/components/admin/VisitBreakdown.svelte';
 	import VisitsChart from '#lib/components/admin/VisitsChart.svelte';
 	import VisitTimeframes from '#lib/components/admin/VisitTimeframes.svelte';
 	import { formatCount } from '#lib/components/admin/format.js';
@@ -19,6 +20,7 @@
 		data.chart ? visitGranularity(timeframe, data.chart.period.retentionMonths) : 'day'
 	);
 	let visits = $derived(data.countsByTimeframe[timeframe]?.validVisits ?? null);
+	let acceptedLanguageVisits = $derived(data.acceptedLanguageVisitsByTimeframe[timeframe] ?? null);
 </script>
 
 <AdminPage siteTitle={data.title} title="Overview" updatedAt={data.asOf}>
@@ -42,6 +44,14 @@
 	</div>
 	{#if data.chart && window}
 		<VisitsChart daily={data.chart.daily} {window} {granularity} />
+	{/if}
+	{#if acceptedLanguageVisits && visits !== null}
+		<VisitBreakdown
+			title="Accepted languages"
+			nameColumnTitle="Language"
+			visitCounts={acceptedLanguageVisits}
+			totalVisits={visits}
+		/>
 	{/if}
 	<section>
 		<h2>Domains</h2>

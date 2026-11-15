@@ -3,13 +3,13 @@ import type { LinkVisitDetails } from '@goto/db/visit-reports';
 import { expect, test } from 'vitest';
 import { combineTagVisits } from './visits.js';
 
-test('combines both outcomes by UTC day and family name without changing member details', () => {
+test('combines outcomes and overlapping named counts without changing member details', () => {
 	const period = createVisitPeriod(3, Date.UTC(2026, 5, 15, 12));
 	const days = visitDays(period);
 	const firstDay = '2026-03-15';
 	const lastDay = '2026-06-15';
 	const first: VisitDetails = {
-		version: 3,
+		version: 4,
 		scope: { kind: 'link', domain: 'one.example.test', path: '/docs' },
 		period,
 		daily: days.map((day) => {
@@ -25,10 +25,15 @@ test('combines both outcomes by UTC day and family name without changing member 
 		operatingSystems: [
 			{ day: firstDay, name: 'Linux', validVisits: 2, invalidVisits: 1 },
 			{ day: lastDay, name: 'Other', validVisits: 1, invalidVisits: 0 }
+		],
+		acceptedLanguages: [
+			{ day: firstDay, name: 'en', validVisits: 2, invalidVisits: 1 },
+			{ day: firstDay, name: 'fr', validVisits: 2, invalidVisits: 1 },
+			{ day: lastDay, name: 'Other', validVisits: 1, invalidVisits: 0 }
 		]
 	};
 	const second: VisitDetails = {
-		version: 3,
+		version: 4,
 		scope: { kind: 'link', domain: 'two.example.test', path: '/docs' },
 		period,
 		daily: days
@@ -47,6 +52,11 @@ test('combines both outcomes by UTC day and family name without changing member 
 		operatingSystems: [
 			{ day: lastDay, name: 'Other', validVisits: 0, invalidVisits: 3 },
 			{ day: firstDay, name: 'Linux', validVisits: 4, invalidVisits: 2 }
+		],
+		acceptedLanguages: [
+			{ day: lastDay, name: 'Other', validVisits: 0, invalidVisits: 3 },
+			{ day: firstDay, name: 'en', validVisits: 4, invalidVisits: 2 },
+			{ day: firstDay, name: 'fr', validVisits: 4, invalidVisits: 2 }
 		]
 	};
 	const report: LinkVisitDetails = {
@@ -74,6 +84,11 @@ test('combines both outcomes by UTC day and family name without changing member 
 		],
 		operatingSystems: [
 			{ day: firstDay, name: 'Linux', validVisits: 6, invalidVisits: 3 },
+			{ day: lastDay, name: 'Other', validVisits: 1, invalidVisits: 3 }
+		],
+		acceptedLanguages: [
+			{ day: firstDay, name: 'en', validVisits: 6, invalidVisits: 3 },
+			{ day: firstDay, name: 'fr', validVisits: 6, invalidVisits: 3 },
 			{ day: lastDay, name: 'Other', validVisits: 1, invalidVisits: 3 }
 		]
 	});

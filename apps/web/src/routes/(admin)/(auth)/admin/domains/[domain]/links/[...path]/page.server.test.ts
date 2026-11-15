@@ -67,7 +67,7 @@ const browserOsCounts = Object.entries(counts).map(([day, [validVisits, invalidV
 	invalidVisits
 }));
 const details: VisitDetails = {
-	version: 3,
+	version: 4,
 	scope: { kind: 'link', domain, path: '/docs' },
 	period,
 	daily: visitDays(period).map((day) => {
@@ -75,7 +75,11 @@ const details: VisitDetails = {
 		return { ...day, validVisits, invalidVisits };
 	}),
 	browsers: browserOsCounts,
-	operatingSystems: browserOsCounts
+	operatingSystems: browserOsCounts,
+	acceptedLanguages: browserOsCounts.flatMap((row) => [
+		{ ...row, name: 'en' },
+		{ ...row, name: 'fr' }
+	])
 };
 
 test('projects only requested link settings, series and compact window counts and breakdowns', async () => {
@@ -99,6 +103,20 @@ test('projects only requested link settings, series and compact window counts an
 			'7d': { validVisits: 3, invalidVisits: 1 },
 			'30d': { validVisits: 8, invalidVisits: 2 },
 			all: { validVisits: 15, invalidVisits: 5 }
+		},
+		acceptedLanguageVisitsByTimeframe: {
+			'7d': [
+				{ name: 'en', visits: 3 },
+				{ name: 'fr', visits: 3 }
+			],
+			'30d': [
+				{ name: 'en', visits: 8 },
+				{ name: 'fr', visits: 8 }
+			],
+			all: [
+				{ name: 'en', visits: 15 },
+				{ name: 'fr', visits: 15 }
+			]
 		},
 		browserOsVisitsByTimeframe: {
 			'7d': {
@@ -164,6 +182,7 @@ test('rejects unknown scopes before reading and keeps unavailable counts absent'
 	expect(data.chart).toBeNull();
 	expect(data.asOf).toBeNull();
 	expect(data.countsByTimeframe).toEqual({});
+	expect(data.acceptedLanguageVisitsByTimeframe).toEqual({});
 	expect(data).toMatchObject(linkMetadata);
 	expect(data.retentionMonths).toBe(3);
 });
@@ -178,5 +197,6 @@ test('disabled analytics skips the report read and leaves link details usable', 
 	expect(data.timeframes).toEqual([]);
 	expect(data.chart).toBeNull();
 	expect(data.countsByTimeframe).toEqual({});
+	expect(data.acceptedLanguageVisitsByTimeframe).toEqual({});
 	expect(data).toMatchObject(linkMetadata);
 });

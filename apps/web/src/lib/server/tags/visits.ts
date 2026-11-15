@@ -3,7 +3,7 @@ import type { LinkVisitDetails } from '@goto/db/visit-reports';
 
 export function combineTagVisits(
 	report: LinkVisitDetails
-): Pick<VisitDetails, 'period' | 'daily' | 'browsers' | 'operatingSystems'> {
+): Pick<VisitDetails, 'period' | 'daily' | 'browsers' | 'operatingSystems' | 'acceptedLanguages'> {
 	const countsByDay = new Map<string, VisitTotals>();
 	for (const { details } of report.links) {
 		for (const point of details.daily) {
@@ -21,14 +21,17 @@ export function combineTagVisits(
 	return {
 		period: report.period,
 		daily,
-		browsers: combineBrowserOsCounts(report.links.map(({ details }) => details.browsers)),
-		operatingSystems: combineBrowserOsCounts(
+		browsers: combineNamedCounts(report.links.map(({ details }) => details.browsers)),
+		operatingSystems: combineNamedCounts(
 			report.links.map(({ details }) => details.operatingSystems)
+		),
+		acceptedLanguages: combineNamedCounts(
+			report.links.map(({ details }) => details.acceptedLanguages)
 		)
 	};
 }
 
-function combineBrowserOsCounts(groups: VisitDetails['browsers'][]): VisitDetails['browsers'] {
+function combineNamedCounts(groups: VisitDetails['browsers'][]): VisitDetails['browsers'] {
 	const countsByDay = new Map<string, Map<string, VisitDetails['browsers'][number]>>();
 	for (const rows of groups) {
 		for (const row of rows) {

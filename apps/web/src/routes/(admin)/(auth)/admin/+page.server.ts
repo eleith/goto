@@ -1,3 +1,4 @@
+import { countAcceptedLanguageVisitsByTimeframe } from '@goto/analytics';
 import { availableVisitTimeframes, countVisitWindows, visitWindow } from '@goto/analytics/daily';
 import { readOverviewDetails } from '#lib/server/visits/reports.js';
 import type { PageServerLoad } from './$types';
@@ -30,6 +31,10 @@ export const load = (async ({ locals }) => {
 			href: `/admin/domains/${encodeURIComponent(domain)}`
 		};
 	});
+	const acceptedLanguageVisitsByTimeframe = countAcceptedLanguageVisitsByTimeframe(
+		overview ?? undefined,
+		windows
+	);
 	const asOf = overview ? Date.parse(overview.period.asOf) : null;
 	const countsByTimeframe = countVisitWindows(overview?.daily, windows);
 	const chart = overview ? { daily: overview.daily, period: overview.period } : null;
@@ -42,6 +47,7 @@ export const load = (async ({ locals }) => {
 		linkCount: domains.reduce((sum, row) => sum + row.linkCount, 0),
 		timeframes,
 		countsByTimeframe,
+		acceptedLanguageVisitsByTimeframe,
 		chart,
 		domains
 	};
