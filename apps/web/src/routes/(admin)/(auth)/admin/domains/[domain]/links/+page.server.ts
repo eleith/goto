@@ -1,8 +1,5 @@
 import { error } from '@sveltejs/kit';
-import {
-	countAcceptedLanguageVisitsByTimeframe,
-	countBrowserOsVisitsByTimeframe
-} from '@goto/analytics';
+import { countBreakdownVisitsByTimeframe } from '@goto/analytics';
 import { availableVisitTimeframes, countVisitWindows, visitWindow } from '@goto/analytics/daily';
 import { readVisitDetails } from '#lib/server/visits/reports.js';
 import type { PageServerLoad } from './$types';
@@ -24,11 +21,15 @@ export const load = (async ({ locals, params }) => {
 		? timeframes.map((timeframe) => ({ timeframe, window: visitWindow(details.period, timeframe) }))
 		: [];
 	const countsByTimeframe = countVisitWindows(details?.daily, windows);
-	const acceptedLanguageVisitsByTimeframe = countAcceptedLanguageVisitsByTimeframe(
-		details ?? undefined,
+	const browserVisitsByTimeframe = countBreakdownVisitsByTimeframe(details?.browsers, windows);
+	const operatingSystemVisitsByTimeframe = countBreakdownVisitsByTimeframe(
+		details?.operatingSystems,
 		windows
 	);
-	const browserOsVisitsByTimeframe = countBrowserOsVisitsByTimeframe(details ?? undefined, windows);
+	const acceptedLanguageVisitsByTimeframe = countBreakdownVisitsByTimeframe(
+		details?.acceptedLanguages,
+		windows
+	);
 	const asOf = details ? Date.parse(details.period.asOf) : null;
 	const chart = details ? { daily: details.daily, period: details.period } : null;
 
@@ -44,8 +45,9 @@ export const load = (async ({ locals, params }) => {
 		asOf,
 		timeframes,
 		countsByTimeframe,
+		browserVisitsByTimeframe,
+		operatingSystemVisitsByTimeframe,
 		acceptedLanguageVisitsByTimeframe,
-		browserOsVisitsByTimeframe,
 		chart
 	};
 }) satisfies PageServerLoad;

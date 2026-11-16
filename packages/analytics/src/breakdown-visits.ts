@@ -1,50 +1,23 @@
 import type { VisitTimeframe, VisitWindow } from './daily.js';
-import type { VisitDetails } from './reports.js';
+import type { DailyVisitCountByName } from './reports.js';
 
 export type VisitCountByName = { name: string; visits: number };
-export type BrowserOsVisits = {
-	browsers: VisitCountByName[];
-	operatingSystems: VisitCountByName[];
-};
-export type BrowserOsVisitsByTimeframe = Partial<Record<VisitTimeframe, BrowserOsVisits>>;
-export type AcceptedLanguageVisitsByTimeframe = Partial<Record<VisitTimeframe, VisitCountByName[]>>;
+export type BreakdownVisitsByTimeframe = Partial<Record<VisitTimeframe, VisitCountByName[]>>;
 
-export function countBrowserOsVisitsByTimeframe(
-	details: Pick<VisitDetails, 'browsers' | 'operatingSystems'> | undefined,
+export function countBreakdownVisitsByTimeframe(
+	rows: DailyVisitCountByName[] | undefined,
 	windows: Array<{ timeframe: VisitTimeframe; window: VisitWindow }>
-): BrowserOsVisitsByTimeframe {
-	const browserOsVisitsByTimeframe: BrowserOsVisitsByTimeframe = {};
-	if (details === undefined) return browserOsVisitsByTimeframe;
+): BreakdownVisitsByTimeframe {
+	const breakdownVisitsByTimeframe: BreakdownVisitsByTimeframe = {};
+	if (rows === undefined) return breakdownVisitsByTimeframe;
 
 	for (const { timeframe, window } of windows) {
-		browserOsVisitsByTimeframe[timeframe] = {
-			browsers: countVisitsByName(details.browsers, window),
-			operatingSystems: countVisitsByName(details.operatingSystems, window)
-		};
+		breakdownVisitsByTimeframe[timeframe] = countVisitsByName(rows, window);
 	}
-	return browserOsVisitsByTimeframe;
+	return breakdownVisitsByTimeframe;
 }
 
-export function countAcceptedLanguageVisitsByTimeframe(
-	details: Pick<VisitDetails, 'acceptedLanguages'> | undefined,
-	windows: Array<{ timeframe: VisitTimeframe; window: VisitWindow }>
-): AcceptedLanguageVisitsByTimeframe {
-	const acceptedLanguageVisitsByTimeframe: AcceptedLanguageVisitsByTimeframe = {};
-	if (details === undefined) return acceptedLanguageVisitsByTimeframe;
-
-	for (const { timeframe, window } of windows) {
-		acceptedLanguageVisitsByTimeframe[timeframe] = countVisitsByName(
-			details.acceptedLanguages,
-			window
-		);
-	}
-	return acceptedLanguageVisitsByTimeframe;
-}
-
-function countVisitsByName(
-	rows: VisitDetails['browsers'],
-	window: VisitWindow
-): VisitCountByName[] {
+function countVisitsByName(rows: DailyVisitCountByName[], window: VisitWindow): VisitCountByName[] {
 	const from = Date.parse(window.from);
 	const asOf = Date.parse(window.asOf);
 	const counts = new Map<string, number>();

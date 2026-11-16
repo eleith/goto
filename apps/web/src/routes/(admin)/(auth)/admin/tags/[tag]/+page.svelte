@@ -4,9 +4,8 @@
 	import AdminPage from '#lib/components/admin/AdminPage.svelte';
 	import StatCard from '#lib/components/admin/StatCard.svelte';
 	import ReportNotice from '#lib/components/admin/ReportNotice.svelte';
-	import VisitBreakdown from '#lib/components/admin/VisitBreakdown.svelte';
+	import VisitBreakdowns from '#lib/components/admin/VisitBreakdowns.svelte';
 	import VisitsChart from '#lib/components/admin/VisitsChart.svelte';
-	import BrowserOsBreakdowns from '#lib/components/admin/BrowserOsBreakdowns.svelte';
 	import VisitTimeframes from '#lib/components/admin/VisitTimeframes.svelte';
 	import LinkInventory from '#lib/components/admin/LinkInventory.svelte';
 	import type { PageData } from './$types';
@@ -21,9 +20,10 @@
 		data.chart ? visitGranularity(timeframe, data.chart.period.retentionMonths) : 'day'
 	);
 	let visits = $derived(data.countsByTimeframe[timeframe]?.validVisits ?? null);
-	let acceptedLanguageVisits = $derived(data.acceptedLanguageVisitsByTimeframe[timeframe] ?? null);
 	let invalidClicks = $derived(data.countsByTimeframe[timeframe]?.invalidVisits ?? null);
-	let browserOsVisits = $derived(data.browserOsVisitsByTimeframe[timeframe] ?? null);
+	let browserVisits = $derived(data.browserVisitsByTimeframe[timeframe] ?? null);
+	let operatingSystemVisits = $derived(data.operatingSystemVisitsByTimeframe[timeframe] ?? null);
+	let acceptedLanguageVisits = $derived(data.acceptedLanguageVisitsByTimeframe[timeframe] ?? null);
 </script>
 
 <AdminPage
@@ -52,16 +52,13 @@
 	{#if data.chart && window}
 		<VisitsChart daily={data.chart.daily} {window} {granularity} />
 	{/if}
-	{#if browserOsVisits && acceptedLanguageVisits && visits !== null}
-		<div class="admin-breakdowns">
-			<BrowserOsBreakdowns {browserOsVisits} totalVisits={visits} />
-			<VisitBreakdown
-				title="Accepted languages"
-				nameColumnTitle="Language"
-				visitCounts={acceptedLanguageVisits}
-				totalVisits={visits}
-			/>
-		</div>
+	{#if browserVisits && operatingSystemVisits && acceptedLanguageVisits && visits !== null}
+		<VisitBreakdowns
+			{browserVisits}
+			{operatingSystemVisits}
+			{acceptedLanguageVisits}
+			totalVisits={visits}
+		/>
 	{/if}
 	<section>
 		<h2>Links</h2>

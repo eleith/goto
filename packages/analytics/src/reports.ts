@@ -88,6 +88,7 @@ const dailyNamedCounts = Type.Object(
 	},
 	exact
 );
+export type DailyVisitCountByName = Static<typeof dailyNamedCounts>;
 
 export const VisitDetailsSchema = Type.Object(
 	{

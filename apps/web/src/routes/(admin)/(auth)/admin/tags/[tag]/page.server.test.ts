@@ -143,28 +143,24 @@ test('projects complete tag traffic and globally distinct member rows without le
 				{ name: 'fr', visits: 14 }
 			]
 		},
-		browserOsVisitsByTimeframe: {
-			'7d': {
-				browsers: [
-					{ name: 'Chrome', visits: 4 },
-					{ name: 'Firefox', visits: 3 }
-				],
-				operatingSystems: [{ name: 'Other', visits: 7 }]
-			},
-			'30d': {
-				browsers: [
-					{ name: 'Firefox', visits: 5 },
-					{ name: 'Chrome', visits: 4 }
-				],
-				operatingSystems: [{ name: 'Other', visits: 9 }]
-			},
-			all: {
-				browsers: [
-					{ name: 'Chrome', visits: 9 },
-					{ name: 'Firefox', visits: 5 }
-				],
-				operatingSystems: [{ name: 'Other', visits: 14 }]
-			}
+		browserVisitsByTimeframe: {
+			'7d': [
+				{ name: 'Chrome', visits: 4 },
+				{ name: 'Firefox', visits: 3 }
+			],
+			'30d': [
+				{ name: 'Firefox', visits: 5 },
+				{ name: 'Chrome', visits: 4 }
+			],
+			all: [
+				{ name: 'Chrome', visits: 9 },
+				{ name: 'Firefox', visits: 5 }
+			]
+		},
+		operatingSystemVisitsByTimeframe: {
+			'7d': [{ name: 'Other', visits: 7 }],
+			'30d': [{ name: 'Other', visits: 9 }],
+			all: [{ name: 'Other', visits: 14 }]
 		},
 		chart: { period, daily: expect.any(Array) },
 		links: [
@@ -247,7 +243,8 @@ test('unavailable reports preserve all current members but expose no partial tra
 	expect(data.asOf).toBeNull();
 	expect(data.countsByTimeframe).toEqual({});
 	expect(data.acceptedLanguageVisitsByTimeframe).toEqual({});
-	expect(data.browserOsVisitsByTimeframe).toEqual({});
+	expect(data.browserVisitsByTimeframe).toEqual({});
+	expect(data.operatingSystemVisitsByTimeframe).toEqual({});
 	expect(data.chart).toBeNull();
 	expect(data.linkCount).toBe(2);
 	expect(data.links.map(({ countsByTimeframe }) => countsByTimeframe)).toEqual([{}, {}]);
@@ -266,7 +263,8 @@ test('zero retention skips the report reader and keeps tag inventory without tra
 	expect(data.timeframes).toEqual([]);
 	expect(data.countsByTimeframe).toEqual({});
 	expect(data.acceptedLanguageVisitsByTimeframe).toEqual({});
-	expect(data.browserOsVisitsByTimeframe).toEqual({});
+	expect(data.browserVisitsByTimeframe).toEqual({});
+	expect(data.operatingSystemVisitsByTimeframe).toEqual({});
 	expect(data.chart).toBeNull();
 	expect(data.linkCount).toBe(2);
 	expect(data.links.map(({ countsByTimeframe }) => countsByTimeframe)).toEqual([{}, {}]);

@@ -133,19 +133,15 @@ test('projects only requested link settings, series and compact window counts an
 				{ name: 'fr', visits: 15 }
 			]
 		},
-		browserOsVisitsByTimeframe: {
-			'7d': {
-				browsers: [{ name: 'Other', visits: 3 }],
-				operatingSystems: [{ name: 'Other', visits: 3 }]
-			},
-			'30d': {
-				browsers: [{ name: 'Other', visits: 8 }],
-				operatingSystems: [{ name: 'Other', visits: 8 }]
-			},
-			all: {
-				browsers: [{ name: 'Other', visits: 15 }],
-				operatingSystems: [{ name: 'Other', visits: 15 }]
-			}
+		browserVisitsByTimeframe: {
+			'7d': [{ name: 'Other', visits: 3 }],
+			'30d': [{ name: 'Other', visits: 8 }],
+			all: [{ name: 'Other', visits: 15 }]
+		},
+		operatingSystemVisitsByTimeframe: {
+			'7d': [{ name: 'Other', visits: 3 }],
+			'30d': [{ name: 'Other', visits: 8 }],
+			all: [{ name: 'Other', visits: 15 }]
 		},
 		chart: { daily: details.daily, period }
 	});
@@ -197,7 +193,8 @@ test('rejects unknown scopes before reading and keeps unavailable counts absent'
 	vi.mocked(readVisitDetails).mockResolvedValue(null);
 	const data = await load(request());
 	expect(data.available).toBe(false);
-	expect(data.browserOsVisitsByTimeframe).toEqual({});
+	expect(data.browserVisitsByTimeframe).toEqual({});
+	expect(data.operatingSystemVisitsByTimeframe).toEqual({});
 	expect(data.chart).toBeNull();
 	expect(data.asOf).toBeNull();
 	expect(data.countsByTimeframe).toEqual({});
@@ -210,7 +207,8 @@ test('disabled analytics skips the report read and leaves link details usable', 
 	const data = await load(request('/docs', { retentionMonths: 0 }));
 	expect(readVisitDetails).not.toHaveBeenCalled();
 	expect(data.collectionEnabled).toBe(false);
-	expect(data.browserOsVisitsByTimeframe).toEqual({});
+	expect(data.browserVisitsByTimeframe).toEqual({});
+	expect(data.operatingSystemVisitsByTimeframe).toEqual({});
 	expect(data.available).toBe(false);
 	expect(data.retentionMonths).toBe(0);
 	expect(data.timeframes).toEqual([]);

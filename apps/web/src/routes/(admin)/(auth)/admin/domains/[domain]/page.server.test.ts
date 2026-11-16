@@ -148,19 +148,15 @@ test('projects compact domain breakdowns without exposing link series or dated n
 				{ name: 'fr', visits: 19 }
 			]
 		},
-		browserOsVisitsByTimeframe: {
-			'7d': {
-				browsers: [{ name: 'Other', visits: 7 }],
-				operatingSystems: [{ name: 'Other', visits: 7 }]
-			},
-			'30d': {
-				browsers: [{ name: 'Other', visits: 10 }],
-				operatingSystems: [{ name: 'Other', visits: 10 }]
-			},
-			all: {
-				browsers: [{ name: 'Other', visits: 19 }],
-				operatingSystems: [{ name: 'Other', visits: 19 }]
-			}
+		browserVisitsByTimeframe: {
+			'7d': [{ name: 'Other', visits: 7 }],
+			'30d': [{ name: 'Other', visits: 10 }],
+			all: [{ name: 'Other', visits: 19 }]
+		},
+		operatingSystemVisitsByTimeframe: {
+			'7d': [{ name: 'Other', visits: 7 }],
+			'30d': [{ name: 'Other', visits: 10 }],
+			all: [{ name: 'Other', visits: 19 }]
 		},
 		chart: { daily: domainDetails.daily, period },
 		root: null,
@@ -293,7 +289,8 @@ test('rejects unknown domains before reading and keeps unavailable inventory usa
 	expect(data.root).toBeNull();
 	expect(data.fallback).toEqual(fallback);
 	expect(data.available).toBe(false);
-	expect(data.browserOsVisitsByTimeframe).toEqual({});
+	expect(data.browserVisitsByTimeframe).toEqual({});
+	expect(data.operatingSystemVisitsByTimeframe).toEqual({});
 	expect(data.chart).toBeNull();
 	expect(data.countsByTimeframe).toEqual({});
 	expect(data.acceptedLanguageVisitsByTimeframe).toEqual({});
@@ -321,7 +318,8 @@ test('disabled collection reads no reports and preserves current inventory', asy
 	const data = await load(request(domain, { root, fallback, retentionMonths: 0 }));
 	expect(readDomainDetails).not.toHaveBeenCalled();
 	expect(data.collectionEnabled).toBe(false);
-	expect(data.browserOsVisitsByTimeframe).toEqual({});
+	expect(data.browserVisitsByTimeframe).toEqual({});
+	expect(data.operatingSystemVisitsByTimeframe).toEqual({});
 	expect(data.timeframes).toEqual([]);
 	expect(data.chart).toBeNull();
 	expect(data.countsByTimeframe).toEqual({});

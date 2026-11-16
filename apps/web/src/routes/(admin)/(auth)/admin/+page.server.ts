@@ -1,4 +1,4 @@
-import { countAcceptedLanguageVisitsByTimeframe } from '@goto/analytics';
+import { countBreakdownVisitsByTimeframe } from '@goto/analytics';
 import { availableVisitTimeframes, countVisitWindows, visitWindow } from '@goto/analytics/daily';
 import { readOverviewDetails } from '#lib/server/visits/reports.js';
 import type { PageServerLoad } from './$types';
@@ -31,8 +31,13 @@ export const load = (async ({ locals }) => {
 			href: `/admin/domains/${encodeURIComponent(domain)}`
 		};
 	});
-	const acceptedLanguageVisitsByTimeframe = countAcceptedLanguageVisitsByTimeframe(
-		overview ?? undefined,
+	const browserVisitsByTimeframe = countBreakdownVisitsByTimeframe(overview?.browsers, windows);
+	const operatingSystemVisitsByTimeframe = countBreakdownVisitsByTimeframe(
+		overview?.operatingSystems,
+		windows
+	);
+	const acceptedLanguageVisitsByTimeframe = countBreakdownVisitsByTimeframe(
+		overview?.acceptedLanguages,
 		windows
 	);
 	const asOf = overview ? Date.parse(overview.period.asOf) : null;
@@ -47,6 +52,8 @@ export const load = (async ({ locals }) => {
 		linkCount: domains.reduce((sum, row) => sum + row.linkCount, 0),
 		timeframes,
 		countsByTimeframe,
+		browserVisitsByTimeframe,
+		operatingSystemVisitsByTimeframe,
 		acceptedLanguageVisitsByTimeframe,
 		chart,
 		domains

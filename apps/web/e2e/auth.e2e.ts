@@ -47,8 +47,10 @@ test('shared credentials protect admin pages and sign-out removes access', async
 	await expect(
 		acceptedLanguages.getByRole('rowheader', { name: 'Other', exact: true })
 	).toBeVisible();
-	await expect(page.getByRole('region', { name: 'Browsers', exact: true })).toHaveCount(0);
-	await expect(page.getByRole('region', { name: 'Operating systems', exact: true })).toHaveCount(0);
+	const browsers = page.getByRole('region', { name: 'Browsers', exact: true });
+	const operatingSystems = page.getByRole('region', { name: 'Operating systems', exact: true });
+	await expect(browsers).toBeVisible();
+	await expect(operatingSystems).toBeVisible();
 	await expect(page.locator('.admin-cards .admin-stat-label')).toHaveText([
 		'Domains',
 		'Links',
@@ -143,8 +145,6 @@ test('shared credentials protect admin pages and sign-out removes access', async
 	const context = page.locator('.admin-context');
 	await expect(context).toHaveCount(0);
 	await expect(page).toHaveTitle('Domain — go.example.org — Goto');
-	const browsers = page.getByRole('region', { name: 'Browsers', exact: true });
-	const operatingSystems = page.getByRole('region', { name: 'Operating systems', exact: true });
 	await expect(acceptedLanguages).toBeVisible();
 	await expect(browsers.getByRole('columnheader')).toHaveText(['Browser', 'Visits', 'Share']);
 	await expect(operatingSystems.getByRole('columnheader')).toHaveText([
@@ -450,6 +450,10 @@ test.describe('analytics disabled', () => {
 		await expect(page.getByRole('heading', { name: 'Overview', exact: true })).toBeVisible();
 		await expect(page.locator('.admin-cards .admin-stat-label')).toHaveText(['Domains', 'Links']);
 		await expect(page.getByRole('group', { name: 'Timeframe', exact: true })).toHaveCount(0);
+		await expect(page.getByRole('region', { name: 'Browsers', exact: true })).toHaveCount(0);
+		await expect(page.getByRole('region', { name: 'Operating systems', exact: true })).toHaveCount(
+			0
+		);
 		await expect(page.getByRole('region', { name: 'Accepted languages', exact: true })).toHaveCount(
 			0
 		);

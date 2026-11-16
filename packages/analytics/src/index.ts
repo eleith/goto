@@ -11,16 +11,9 @@ export type {
 	DomainSummary,
 	LinkSummary,
 	VisitDetails,
+	DailyVisitCountByName,
 	PreparedVisitReport,
 	SerializedVisitReport
 } from './reports.js';
-export {
-	countBrowserOsVisitsByTimeframe,
-	countAcceptedLanguageVisitsByTimeframe
-} from './breakdown-visits.js';
-export type {
-	VisitCountByName,
-	BrowserOsVisits,
-	BrowserOsVisitsByTimeframe,
-	AcceptedLanguageVisitsByTimeframe
-} from './breakdown-visits.js';
+export { countBreakdownVisitsByTimeframe } from './breakdown-visits.js';
+export type { VisitCountByName, BreakdownVisitsByTimeframe } from './breakdown-visits.js';

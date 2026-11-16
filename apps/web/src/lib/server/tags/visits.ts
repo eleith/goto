@@ -1,4 +1,10 @@
-import { visitDays, zeroVisitTotals, type VisitDetails, type VisitTotals } from '@goto/analytics';
+import {
+	visitDays,
+	zeroVisitTotals,
+	type DailyVisitCountByName,
+	type VisitDetails,
+	type VisitTotals
+} from '@goto/analytics';
 import type { LinkVisitDetails } from '@goto/db/visit-reports';
 
 export function combineTagVisits(
@@ -31,8 +37,8 @@ export function combineTagVisits(
 	};
 }
 
-function combineNamedCounts(groups: VisitDetails['browsers'][]): VisitDetails['browsers'] {
-	const countsByDay = new Map<string, Map<string, VisitDetails['browsers'][number]>>();
+function combineNamedCounts(groups: DailyVisitCountByName[][]): DailyVisitCountByName[] {
+	const countsByDay = new Map<string, Map<string, DailyVisitCountByName>>();
 	for (const rows of groups) {
 		for (const row of rows) {
 			let countsByName = countsByDay.get(row.day);
