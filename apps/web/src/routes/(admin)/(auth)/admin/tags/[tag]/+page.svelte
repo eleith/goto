@@ -2,6 +2,7 @@
 	import { page } from '$app/state';
 	import { resolveVisitTimeframe, visitGranularity, visitWindow } from '@goto/analytics/daily';
 	import AdminPage from '#lib/components/admin/AdminPage.svelte';
+	import AnalyticsSection from '#lib/components/admin/AnalyticsSection.svelte';
 	import StatCard from '#lib/components/admin/StatCard.svelte';
 	import ReportNotice from '#lib/components/admin/ReportNotice.svelte';
 	import VisitBreakdowns from '#lib/components/admin/VisitBreakdowns.svelte';
@@ -41,25 +42,6 @@
 			/>
 		{/if}
 	{/snippet}
-	<ReportNotice collectionEnabled={data.collectionEnabled} available={data.available} />
-	<div class="admin-cards">
-		<StatCard label="Links" value={data.linkCount} />
-		{#if data.collectionEnabled}
-			<StatCard label="Visits" value={visits} />
-			<StatCard label="Invalid clicks" value={invalidClicks} />
-		{/if}
-	</div>
-	{#if data.chart && window}
-		<VisitsChart daily={data.chart.daily} {window} {granularity} />
-	{/if}
-	{#if browserVisits && operatingSystemVisits && acceptedLanguageVisits && visits !== null}
-		<VisitBreakdowns
-			{browserVisits}
-			{operatingSystemVisits}
-			{acceptedLanguageVisits}
-			totalVisits={visits}
-		/>
-	{/if}
 	<section>
 		<h2>Links</h2>
 		<LinkInventory
@@ -70,4 +52,25 @@
 			showDomain
 		/>
 	</section>
+	<AnalyticsSection>
+		<ReportNotice collectionEnabled={data.collectionEnabled} available={data.available} />
+		<div class="admin-cards">
+			<StatCard label="Links" value={data.linkCount} />
+			{#if data.collectionEnabled}
+				<StatCard label="Visits" value={visits} />
+				<StatCard label="Invalid clicks" value={invalidClicks} />
+			{/if}
+		</div>
+		{#if data.chart && window}
+			<VisitsChart daily={data.chart.daily} {window} {granularity} />
+		{/if}
+		{#if browserVisits && operatingSystemVisits && acceptedLanguageVisits && visits !== null}
+			<VisitBreakdowns
+				{browserVisits}
+				{operatingSystemVisits}
+				{acceptedLanguageVisits}
+				totalVisits={visits}
+			/>
+		{/if}
+	</AnalyticsSection>
 </AdminPage>

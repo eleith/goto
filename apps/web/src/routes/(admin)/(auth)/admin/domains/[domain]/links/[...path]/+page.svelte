@@ -5,6 +5,7 @@
 	import VisitsChart from '#lib/components/admin/VisitsChart.svelte';
 	import VisitTimeframes from '#lib/components/admin/VisitTimeframes.svelte';
 	import AdminPage from '#lib/components/admin/AdminPage.svelte';
+	import AnalyticsSection from '#lib/components/admin/AnalyticsSection.svelte';
 	import StatCard from '#lib/components/admin/StatCard.svelte';
 	import ReportNotice from '#lib/components/admin/ReportNotice.svelte';
 	import { formatUtc } from '#lib/components/admin/format.js';
@@ -42,21 +43,6 @@
 			/>
 		{/if}
 	{/snippet}
-	<ReportNotice collectionEnabled={data.collectionEnabled} available={data.available} />
-	<div class="admin-cards">
-		{#if data.collectionEnabled}
-			<StatCard label="Visits" value={visits} />
-		{/if}
-		{#if data.state === 'active'}
-			<StatCard label="Status" value="Active" />
-		{:else if data.state === 'disabled'}
-			<StatCard label="Status" value="Disabled" />
-		{:else if data.state === 'scheduled'}
-			<StatCard label="Status" value="Scheduled" />
-		{:else if data.state === 'expired'}
-			<StatCard label="Status" value="Expired" />
-		{/if}
-	</div>
 	<section class="admin-info" aria-labelledby="redirect-heading">
 		<h2 id="redirect-heading">Redirect</h2>
 		<dl>
@@ -147,17 +133,34 @@
 			{/if}
 		</dl>
 	</section>
-	{#if data.chart && window}
-		<VisitsChart daily={data.chart.daily} {window} {granularity} />
-	{/if}
-	{#if browserVisits && operatingSystemVisits && acceptedLanguageVisits && visits !== null}
-		<VisitBreakdowns
-			{browserVisits}
-			{operatingSystemVisits}
-			{acceptedLanguageVisits}
-			totalVisits={visits}
-		/>
-	{/if}
+	<AnalyticsSection>
+		<ReportNotice collectionEnabled={data.collectionEnabled} available={data.available} />
+		<div class="admin-cards">
+			{#if data.collectionEnabled}
+				<StatCard label="Visits" value={visits} />
+			{/if}
+			{#if data.state === 'active'}
+				<StatCard label="Status" value="Active" />
+			{:else if data.state === 'disabled'}
+				<StatCard label="Status" value="Disabled" />
+			{:else if data.state === 'scheduled'}
+				<StatCard label="Status" value="Scheduled" />
+			{:else if data.state === 'expired'}
+				<StatCard label="Status" value="Expired" />
+			{/if}
+		</div>
+		{#if data.chart && window}
+			<VisitsChart daily={data.chart.daily} {window} {granularity} />
+		{/if}
+		{#if browserVisits && operatingSystemVisits && acceptedLanguageVisits && visits !== null}
+			<VisitBreakdowns
+				{browserVisits}
+				{operatingSystemVisits}
+				{acceptedLanguageVisits}
+				totalVisits={visits}
+			/>
+		{/if}
+	</AnalyticsSection>
 </AdminPage>
 
 <style>

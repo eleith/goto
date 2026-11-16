@@ -174,7 +174,7 @@ test('shared credentials protect admin pages and sign-out removes access', async
 		page.getByRole('region', { name: 'Invalid clicks', exact: true }).locator('.admin-stat-value')
 	).toHaveText('1');
 	const linksInventory = page.getByRole('region', { name: 'Links on go.example.org', exact: true });
-	const domainDetails = page.getByRole('region', { name: 'Domain details', exact: true });
+	const domainDetails = page.getByRole('region', { name: 'Details', exact: true });
 	const rootRow = linksInventory.getByRole('listitem').filter({
 		has: page.getByRole('link', { name: '(root)', exact: true })
 	});
@@ -215,9 +215,7 @@ test('shared credentials protect admin pages and sign-out removes access', async
 		.getByRole('listitem')
 		.filter({ has: page.getByRole('link', { name: '/a/b', exact: true }) });
 	await expect(historicalInvalid.locator('.admin-inventory-number')).toHaveText('0');
-	await expect(
-		domainDetails.getByRole('heading', { name: 'Domain details', exact: true })
-	).toBeVisible();
+	await expect(domainDetails.getByRole('heading', { name: 'Details', exact: true })).toBeVisible();
 	await expect(domainDetails.locator('dt')).toHaveText(['Domain', 'Root', 'Fallback']);
 	await expect(domainDetails.locator('dd')).toHaveText([
 		'go.example.org',
@@ -464,7 +462,7 @@ test.describe('analytics disabled', () => {
 			page
 				.getByRole('region', { name: 'Domain inventory', exact: true })
 				.locator('.admin-inventory-heading > span')
-		).toHaveText(['Domain', 'Links']);
+		).toHaveText(['Host', 'Links']);
 		await expect(page.getByRole('status')).toHaveText('Analytics disabled.');
 		await page.getByRole('link', { name: 'go.example.org', exact: true }).click();
 		await expect(page.locator('.admin-cards .admin-stat-label')).toHaveText(['Links']);
@@ -481,7 +479,7 @@ test.describe('analytics disabled', () => {
 				.locator('.admin-inventory-heading > span')
 		).toHaveText(['Path', 'Destination', 'State']);
 		await expect(
-			page.getByRole('region', { name: 'Domain details', exact: true }).locator('dt')
+			page.getByRole('region', { name: 'Details', exact: true }).locator('dt')
 		).toHaveText(['Domain', 'Root', 'Fallback']);
 		await expect(
 			page
