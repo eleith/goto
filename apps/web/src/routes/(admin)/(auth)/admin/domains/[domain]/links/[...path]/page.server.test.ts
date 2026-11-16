@@ -11,6 +11,11 @@ beforeEach(() => vi.resetAllMocks());
 const domain = 'go.example.test';
 const linkMetadata = {
 	response: { url: 'https://example.test/docs', status_code: 308, forward_query: true },
+	redirectRules: [
+		{ language: 'fr-ca', os: 'ios', to: 'https://example.test/fr-ios' },
+		{ language: null, os: 'linux', to: 'https://example.test/linux' },
+		{ language: 'en', os: null, to: 'https://example.test/en' }
+	],
 	caseInsensitive: false,
 	ignoreTrailingSlash: false,
 	forwardPath: true,
@@ -26,6 +31,11 @@ function request(path = '/docs', options: { host?: string; retentionMonths?: num
 		links: {
 			'/docs': {
 				url: 'https://example.test/docs',
+				redirect: [
+					{ if: { language: 'FR-ca', os: 'ios' }, to: 'https://example.test/fr-ios' },
+					{ if: { os: 'linux' }, to: 'https://example.test/linux' },
+					{ if: { language: 'en' }, to: 'https://example.test/en' }
+				],
 				status_code: 308,
 				forward_path: true,
 				enabled: true,
@@ -34,7 +44,12 @@ function request(path = '/docs', options: { host?: string; retentionMonths?: num
 				tags: ['guides', 'reference']
 			},
 			'/a/b': { url: 'https://example.test/nested', enabled: true, tags: [] },
-			'/a%2Fb': { url: 'https://example.test/percent', enabled: false, tags: [] }
+			'/a%2Fb': {
+				url: 'https://example.test/percent',
+				redirect: [{ if: { language: 'fr' }, to: 'https://example.test/percent-fr' }],
+				enabled: false,
+				tags: []
+			}
 		}
 	};
 	const prepared = loadConfig(
@@ -145,6 +160,7 @@ test('keeps decoded nested and literal-percent identities distinct', async () =>
 	expect(nested.path).toBe('/a/b');
 	expect(nested).toMatchObject({
 		response: { url: 'https://example.test/nested', status_code: 301, forward_query: true },
+		redirectRules: [],
 		caseInsensitive: false,
 		ignoreTrailingSlash: false,
 		forwardPath: false,
@@ -155,6 +171,9 @@ test('keeps decoded nested and literal-percent identities distinct', async () =>
 	});
 	expect(percent.path).toBe('/a%2Fb');
 	expect(percent.state).toBe('disabled');
+	expect(percent.redirectRules).toEqual([
+		{ language: 'fr', os: null, to: 'https://example.test/percent-fr' }
+	]);
 	expect(percent.countsByTimeframe.all?.validVisits).toBe(15);
 	expect(readVisitDetails).toHaveBeenNthCalledWith(1, expect.any(Object), {
 		kind: 'link',

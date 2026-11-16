@@ -22,6 +22,11 @@ export const load = (async ({ locals, params }) => {
 		status_code: link.status_code,
 		forward_query: link.forward_query
 	};
+	const redirectRules = (link.redirect ?? []).map((rule) => ({
+		language: rule.if.language ?? null,
+		os: rule.if.os ?? null,
+		to: rule.to
+	}));
 	const state = currentLinkState(link, Date.now());
 	const validFrom = link.valid_from ?? null;
 	const validUntil = link.valid_until ?? null;
@@ -47,6 +52,7 @@ export const load = (async ({ locals, params }) => {
 		domain,
 		path,
 		response,
+		redirectRules,
 		caseInsensitive: link.case_insensitive,
 		ignoreTrailingSlash: link.ignore_trailing_slash,
 		forwardPath: link.forward_path,

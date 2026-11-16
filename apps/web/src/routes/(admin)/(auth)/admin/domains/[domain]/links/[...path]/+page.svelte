@@ -57,17 +57,68 @@
 			<StatCard label="Status" value="Expired" />
 		{/if}
 	</div>
-	<section class="admin-info" aria-labelledby="link-details-heading">
-		<h2 id="link-details-heading">Link details</h2>
+	<section class="admin-info" aria-labelledby="redirect-heading">
+		<h2 id="redirect-heading">Redirect</h2>
 		<dl>
-			<dt>Link</dt>
-			<dd>{data.domain}{data.path}</dd>
-			<dt>Destination</dt>
+			<dt>Domain</dt>
 			<dd>
-				<a class="admin-destination" href={data.response.url}>
-					{data.response.url}
+				<a href={`/admin/domains/${encodeURIComponent(data.domain)}?period=${timeframe}`}>
+					{data.domain}
 				</a>
 			</dd>
+			<dt>Path</dt>
+			<dd>{data.path}</dd>
+			<dt>Destination</dt>
+			<dd class:numbered-setting={data.redirectRules.length > 0}>
+				{#if data.redirectRules.length > 0}
+					<ol aria-label="Destinations">
+						{#each data.redirectRules as rule, index (index)}
+							<li>
+								<span aria-hidden="true">{index + 1}.</span>
+								<a class="admin-destination setting-value" href={rule.to}>{rule.to}</a>
+							</li>
+						{/each}
+						<li>
+							<span aria-hidden="true">{data.redirectRules.length + 1}.</span>
+							<a class="admin-destination setting-value" href={data.response.url}
+								>{data.response.url}</a
+							>
+						</li>
+					</ol>
+				{:else}
+					<a class="admin-destination" href={data.response.url}>{data.response.url}</a>
+				{/if}
+			</dd>
+			{#if data.redirectRules.length > 0}
+				<dt>Rules</dt>
+				<dd class="numbered-setting">
+					<ol aria-label="Rules">
+						{#each data.redirectRules as rule, index (index)}
+							<li>
+								<span aria-hidden="true">{index + 1}.</span>
+								<span class="setting-value">
+									{#if rule.language !== null && rule.os !== null}
+										language {rule.language} AND OS {rule.os}
+									{:else if rule.language !== null}
+										language {rule.language}
+									{:else}
+										OS {rule.os}
+									{/if}
+								</span>
+							</li>
+						{/each}
+						<li>
+							<span aria-hidden="true">{data.redirectRules.length + 1}.</span>
+							<span class="setting-value">default</span>
+						</li>
+					</ol>
+				</dd>
+			{/if}
+		</dl>
+	</section>
+	<section class="admin-info" aria-labelledby="settings-heading">
+		<h2 id="settings-heading">Settings</h2>
+		<dl>
 			<dt>HTTP status</dt>
 			<dd>{data.response.status_code}</dd>
 			<dt>Case insensitive</dt>
@@ -111,3 +162,29 @@
 		</div>
 	{/if}
 </AdminPage>
+
+<style>
+	.numbered-setting,
+	ol,
+	li {
+		display: grid;
+		grid-template-columns: subgrid;
+		grid-column: 1 / -1;
+	}
+
+	ol {
+		row-gap: var(--space-1);
+		padding: 0;
+	}
+
+	.setting-value {
+		min-width: 0;
+	}
+
+	@media (max-width: 640px) {
+		.numbered-setting {
+			grid-template-columns: max-content minmax(0, 1fr);
+			column-gap: var(--space-4);
+		}
+	}
+</style>
