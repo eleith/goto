@@ -3,13 +3,12 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { createVisitPeriod, encodeVisitReports } from '@goto/analytics';
+import { emptyDailyStatistics } from '@goto/analytics';
 import { insertVisit, openDb, runMigrations } from '@goto/db';
-import { publishVisitReports } from '@goto/db/visit-reports';
+import { addDailyVisitStatistics } from '@goto/db/visit-reports';
 import { Worker } from 'openworkflow';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { startWorkerService } from './startup.js';
-import { buildVisitReports } from './build-visit-reports.js';
 import { logger } from './logger.js';
 
 let directory: string;
@@ -46,7 +45,7 @@ async function writeConfiguration(
 
 const env = { HOST: '127.0.0.1', PORT: '0' };
 
-test('starts an idle zero-policy service with tag warnings and exposes health', async () => {
+test('starts with zero-policy analytics paused, no run, tag warnings and healthy service', async () => {
 	await writeConfiguration(undefined, ['', 'work']);
 	const warning = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
 	const start = vi.spyOn(Worker.prototype, 'start');
@@ -63,13 +62,21 @@ test('starts an idle zero-policy service with tag warnings and exposes health', 
 		expect(await response.json()).toEqual({ status: 'ok' });
 		const state = new DatabaseSync(join(directory, 'state/worker.sqlite'), { readOnly: true });
 		try {
-			expect(state.prepare('SELECT count(*) AS count FROM workflow_runs').get()?.count).toBe(0);
+			expect(
+				Number(state.prepare('SELECT count(*) AS count FROM workflow_runs').get()?.count)
+			).toBe(0);
+			expect(
+				state
+					.prepare('SELECT next_run_at FROM workflow_schedules WHERE id = ?')
+					.get('goto:retain-visits')?.next_run_at
+			).toBeNull();
 		} finally {
 			state.close();
 		}
 		const db = await openDb(join(directory, 'data/visits.sqlite'), { readOnly: true });
 		try {
 			expect(await db.selectFrom('visits').selectAll().execute()).toEqual([]);
+			expect(await db.selectFrom('visit_daily_statistics').select('id').execute()).toEqual([]);
 		} finally {
 			await db.destroy();
 		}
@@ -78,24 +85,29 @@ test('starts an idle zero-policy service with tag warnings and exposes health', 
 	}
 });
 
-test('a real zero-policy startup workflow purges raw history and prepared output', async () => {
-	await writeConfiguration();
+test('zero-policy startup purges existing raw and daily data once and remains paused', async () => {
+	await writeConfiguration(undefined, []);
 	const path = join(directory, 'data/visits.sqlite');
 	const db = await openDb(path);
 	try {
 		await runMigrations(db);
-		const period = createVisitPeriod(3, Date.now() - 1000);
-		const reports = buildVisitReports(
-			{ daily: [], browsers: [], operatingSystems: [], languageHeaders: [] },
-			[],
-			period
-		);
-		await publishVisitReports(db, encodeVisitReports(reports));
+		const visitedAt = Date.now() - 1000;
+		const day = new Date(visitedAt).toISOString().slice(0, 10);
+		const daily = emptyDailyStatistics({ kind: 'overview' }, day);
+		daily.lastVisitAt = visitedAt;
+		daily.validVisits = 1;
+		daily.browsers = [{ name: 'Other', validVisits: 1, invalidVisits: 0 }];
+		daily.operatingSystems = [{ name: 'Other', validVisits: 1, invalidVisits: 0 }];
+		daily.acceptedLanguages = [{ name: 'Other', validVisits: 1, invalidVisits: 0 }];
+		await db.transaction().execute(async (transaction) => {
+			await transaction.deleteFrom('visit_daily_statistics').execute();
+			await addDailyVisitStatistics(transaction, [daily]);
+		});
 		await insertVisit(db, {
 			domain: 'go.example.test',
 			path: '/docs',
 			outcome: 'valid',
-			visited_at: Date.now(),
+			visited_at: Date.now() - 1000,
 			ip: '127.0.0.1',
 			user_agent: null,
 			accept_language: null,
@@ -110,7 +122,20 @@ test('a real zero-policy startup workflow purges raw history and prepared output
 		const reader = await openDb(path, { readOnly: true });
 		try {
 			expect(await reader.selectFrom('visits').selectAll().execute()).toEqual([]);
-			expect(await reader.selectFrom('analytics_reports').select('id').execute()).toEqual([]);
+			expect(await reader.selectFrom('visit_daily_statistics').select('id').execute()).toEqual([]);
+			const state = new DatabaseSync(join(directory, 'state/worker.sqlite'), { readOnly: true });
+			try {
+				expect(
+					Number(state.prepare('SELECT count(*) AS count FROM workflow_runs').get()?.count)
+				).toBe(1);
+				expect(
+					state
+						.prepare('SELECT next_run_at FROM workflow_schedules WHERE id = ?')
+						.get('goto:retain-visits')?.next_run_at
+				).toBeNull();
+			} finally {
+				state.close();
+			}
 		} finally {
 			await reader.destroy();
 		}

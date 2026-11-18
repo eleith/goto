@@ -1,12 +1,6 @@
 import { Value } from '@sinclair/typebox/value';
 import { expect, test } from 'vitest';
-import { createVisitPeriod } from './period.js';
-import {
-	ReportScopeSchema,
-	VisitSummarySchema,
-	zeroVisitTotals,
-	type LinkSummary
-} from './reports.js';
+import { ReportScopeSchema, VisitTotalsSchema, zeroVisitTotals } from './reports.js';
 
 test('zero totals are independent objects with no redundant total or root count', () => {
 	const first = zeroVisitTotals();
@@ -17,16 +11,11 @@ test('zero totals are independent objects with no redundant total or root count'
 	expect(first).not.toBe(second);
 });
 
-test('canonical schemas distinguish scopes and summary variants', () => {
-	const summary: LinkSummary = {
-		version: 1,
-		scope: { kind: 'link', domain: 'go.example.test', path: '/' },
-		period: createVisitPeriod(3, Date.UTC(2026, 2, 1)),
-		totals: zeroVisitTotals()
-	};
-
-	expect(Value.Check(VisitSummarySchema, summary)).toBe(true);
-	expect(Value.Check(VisitSummarySchema, { ...summary, base: zeroVisitTotals() })).toBe(false);
+test('canonical schemas distinguish scopes and require safe exact totals', () => {
+	expect(Value.Check(ReportScopeSchema, { kind: 'overview' })).toBe(true);
+	expect(
+		Value.Check(ReportScopeSchema, { kind: 'link', domain: 'go.example.test', path: '/' })
+	).toBe(true);
 	expect(Value.Check(ReportScopeSchema, { kind: 'overview', domain: null })).toBe(false);
 	expect(
 		Value.Check(ReportScopeSchema, { kind: 'domain', domain: 'go.example.test', path: '/' })
@@ -34,4 +23,12 @@ test('canonical schemas distinguish scopes and summary variants', () => {
 	expect(
 		Value.Check(ReportScopeSchema, { kind: 'link', domain: 'go.example.test', path: '' })
 	).toBe(false);
+	expect(Value.Check(VisitTotalsSchema, zeroVisitTotals())).toBe(true);
+	for (const invalid of [
+		{ validVisits: -1, invalidVisits: 0 },
+		{ validVisits: 0.5, invalidVisits: 0 },
+		{ validVisits: Number.MAX_SAFE_INTEGER + 1, invalidVisits: 0 },
+		{ ...zeroVisitTotals(), base: 0 }
+	])
+		expect(Value.Check(VisitTotalsSchema, invalid)).toBe(false);
 });

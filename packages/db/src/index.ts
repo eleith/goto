@@ -6,7 +6,12 @@ import { NodeSqliteDialect } from './node-sqlite-dialect.js';
 import type { Database } from './types.js';
 
 export { runMigrations } from './migrate.js';
-export { insertVisit, pruneVisits, purgeVisits } from './visits.js';
+export { insertVisit, purgeVisits } from './visits.js';
+export {
+	captureVisitBoundary,
+	processVisitBatch,
+	deleteExpiredVisitBatch
+} from './visit-processing.js';
 export type { ClassifiedVisit, Database, NewVisit, Visit, VisitOutcome } from './types.js';
 
 export async function openDb(

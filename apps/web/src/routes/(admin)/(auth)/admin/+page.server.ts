@@ -40,14 +40,14 @@ export const load = (async ({ locals }) => {
 		overview?.acceptedLanguages,
 		windows
 	);
-	const asOf = overview ? Date.parse(overview.period.asOf) : null;
+	const lastActivityAt = overview?.lastActivityAt ? Date.parse(overview.lastActivityAt) : null;
 	const countsByTimeframe = countVisitWindows(overview?.daily, windows);
 	const chart = overview ? { daily: overview.daily, period: overview.period } : null;
 	return {
 		collectionEnabled,
 		available: overview !== null,
 		retentionMonths,
-		asOf,
+		lastActivityAt,
 		domainCount: domains.length,
 		linkCount: domains.reduce((sum, row) => sum + row.linkCount, 0),
 		timeframes,

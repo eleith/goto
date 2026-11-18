@@ -30,7 +30,7 @@
 <AdminPage
 	siteTitle={data.title}
 	title={`Tag: ${data.tag}`}
-	updatedAt={data.asOf}
+	lastActivityAt={data.lastActivityAt}
 	overviewHref={`/admin?period=${timeframe}`}
 >
 	{#snippet actions()}

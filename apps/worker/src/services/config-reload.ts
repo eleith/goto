@@ -8,7 +8,7 @@ import { logger } from './logger.js';
 import type { ShutdownResources } from './lifecycle.js';
 import type { OpenWorkflow } from 'openworkflow';
 import type { WorkerContext } from './context.js';
-import { requestReportRefresh } from './report-schedule.js';
+import { requestVisitMaintenance } from './visit-maintenance-schedule.js';
 
 interface ConfigurationSource {
 	path: string;
@@ -23,43 +23,9 @@ export async function applyConfig(
 	context: WorkerContext,
 	engine: OpenWorkflow
 ): Promise<boolean> {
-	const months = next.configuration.analytics.retention_months;
-	const previousMonths = previous.configuration.analytics.retention_months;
-	const collectionEnabled = months !== 0;
-	const previousCollectionEnabled = previousMonths !== 0;
-	if (collectionEnabled !== previousCollectionEnabled) {
-		logger.warn(
-			'Analytics collection change requires coordinated restart; keeping current configuration'
-		);
-		return false;
-	}
-	const nextDatabase = next.configuration.database;
-	const previousDatabase = previous.configuration.database;
-	if (
-		nextDatabase.worker_path !== previousDatabase.worker_path ||
-		nextDatabase.path !== previousDatabase.path
-	) {
-		logger.warn('Worker configuration change requires restart');
-		onRestart();
-		return false;
-	}
-	const currentMonths = context.config.analytics.retention_months;
-	context.config = next.configuration;
-	context.domains = next.domains;
-	try {
-		const inventoryChanged = !isDeepStrictEqual(next.domains, previous.domains);
-		if (months !== previousMonths || months !== currentMonths || inventoryChanged) {
-			await requestReportRefresh(context, engine);
-		}
-	} catch (error) {
-		logger.error('Unable to apply worker retention policy; stopping service');
-		onRestart();
-		throw error;
-	}
-	if (next.warnings.length > 0 && !isDeepStrictEqual(next.warnings, previous.warnings)) {
-		logger.warn(formatConfigWarnings(next.warnings));
-	}
-	logger.info('Worker configuration reloaded');
+	if (!canReloadConfiguration(next, previous, onRestart)) return false;
+	await updateWorkerConfiguration(next, previous, context, engine, onRestart);
+	logConfigurationReload(next, previous);
 	return true;
 }
 
@@ -91,4 +57,61 @@ export async function watchConfiguration(
 	});
 	watchOwned = true;
 	if (restartRequested) shutdownForRestart();
+}
+
+function canReloadConfiguration(
+	next: PreparedConfiguration,
+	previous: PreparedConfiguration,
+	onRestart: () => void
+): boolean {
+	const collectVisits = next.configuration.analytics.retention_months !== 0;
+	const previouslyCollectedVisits = previous.configuration.analytics.retention_months !== 0;
+	if (collectVisits !== previouslyCollectedVisits) {
+		logger.warn(
+			'Analytics collection change requires coordinated restart; keeping current configuration'
+		);
+		return false;
+	}
+	const nextDatabase = next.configuration.database;
+	const previousDatabase = previous.configuration.database;
+	if (
+		nextDatabase.worker_path !== previousDatabase.worker_path ||
+		nextDatabase.path !== previousDatabase.path
+	) {
+		logger.warn('Worker configuration change requires restart');
+		onRestart();
+		return false;
+	}
+	return true;
+}
+
+async function updateWorkerConfiguration(
+	next: PreparedConfiguration,
+	previous: PreparedConfiguration,
+	context: WorkerContext,
+	engine: OpenWorkflow,
+	onRestart: () => void
+): Promise<void> {
+	const months = next.configuration.analytics.retention_months;
+	const retentionChanged =
+		months !== previous.configuration.analytics.retention_months ||
+		months !== context.config.analytics.retention_months;
+	try {
+		context.config = next.configuration;
+		if (retentionChanged && months > 0) await requestVisitMaintenance(context, engine);
+	} catch (error) {
+		logger.error('Unable to apply worker configuration; stopping service');
+		onRestart();
+		throw error;
+	}
+}
+
+function logConfigurationReload(
+	next: PreparedConfiguration,
+	previous: PreparedConfiguration
+): void {
+	if (next.warnings.length > 0 && !isDeepStrictEqual(next.warnings, previous.warnings)) {
+		logger.warn(formatConfigWarnings(next.warnings));
+	}
+	logger.info('Worker configuration reloaded');
 }

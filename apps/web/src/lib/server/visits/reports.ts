@@ -1,11 +1,12 @@
-import type { ReportScope, VisitDetails } from '@goto/analytics';
+import { createVisitPeriod, type ReportScope, type VisitDetails } from '@goto/analytics';
 import type { GotoConfiguration } from '@goto/config';
 import { openDb } from '@goto/db';
 import {
 	readOverviewVisitDetails,
 	readDomainVisitDetails,
 	readLinkVisitDetails,
-	readVisitDetails as readPreparedDetails,
+	readVisitDetails as readStoredDetails,
+	readLastVisitActivity,
 	type OverviewVisitDetails,
 	type DomainVisitDetails,
 	type LinkVisitDetails
@@ -23,9 +24,8 @@ export async function readOverviewDetails(
 	let db: Awaited<ReturnType<typeof openDb>> | undefined;
 	try {
 		db = await openDb(configuration.database.path, { readOnly: true });
-		const report = await readOverviewVisitDetails(db, currentDomains);
-		if (!report || report.overview.period.retentionMonths !== months) return null;
-		return report;
+		const period = createVisitPeriod(months, Date.now());
+		return await readOverviewVisitDetails(db, currentDomains, period);
 	} catch {
 		warnUnavailable();
 		return null;
@@ -44,9 +44,8 @@ export async function readDomainDetails(
 	let db: Awaited<ReturnType<typeof openDb>> | undefined;
 	try {
 		db = await openDb(configuration.database.path, { readOnly: true });
-		const report = await readDomainVisitDetails(db, domain, currentPaths);
-		if (!report || report.domain.period.retentionMonths !== months) return null;
-		return report;
+		const period = createVisitPeriod(months, Date.now());
+		return await readDomainVisitDetails(db, domain, currentPaths, period);
 	} catch {
 		warnUnavailable();
 		return null;
@@ -64,9 +63,8 @@ export async function readLinkDetails(
 	let db: Awaited<ReturnType<typeof openDb>> | undefined;
 	try {
 		db = await openDb(configuration.database.path, { readOnly: true });
-		const report = await readLinkVisitDetails(db, currentLinks);
-		if (!report || report.period.retentionMonths !== months) return null;
-		return report;
+		const period = createVisitPeriod(months, Date.now());
+		return await readLinkVisitDetails(db, currentLinks, period);
 	} catch {
 		warnUnavailable();
 		return null;
@@ -84,12 +82,30 @@ export async function readVisitDetails(
 	let db: Awaited<ReturnType<typeof openDb>> | undefined;
 	try {
 		db = await openDb(configuration.database.path, { readOnly: true });
-		const details = await readPreparedDetails(db, scope);
-		if (!details || details.period.retentionMonths !== months) return null;
-		return details;
+		const period = createVisitPeriod(months, Date.now());
+		return await readStoredDetails(db, scope, period);
 	} catch {
 		warnUnavailable();
 		return null;
+	} finally {
+		await db?.destroy().catch(warnUnavailable);
+	}
+}
+
+export async function readLastActivity(
+	configuration: ReportConfiguration
+): Promise<{ available: boolean; lastActivityAt: string | null }> {
+	const months = configuration.analytics.retention_months;
+	if (months === 0) return { available: true, lastActivityAt: null };
+	let db: Awaited<ReturnType<typeof openDb>> | undefined;
+	try {
+		db = await openDb(configuration.database.path, { readOnly: true });
+		const period = createVisitPeriod(months, Date.now());
+		const lastActivityAt = await readLastVisitActivity(db, period);
+		return { available: true, lastActivityAt };
+	} catch {
+		warnUnavailable();
+		return { available: false, lastActivityAt: null };
 	} finally {
 		await db?.destroy().catch(warnUnavailable);
 	}

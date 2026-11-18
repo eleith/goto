@@ -30,7 +30,7 @@ export const load = (async ({ locals, params }) => {
 		details?.acceptedLanguages,
 		windows
 	);
-	const asOf = details ? Date.parse(details.period.asOf) : null;
+	const lastActivityAt = details?.lastActivityAt ? Date.parse(details.lastActivityAt) : null;
 	const chart = details ? { daily: details.daily, period: details.period } : null;
 
 	return {
@@ -42,7 +42,7 @@ export const load = (async ({ locals, params }) => {
 		retentionMonths,
 		collectionEnabled,
 		available: details !== null,
-		asOf,
+		lastActivityAt,
 		timeframes,
 		countsByTimeframe,
 		browserVisitsByTimeframe,

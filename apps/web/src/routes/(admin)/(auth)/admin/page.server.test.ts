@@ -58,7 +58,8 @@ function details(
 			invalidVisits
 		}));
 	return {
-		version: 4,
+		version: 5,
+		lastActivityAt: new Date(Date.parse(period.asOf) - 60_000).toISOString(),
 		scope,
 		period,
 		daily,
@@ -93,11 +94,21 @@ test('projects compact global window counts while inventory stays current and hi
 	const overview = details({ kind: 'overview' }, period, (day) => overviewCounts[day] ?? 0);
 	const current = details({ kind: 'domain', domain }, period, (day) => domainCounts[day] ?? 0);
 	const empty = details({ kind: 'domain', domain: emptyDomain }, period, () => 0);
+	const newDomainDetails: VisitDetails = {
+		...empty,
+		scope: { kind: 'domain', domain: newDomain },
+		lastActivityAt: null,
+		daily: empty.daily.map((day) => ({ ...day, validVisits: 0, invalidVisits: 0 })),
+		browsers: [],
+		operatingSystems: [],
+		acceptedLanguages: []
+	};
 	vi.mocked(readOverviewDetails).mockResolvedValue({
 		overview,
 		domains: [
 			{ domain, details: current },
-			{ domain: emptyDomain, details: empty }
+			{ domain: emptyDomain, details: empty },
+			{ domain: newDomain, details: newDomainDetails }
 		]
 	});
 	const data = await load(request());
@@ -110,7 +121,7 @@ test('projects compact global window counts while inventory stays current and hi
 		collectionEnabled: true,
 		available: true,
 		retentionMonths: 3,
-		asOf: Date.parse(period.asOf),
+		lastActivityAt: Date.parse(overview.lastActivityAt!),
 		domainCount: 3,
 		linkCount: 3,
 		timeframes: ['7d', '30d', 'all'],
@@ -168,7 +179,11 @@ test('projects compact global window counts while inventory stays current and hi
 			{
 				domain: newDomain,
 				linkCount: 1,
-				countsByTimeframe: {},
+				countsByTimeframe: {
+					'7d': { validVisits: 0, invalidVisits: 0 },
+					'30d': { validVisits: 0, invalidVisits: 0 },
+					all: { validVisits: 0, invalidVisits: 0 }
+				},
 				href: '/admin/domains/new.example.test'
 			}
 		]
@@ -183,7 +198,21 @@ test.each([
 	async ({ months, retainedDays }) => {
 		const period = createVisitPeriod(months, Date.parse('2026-03-01T00:00:00.000Z'));
 		const overview = details({ kind: 'overview' }, period, () => 1);
-		vi.mocked(readOverviewDetails).mockResolvedValue({ overview, domains: [] });
+		vi.mocked(readOverviewDetails).mockResolvedValue({
+			overview,
+			domains: [domain, emptyDomain, newDomain].map((domain) => ({
+				domain,
+				details: {
+					...overview,
+					scope: { kind: 'domain' as const, domain },
+					lastActivityAt: null,
+					daily: overview.daily.map((day) => ({ ...day, validVisits: 0, invalidVisits: 0 })),
+					browsers: [],
+					operatingSystems: [],
+					acceptedLanguages: []
+				}
+			}))
+		});
 		const data = await load(request(months));
 		if (!data) throw new Error('Missing overview page');
 		expect(data.timeframes).toEqual(['7d', '30d', '90d', 'all']);
@@ -193,11 +222,18 @@ test.each([
 			'90d': { validVisits: 90, invalidVisits: 90 },
 			all: { validVisits: retainedDays, invalidVisits: retainedDays }
 		});
-		expect(data.domains.every((row) => Object.keys(row.countsByTimeframe).length === 0)).toBe(true);
+		expect(data.domains.map((row) => row.countsByTimeframe)).toEqual(
+			Array.from({ length: 3 }, () => ({
+				'7d': { validVisits: 0, invalidVisits: 0 },
+				'30d': { validVisits: 0, invalidVisits: 0 },
+				'90d': { validVisits: 0, invalidVisits: 0 },
+				all: { validVisits: 0, invalidVisits: 0 }
+			}))
+		);
 	}
 );
 
-test('missing preparation keeps inventory usable without substituting zero counts', async () => {
+test('unavailable storage keeps inventory usable without substituting zero counts', async () => {
 	vi.mocked(readOverviewDetails).mockResolvedValue(null);
 	const data = await load(request());
 	if (!data) throw new Error('Missing unavailable page');
@@ -206,7 +242,7 @@ test('missing preparation keeps inventory usable without substituting zero count
 	expect(data.retentionMonths).toBe(3);
 	expect(data.domainCount).toBe(3);
 	expect(data.linkCount).toBe(3);
-	expect(data.asOf).toBeNull();
+	expect(data.lastActivityAt).toBeNull();
 	expect(data.browserVisitsByTimeframe).toEqual({});
 	expect(data.operatingSystemVisitsByTimeframe).toEqual({});
 	expect(data.chart).toBeNull();

@@ -1,19 +1,21 @@
 export { createVisitPeriod, visitDays } from './period.js';
 export { zeroVisitTotals } from './reports.js';
-export { encodeVisitReports } from './encode.js';
-export { parseVisitSummary, parseVisitDetails } from './decode.js';
+export { checkReportPeriod, checkReportScope } from './validation.js';
 export type {
 	ReportScope,
 	ReportPeriod,
 	VisitTotals,
-	VisitSummary,
-	OverviewSummary,
-	DomainSummary,
-	LinkSummary,
 	VisitDetails,
-	DailyVisitCountByName,
-	PreparedVisitReport,
-	SerializedVisitReport
+	DailyVisitCountByName
 } from './reports.js';
 export { countBreakdownVisitsByTimeframe } from './breakdown-visits.js';
 export type { VisitCountByName, BreakdownVisitsByTimeframe } from './breakdown-visits.js';
+export {
+	emptyDailyStatistics,
+	checkDailyStatistics,
+	addDailyStatistics,
+	subtractDailyStatistics,
+	canSubtractDailyStatistics,
+	projectVisitDetails
+} from './daily-statistics.js';
+export type { DailyVisitStatistics } from './daily-statistics.js';

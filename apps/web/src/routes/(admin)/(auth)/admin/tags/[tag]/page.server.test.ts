@@ -69,8 +69,10 @@ function details(
 			validVisits,
 			invalidVisits
 		}));
+	const lastDay = Object.keys(counts).sort().at(-1);
 	return {
-		version: 4,
+		version: 5,
+		lastActivityAt: lastDay ? `${lastDay}T10:00:00.000Z` : null,
 		scope: { kind: 'link', domain, path },
 		period,
 		daily,
@@ -121,7 +123,7 @@ test('projects complete tag traffic and globally distinct member rows without le
 		retentionMonths: 3,
 		collectionEnabled: true,
 		available: true,
-		asOf: Date.parse(period.asOf),
+		lastActivityAt: Date.parse(firstDetails.lastActivityAt!),
 		linkCount: 2,
 		timeframes: ['7d', '30d', 'all'],
 		countsByTimeframe: {
@@ -212,6 +214,7 @@ test('current membership reassigns unchanged prepared history without tag-specif
 		{ domain: secondDomain, path: '/docs' }
 	]);
 	expect(data.linkCount).toBe(1);
+	expect(data.lastActivityAt).toBe(Date.parse(secondDetails.lastActivityAt!));
 	expect(data.countsByTimeframe.all).toEqual({ validVisits: 9, invalidVisits: 4 });
 	expect(data.links.map(({ domain, path }) => ({ domain, path }))).toEqual([
 		{ domain: secondDomain, path: '/docs' }
@@ -226,6 +229,7 @@ test('uses the already decoded literal parameter without decoding percent escape
 	});
 	const data = await load(request('%2F'));
 	expect(data.tag).toBe('%2F');
+	expect(data.lastActivityAt).toBeNull();
 	expect(data.countsByTimeframe.all).toEqual({ validVisits: 0, invalidVisits: 0 });
 	expect(data.acceptedLanguageVisitsByTimeframe).toEqual({ '7d': [], '30d': [], all: [] });
 	expect(data.links[0]?.href).toBe('/admin/domains/go.example.test/links/a%252Fb');
@@ -240,7 +244,7 @@ test('unavailable reports preserve all current members but expose no partial tra
 	vi.mocked(readLinkDetails).mockResolvedValue(null);
 	const data = await load(request());
 	expect(data.available).toBe(false);
-	expect(data.asOf).toBeNull();
+	expect(data.lastActivityAt).toBeNull();
 	expect(data.countsByTimeframe).toEqual({});
 	expect(data.acceptedLanguageVisitsByTimeframe).toEqual({});
 	expect(data.browserVisitsByTimeframe).toEqual({});
@@ -259,7 +263,7 @@ test('zero retention skips the report reader and keeps tag inventory without tra
 	expect(readLinkDetails).not.toHaveBeenCalled();
 	expect(data.collectionEnabled).toBe(false);
 	expect(data.available).toBe(false);
-	expect(data.asOf).toBeNull();
+	expect(data.lastActivityAt).toBeNull();
 	expect(data.timeframes).toEqual([]);
 	expect(data.countsByTimeframe).toEqual({});
 	expect(data.acceptedLanguageVisitsByTimeframe).toEqual({});

@@ -1,20 +1,20 @@
 import { randomInt } from 'node:crypto';
 import type { OpenWorkflow } from 'openworkflow';
 import type { WorkerContext } from '../services/context.js';
-import { prepareVisitReports } from '../services/prepare-visit-reports.js';
-import { refreshVisitReports, type ReportRefreshInput } from './specs.js';
+import { maintainVisits } from '../services/maintain-visits.js';
+import { visitMaintenance, type VisitMaintenanceInput } from './specs.js';
 
 const MAX_JITTER_SECONDS = 60;
 
-export interface ReportStep {
+export interface VisitMaintenanceStep {
 	run<T>(config: { name: string }, fn: () => Promise<T>): Promise<T>;
 	sleep(name: string, duration: `${number}s`): Promise<void>;
 }
 
-export async function runReportRefresh(
+export async function runVisitMaintenance(
 	context: WorkerContext,
-	input: ReportRefreshInput,
-	step: ReportStep
+	input: VisitMaintenanceInput,
+	step: VisitMaintenanceStep
 ): Promise<'completed'> {
 	if (input.scheduled) {
 		if (context.config.analytics.retention_months === 0) return 'completed';
@@ -22,19 +22,19 @@ export async function runReportRefresh(
 		const duration: `${number}s` = `${seconds}s`;
 		await step.sleep('retention-jitter', duration);
 	}
-	function prepare(): Promise<void> {
-		return prepareVisitReports(context);
+	function maintain(): Promise<void> {
+		return maintainVisits(context);
 	}
 	// Preserve the durable step identity used by already-queued maintenance runs.
-	await step.run({ name: 'retain-visits' }, prepare);
+	await step.run({ name: 'retain-visits' }, maintain);
 	return 'completed';
 }
 
-export function registerReportWorkflow(engine: OpenWorkflow, context: WorkerContext): void {
-	function execute({ input, step }: { input: ReportRefreshInput; step: ReportStep }) {
-		return runReportRefresh(context, input, step);
+export function registerVisitMaintenance(engine: OpenWorkflow, context: WorkerContext): void {
+	function execute({ input, step }: { input: VisitMaintenanceInput; step: VisitMaintenanceStep }) {
+		return runVisitMaintenance(context, input, step);
 	}
-	engine.implementWorkflow(refreshVisitReports, execute);
+	engine.implementWorkflow(visitMaintenance, execute);
 }
 
 async function chooseJitter(): Promise<number> {

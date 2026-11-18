@@ -42,7 +42,8 @@ const rootBrowserOsCounts = [
 	{ day: period.from.slice(0, 10), name: 'Other', validVisits: 7, invalidVisits: 0 }
 ];
 const rootDetails: VisitDetails = {
-	version: 4,
+	version: 5,
+	lastActivityAt: `${period.from.slice(0, 10)}T10:00:00.000Z`,
 	period,
 	scope: { kind: 'link', domain, path: '/' },
 	daily: visitDays(period).map((day, index) => ({
@@ -73,6 +74,7 @@ test('supports historical root traffic without a configured root and preserves u
 		fallback,
 		fallbackSource: 'domain'
 	});
+	expect(data.lastActivityAt).toBe(Date.parse(rootDetails.lastActivityAt!));
 	expect(data.countsByTimeframe.all?.validVisits).toBe(7);
 	expect(data.browserVisitsByTimeframe).toEqual({
 		'7d': [],

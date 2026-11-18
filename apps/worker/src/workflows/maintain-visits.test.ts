@@ -1,11 +1,11 @@
 import { loadConfig } from '@goto/config';
 import { afterEach, expect, test, vi } from 'vitest';
 import type { WorkerContext } from '../services/context.js';
-import { prepareVisitReports } from '../services/prepare-visit-reports.js';
-import { runReportRefresh, type ReportStep } from './refresh-visit-reports.js';
+import { maintainVisits } from '../services/maintain-visits.js';
+import { runVisitMaintenance, type VisitMaintenanceStep } from './maintain-visits.js';
 
-vi.mock('../services/prepare-visit-reports.js', () => ({
-	prepareVisitReports: vi.fn(async () => {})
+vi.mock('../services/maintain-visits.js', () => ({
+	maintainVisits: vi.fn(async () => {})
 }));
 afterEach(() => vi.clearAllMocks());
 
@@ -16,7 +16,6 @@ function context(): WorkerContext {
 	);
 	return {
 		config: prepared.configuration,
-		domains: prepared.domains,
 		db: {} as WorkerContext['db']
 	};
 }
@@ -25,7 +24,7 @@ function steps() {
 	const sleep = vi
 		.fn<(name: string, duration: string) => Promise<void>>()
 		.mockResolvedValue(undefined);
-	const step: ReportStep = {
+	const step: VisitMaintenanceStep = {
 		async run(config, fn) {
 			names.push(config.name);
 			return fn();
@@ -35,10 +34,10 @@ function steps() {
 	return { step, names, sleep };
 }
 
-test('hourly refresh uses durable jitter; startup/manual refreshes do not', async () => {
+test('scheduled maintenance keeps durable jitter while immediate cleanup is not delayed', async () => {
 	const ctx = context();
 	const { step, names, sleep } = steps();
-	await runReportRefresh(ctx, { scheduled: true }, step);
+	expect(await runVisitMaintenance(ctx, { scheduled: true }, step)).toBe('completed');
 	expect(names).toEqual(['choose-jitter', 'retain-visits']);
 	expect(sleep).toHaveBeenCalledOnce();
 	const [name, duration] = sleep.mock.calls[0]!;
@@ -46,21 +45,22 @@ test('hourly refresh uses durable jitter; startup/manual refreshes do not', asyn
 	expect(name).toBe('retention-jitter');
 	expect(seconds).toBeGreaterThanOrEqual(1);
 	expect(seconds).toBeLessThanOrEqual(60);
-	expect(prepareVisitReports).toHaveBeenCalledExactlyOnceWith(ctx);
+	expect(maintainVisits).toHaveBeenCalledExactlyOnceWith(ctx);
 	vi.clearAllMocks();
 	names.length = 0;
-	await runReportRefresh(ctx, {}, step);
+	ctx.config.analytics.retention_months = 0;
+	expect(await runVisitMaintenance(ctx, {}, step)).toBe('completed');
 	expect(names).toEqual(['retain-visits']);
 	expect(sleep).not.toHaveBeenCalled();
-	expect(prepareVisitReports).toHaveBeenCalledExactlyOnceWith(ctx);
+	expect(maintainVisits).toHaveBeenCalledExactlyOnceWith(ctx);
 });
 
-test('old scheduled work does nothing when the service starts disabled', async () => {
+test('queued scheduled work does nothing when the service starts with zero retention', async () => {
 	const ctx = context();
 	ctx.config.analytics.retention_months = 0;
 	const { step, names, sleep } = steps();
-	await runReportRefresh(ctx, { scheduled: true }, step);
+	expect(await runVisitMaintenance(ctx, { scheduled: true }, step)).toBe('completed');
 	expect(names).toEqual([]);
 	expect(sleep).not.toHaveBeenCalled();
-	expect(prepareVisitReports).not.toHaveBeenCalled();
+	expect(maintainVisits).not.toHaveBeenCalled();
 });

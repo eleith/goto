@@ -1,13 +1,12 @@
 import packageJson from '../../../../../../package.json' with { type: 'json' };
-import { createVisitPeriod, visitDays, type VisitDetails } from '@goto/analytics';
 import { loadConfig } from '@goto/config';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { prepareSnapshot } from '#lib/server/snapshot.js';
-import { readOverviewDetails } from '#lib/server/visits/reports.js';
+import { readLastActivity } from '#lib/server/visits/reports.js';
 import { isWorkerReachable } from '#lib/server/worker-health.js';
 import { actions, load } from './+page.server.js';
 
-vi.mock('#lib/server/visits/reports.js', () => ({ readOverviewDetails: vi.fn() }));
+vi.mock('#lib/server/visits/reports.js', () => ({ readLastActivity: vi.fn() }));
 vi.mock('#lib/server/worker-health.js', () => ({ isWorkerReachable: vi.fn() }));
 beforeEach(() => {
 	vi.resetAllMocks();
@@ -39,22 +38,9 @@ function request(overrides: Record<string, unknown> = {}) {
 	} as Parameters<typeof load>[0];
 }
 
-function emptyOverview(): VisitDetails {
-	const period = createVisitPeriod(3, Date.parse('2026-06-15T12:34:56.000Z'));
-	return {
-		version: 4,
-		scope: { kind: 'overview' },
-		period,
-		daily: visitDays(period).map((day) => ({ ...day, validVisits: 0, invalidVisits: 0 })),
-		browsers: [],
-		operatingSystems: [],
-		acceptedLanguages: []
-	};
-}
-
-test('returns only allowlisted settings and the prepared report cutoff, without probing', async () => {
-	const overview = emptyOverview();
-	vi.mocked(readOverviewDetails).mockResolvedValue({ overview, domains: [] });
+test('returns only allowlisted settings and actual last data activity, without probing', async () => {
+	const lastActivityAt = '2026-06-01T12:34:56.000Z';
+	vi.mocked(readLastActivity).mockResolvedValue({ available: true, lastActivityAt });
 	const event = request();
 	const data = await load(event);
 
@@ -63,8 +49,8 @@ test('returns only allowlisted settings and the prepared report cutoff, without 
 		appUrl: 'https://admin.example.test',
 		authMode: 'credentials',
 		retentionMonths: 3,
-		reportDataAsOf: overview.period.asOf,
-		reportDelayed: false,
+		lastDataActivity: lastActivityAt,
+		activityAvailable: true,
 		redirectStatusCode: 302,
 		forwardQuery: false,
 		caseInsensitive: true,
@@ -74,15 +60,12 @@ test('returns only allowlisted settings and the prepared report cutoff, without 
 		workerUrl: 'http://worker.example.test:9000/base',
 		tags: []
 	});
-	expect(readOverviewDetails).toHaveBeenCalledExactlyOnceWith(
-		event.locals.snapshot.configuration,
-		[]
-	);
+	expect(readLastActivity).toHaveBeenCalledExactlyOnceWith(event.locals.snapshot.configuration);
 	expect(isWorkerReachable).not.toHaveBeenCalled();
 });
 
 test('projects OIDC mode and configured redirect defaults without exposing the provider settings', async () => {
-	vi.mocked(readOverviewDetails).mockResolvedValue(null);
+	vi.mocked(readLastActivity).mockResolvedValue({ available: true, lastActivityAt: null });
 	const data = await load(
 		request({
 			auth: {
@@ -109,8 +92,8 @@ test('projects OIDC mode and configured redirect defaults without exposing the p
 		appUrl: 'https://admin.example.test',
 		authMode: 'oidc',
 		retentionMonths: 3,
-		reportDataAsOf: null,
-		reportDelayed: false,
+		lastDataActivity: null,
+		activityAvailable: true,
 		redirectStatusCode: 307,
 		forwardQuery: true,
 		caseInsensitive: false,
@@ -120,16 +103,6 @@ test('projects OIDC mode and configured redirect defaults without exposing the p
 		workerUrl: 'http://worker.example.test:9000/base',
 		tags: []
 	});
-});
-
-test('marks reports delayed only after the hourly refresh grace period', async () => {
-	const overview = emptyOverview();
-	vi.mocked(readOverviewDetails).mockResolvedValue({ overview, domains: [] });
-	const graceDeadline = Date.parse(overview.period.asOf) + 75 * 60 * 1000;
-	vi.setSystemTime(new Date(graceDeadline));
-	expect((await load(request())).reportDelayed).toBe(false);
-	vi.setSystemTime(new Date(graceDeadline + 1));
-	expect((await load(request())).reportDelayed).toBe(true);
 });
 
 const taggedDomains = {
@@ -154,30 +127,30 @@ const taggedDomains = {
 	}
 };
 
-test('zero retention skips the report read and keeps all current tag labels available', async () => {
+test('zero retention skips the activity read and keeps all current tag labels available', async () => {
 	const data = await load(request({ analytics: { retention_months: 0 }, domains: taggedDomains }));
 	expect(data.tags).toEqual([' Work ', 'Old', 'Work', 'Work/100%é', 'work']);
 	expect(data.retentionMonths).toBe(0);
-	expect(data.reportDataAsOf).toBeNull();
-	expect(data.reportDelayed).toBe(false);
+	expect(data.lastDataActivity).toBeNull();
+	expect(data.activityAvailable).toBe(true);
 	expect(data.appUrl).toBe('https://admin.example.test');
-	expect(readOverviewDetails).not.toHaveBeenCalled();
+	expect(readLastActivity).not.toHaveBeenCalled();
 	expect(isWorkerReachable).not.toHaveBeenCalled();
 });
 
-test('unavailable prepared analytics do not prevent viewing settings', async () => {
-	vi.mocked(readOverviewDetails).mockResolvedValue(null);
+test('unavailable analytics storage does not prevent viewing settings', async () => {
+	vi.mocked(readLastActivity).mockResolvedValue({ available: false, lastActivityAt: null });
 	const data = await load(request({ domains: taggedDomains }));
 	expect(data.tags).toEqual([' Work ', 'Old', 'Work', 'Work/100%é', 'work']);
 	expect(data.retentionMonths).toBe(3);
-	expect(data.reportDataAsOf).toBeNull();
-	expect(data.reportDelayed).toBe(false);
+	expect(data.lastDataActivity).toBeNull();
+	expect(data.activityAvailable).toBe(false);
 	expect(data.workerUrl).toBe('http://worker.example.test:9000/base');
 	expect(isWorkerReachable).not.toHaveBeenCalled();
 });
 
 test('manual worker check uses the current configured address, ignoring submitted targets', async () => {
-	vi.mocked(readOverviewDetails).mockResolvedValue(null);
+	vi.mocked(readLastActivity).mockResolvedValue({ available: true, lastActivityAt: null });
 	await load(request());
 	const event = request({
 		url: { app: 'https://admin.example.test', worker: 'http://current-worker.example.test:9001' }
@@ -200,5 +173,5 @@ test('an unreachable worker returns only the negative result and completion time
 	const result = await actions.checkWorker(request() as Parameters<typeof actions.checkWorker>[0]);
 	expect(result).toEqual({ workerCheck: { reachable: false, checkedAt: expect.any(String) } });
 	expect(new Date(result.workerCheck.checkedAt).toISOString()).toBe(result.workerCheck.checkedAt);
-	expect(readOverviewDetails).not.toHaveBeenCalled();
+	expect(readLastActivity).not.toHaveBeenCalled();
 });

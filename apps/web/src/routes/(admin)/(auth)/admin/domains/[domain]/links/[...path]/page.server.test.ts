@@ -82,7 +82,8 @@ const browserOsCounts = Object.entries(counts).map(([day, [validVisits, invalidV
 	invalidVisits
 }));
 const details: VisitDetails = {
-	version: 4,
+	version: 5,
+	lastActivityAt: '2026-06-15T10:00:00.000Z',
 	scope: { kind: 'link', domain, path: '/docs' },
 	period,
 	daily: visitDays(period).map((day) => {
@@ -112,7 +113,7 @@ test('projects only requested link settings, series and compact window counts an
 		retentionMonths: 3,
 		collectionEnabled: true,
 		available: true,
-		asOf: Date.parse(period.asOf),
+		lastActivityAt: Date.parse(details.lastActivityAt!),
 		timeframes: ['7d', '30d', 'all'],
 		countsByTimeframe: {
 			'7d': { validVisits: 3, invalidVisits: 1 },
@@ -196,7 +197,7 @@ test('rejects unknown scopes before reading and keeps unavailable counts absent'
 	expect(data.browserVisitsByTimeframe).toEqual({});
 	expect(data.operatingSystemVisitsByTimeframe).toEqual({});
 	expect(data.chart).toBeNull();
-	expect(data.asOf).toBeNull();
+	expect(data.lastActivityAt).toBeNull();
 	expect(data.countsByTimeframe).toEqual({});
 	expect(data.acceptedLanguageVisitsByTimeframe).toEqual({});
 	expect(data).toMatchObject(linkMetadata);

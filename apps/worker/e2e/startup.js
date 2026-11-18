@@ -45,6 +45,19 @@ function visitCount(directory) {
 	}
 }
 
+function dailyVisitCount(directory) {
+	const db = new DatabaseSync(join(directory, 'data/goto.sqlite'), { readOnly: true });
+	try {
+		return db
+			.prepare(
+				"SELECT coalesce(sum(valid_visits + invalid_visits), 0) AS count FROM visit_daily_statistics WHERE scope_kind = 'overview'"
+			)
+			.get().count;
+	} finally {
+		db.close();
+	}
+}
+
 async function saveConfiguration(path, configuration) {
 	await writeFile(`${path}.next`, JSON.stringify(configuration));
 	await rename(`${path}.next`, path);
@@ -71,7 +84,11 @@ async function checkStartup(mode, port = 0) {
 				url: { app: 'http://admin.example.test' },
 				auth: { credentials: { username: 'smoke', password: 'private-worker-smoke-password' } },
 				analytics: { retention_months: mode === 'retention-change' ? 9 : 0 },
-				domains: {}
+				domains: {
+					'go.example.test': {
+						links: { '/docs': { url: 'https://example.test/docs', tags: [' work '] } }
+					}
+				}
 			})
 		);
 		if (mode === 'retention-change') await seedHistory(directory);
@@ -149,10 +166,17 @@ async function checkStartup(mode, port = 0) {
 			try {
 				const runs = database.prepare('SELECT count(*) AS count FROM workflow_runs').get().count;
 				if (mode === 'retention-change') assert(runs >= 1);
-				else assert.equal(runs, 0);
+				else assert.equal(runs, 0, 'Empty zero policy must not request analytics work');
+				const schedule = database
+					.prepare('SELECT next_run_at FROM workflow_schedules WHERE id = ?')
+					.get('goto:retain-visits');
+				assert(schedule, 'Existing hourly maintenance identity must be registered');
+				if (mode === 'retention-change') assert(schedule.next_run_at);
+				else assert.equal(schedule.next_run_at, null, 'Zero policy must pause analytics');
 			} finally {
 				database.close();
 			}
+			assert.equal(dailyVisitCount(directory), mode === 'retention-change' ? 2 : 0);
 			if (mode === 'storage-change') {
 				const path = join(directory, 'config/goto.yaml');
 				const configuration = JSON.parse(await readFile(path, 'utf8'));
@@ -168,14 +192,17 @@ async function checkStartup(mode, port = 0) {
 				const configuration = JSON.parse(await readFile(path, 'utf8'));
 				configuration.analytics.retention_months = 3;
 				await saveConfiguration(path, configuration);
-				await waitUntil(() => visitCount(directory) === 1, stopped.signal);
+				await waitUntil(
+					() => visitCount(directory) === 1 && dailyVisitCount(directory) === 1,
+					stopped.signal
+				);
 				configuration.analytics.retention_months = 0;
 				await saveConfiguration(path, configuration);
 				await waitUntil(
 					() => output.includes('Analytics collection change requires coordinated restart'),
 					stopped.signal
 				);
-				assert.equal(visitCount(directory), 1, 'Live collection disable must not purge history');
+				assert.equal(visitCount(directory), 1, 'Live collection disable must not remove history');
 				const stillRunning = await fetch(`http://127.0.0.1:${ready.port}/healthz`, {
 					signal: AbortSignal.timeout(2000)
 				});
@@ -225,5 +252,5 @@ try {
 	await new Promise((resolve) => occupied.close(resolve));
 }
 console.log(
-	'Compiled/source startup, config restart, idle zero policy, live positive retention, restart-only collection, health, partial-startup cleanup, and shutdown passed'
+	'Compiled/source startup, config restart, paused empty zero policy, incremental daily preparation, live positive retention, restart-only collection, health, partial-startup cleanup, and shutdown passed'
 );

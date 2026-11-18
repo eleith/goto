@@ -60,15 +60,11 @@
 		{/if}
 	</section>
 	<section class="admin-info health-card" aria-labelledby="analytics-heading">
-		{#if data.retentionMonths !== 0 && (data.reportDelayed || data.reportDataAsOf === null)}
+		{#if data.retentionMonths !== 0 && !data.activityAvailable}
 			<aside class="health-result health-result-error" role="alert">
 				<span class="health-result-icon" aria-hidden="true"><IconWarningCircle /></span>
 				<div>
-					<p class="health-result-title">
-						{data.reportDelayed
-							? 'Analytics data is delayed.'
-							: 'Analytics reports are unavailable.'}
-					</p>
+					<p class="health-result-title">Analytics activity is unavailable.</p>
 				</div>
 			</aside>
 		{/if}
@@ -79,14 +75,16 @@
 				<dd>{data.retentionMonths === 0 ? 'Disabled' : 'Enabled'}</dd>
 				<dt>Retention</dt>
 				<dd>{data.retentionMonths === 0 ? 'Disabled' : `${data.retentionMonths} months`}</dd>
-				<dt>Report data as of</dt>
+				<dt>Last data activity</dt>
 				<dd>
 					{#if data.retentionMonths === 0}
 						Disabled
-					{:else if data.reportDataAsOf}
-						<time datetime={data.reportDataAsOf}>{formatUtc(data.reportDataAsOf)}</time>
-					{:else}
+					{:else if !data.activityAvailable}
 						Unavailable
+					{:else if data.lastDataActivity}
+						<time datetime={data.lastDataActivity}>{formatUtc(data.lastDataActivity)} UTC</time>
+					{:else}
+						No recorded activity
 					{/if}
 				</dd>
 			</dl>
@@ -108,7 +106,7 @@
 					</p>
 					<p class="health-result-time">
 						Checked <time datetime={form.workerCheck.checkedAt}
-							>{formatUtc(form.workerCheck.checkedAt)}</time
+							>{formatUtc(form.workerCheck.checkedAt)} UTC</time
 						>
 					</p>
 				</div>

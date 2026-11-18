@@ -1,19 +1,17 @@
 import packageJson from '../../../../../../package.json' with { type: 'json' };
-import { readOverviewDetails } from '#lib/server/visits/reports.js';
+import { readLastActivity } from '#lib/server/visits/reports.js';
 import { currentTags } from '#lib/server/tags/inventory.js';
 import { isWorkerReachable } from '#lib/server/worker-health.js';
 import type { Actions, PageServerLoad } from './$types';
-
-const MAX_REPORT_AGE_MS = 75 * 60 * 1000;
 
 export const load = (async ({ locals }) => {
 	const snapshot = locals.snapshot;
 	const configuration = snapshot.configuration;
 	const retentionMonths = configuration.analytics.retention_months;
-	const report = retentionMonths === 0 ? null : await readOverviewDetails(configuration, []);
-	const reportDataAsOf = report?.overview.period.asOf ?? null;
-	const reportDelayed =
-		reportDataAsOf !== null && Date.now() - Date.parse(reportDataAsOf) > MAX_REPORT_AGE_MS;
+	const activity =
+		retentionMonths === 0
+			? { available: true, lastActivityAt: null }
+			: await readLastActivity(configuration);
 	const authMode = configuration.auth.oidc ? ('oidc' as const) : ('credentials' as const);
 
 	return {
@@ -21,8 +19,8 @@ export const load = (async ({ locals }) => {
 		appUrl: configuration.url.app,
 		authMode,
 		retentionMonths,
-		reportDataAsOf,
-		reportDelayed,
+		lastDataActivity: activity.lastActivityAt,
+		activityAvailable: activity.available,
 		redirectStatusCode: configuration.link_defaults.status_code,
 		forwardQuery: configuration.link_defaults.forward_query,
 		caseInsensitive: configuration.link_defaults.case_insensitive,

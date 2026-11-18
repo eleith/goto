@@ -5,14 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { dirname, join } from 'node:path';
 import { Migrator, sql, type Migration } from 'kysely';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import {
-	insertVisit,
-	openDb,
-	pruneVisits,
-	purgeVisits,
-	runMigrations,
-	type ClassifiedVisit
-} from './index.js';
+import { insertVisit, openDb, runMigrations, type ClassifiedVisit } from './index.js';
 import { migrations } from './migrations/index.js';
 
 let directory: string;
@@ -37,7 +30,7 @@ const visit: ClassifiedVisit = {
 	os: 'Linux'
 };
 
-test('opens a real WAL database and applies versioned migrations once', async () => {
+test('opens a real WAL database and initializes the current schema once', async () => {
 	const db = await openDb(join(directory, 'data/visits.sqlite'));
 	try {
 		expect(
@@ -49,23 +42,28 @@ test('opens a real WAL database and applies versioned migrations once', async ()
 		expect((await sql<{ timeout: number }>`PRAGMA busy_timeout`.execute(db)).rows[0]?.timeout).toBe(
 			5000
 		);
-		expect(await runMigrations(db)).toEqual([
-			'0001_visits',
-			'0002_visit_classification',
-			'0003_visit_retention',
-			'0004_remove_visit_collection',
-			'0005_visit_outcome',
-			'0006_visit_reports',
-			'0007_analytics_reports'
-		]);
+		expect(await runMigrations(db)).toEqual(['0001_initial']);
 		const tables = await db.introspection.getTables();
 		const names = tables.map((table) => table.name);
-		expect(names).not.toContain('visit_collection');
-		expect(names).not.toContain('visit_reports');
-		expect(names).toContain('analytics_reports');
+		expect(names).toEqual(expect.arrayContaining(['visits', 'visit_daily_statistics']));
+		expect(names).toHaveLength(2);
 		expect(
-			tables.find((table) => table.name === 'analytics_reports')?.columns.map(({ name }) => name)
-		).toEqual(['id', 'scope_kind', 'domain', 'path', 'summary_json', 'details_json']);
+			tables
+				.find((table) => table.name === 'visit_daily_statistics')
+				?.columns.map(({ name }) => name)
+		).toEqual([
+			'id',
+			'scope_kind',
+			'domain',
+			'path',
+			'day',
+			'valid_visits',
+			'invalid_visits',
+			'last_visit_at',
+			'browsers_json',
+			'operating_systems_json',
+			'accepted_languages_json'
+		]);
 		expect(await runMigrations(db)).toEqual([]);
 	} finally {
 		await db.destroy();
@@ -97,12 +95,13 @@ test('persists request-time outcomes for the same logical path on different doma
 	try {
 		const rows = await reader.selectFrom('visits').selectAll().orderBy('id').execute();
 		expect(rows).toEqual([
-			{ ...visit, id: ids[0] },
+			{ ...visit, id: ids[0], processed: 0 },
 			{
 				...visit,
 				domain: 'tiny.example.test',
 				outcome: 'invalid',
 				id: ids[1],
+				processed: 0,
 				user_agent: null,
 				accept_language: null,
 				browser: 'Other',
@@ -115,50 +114,13 @@ test('persists request-time outcomes for the same logical path on different doma
 	}
 });
 
-test('upgrades legacy visits and discards only the obsolete report cache', async () => {
-	const db = await openDb(join(directory, 'legacy.sqlite'));
-	try {
-		const migrator = new Migrator({
-			db,
-			provider: {
-				async getMigrations() {
-					return migrations;
-				}
-			}
-		});
-		const { error } = await migrator.migrateTo('0001_visits');
-		if (error) throw error;
-		await sql`
-			INSERT INTO visits (domain, path, visited_at, ip, user_agent, accept_language)
-			VALUES (${visit.domain}, ${visit.path}, ${visit.visited_at}, ${visit.ip}, ${visit.user_agent}, ${visit.accept_language})
-		`.execute(db);
-
-		const upgrade = await migrator.migrateTo('0006_visit_reports');
-		if (upgrade.error) throw upgrade.error;
-		await sql`INSERT INTO visit_reports (key, data) VALUES ('overview', 'obsolete cache')`.execute(
-			db
-		);
-
-		expect(await runMigrations(db)).toEqual(['0007_analytics_reports']);
-		expect(await db.selectFrom('analytics_reports').selectAll().execute()).toEqual([]);
-		expect(await db.selectFrom('visits').selectAll().executeTakeFirstOrThrow()).toEqual({
-			...visit,
-			id: 1,
-			browser: 'Other',
-			os: 'Other'
-		});
-	} finally {
-		await db.destroy();
-	}
-});
-
-test('a failed migration rolls back schema and bookkeeping so startup can retry', async () => {
+test('failed initialization rolls back schema and bookkeeping so startup can retry', async () => {
 	const db = await openDb(join(directory, 'failed-migration.sqlite'));
 	try {
-		const failure = new Error('Simulated failure after classification DDL');
-		const failedClassification: Migration = {
+		const failure = new Error('Simulated failure after schema creation');
+		const failedInitialization: Migration = {
 			async up(transaction) {
-				await migrations['0002_visit_classification'].up(transaction);
+				await migrations['0001_initial'].up(transaction);
 				throw failure;
 			}
 		};
@@ -166,49 +128,14 @@ test('a failed migration rolls back schema and bookkeeping so startup can retry'
 			db,
 			provider: {
 				async getMigrations() {
-					return { ...migrations, '0002_visit_classification': failedClassification };
+					return { '0001_initial': failedInitialization };
 				}
 			}
 		});
 
 		expect((await migrator.migrateToLatest()).error).toBe(failure);
-		expect(await runMigrations(db)).toEqual([
-			'0001_visits',
-			'0002_visit_classification',
-			'0003_visit_retention',
-			'0004_remove_visit_collection',
-			'0005_visit_outcome',
-			'0006_visit_reports',
-			'0007_analytics_reports'
-		]);
+		expect(await runMigrations(db)).toEqual(['0001_initial']);
 		expect(await runMigrations(db)).toEqual([]);
-	} finally {
-		await db.destroy();
-	}
-});
-
-test('prunes expired visits in bounded passes and zero-retention purge removes the remainder', async () => {
-	const db = await openDb(join(directory, 'retention.sqlite'));
-	try {
-		await runMigrations(db);
-		const cutoff = visit.visited_at;
-		await db
-			.insertInto('visits')
-			.values([
-				...Array.from({ length: 1001 }, () => ({ ...visit, visited_at: cutoff - 1 })),
-				{ ...visit, visited_at: cutoff },
-				{ ...visit, visited_at: cutoff + 1 }
-			])
-			.execute();
-
-		expect(await pruneVisits(db, cutoff)).toBe(true);
-		expect(await db.selectFrom('visits').select('id').execute()).toHaveLength(3);
-		expect(await pruneVisits(db, cutoff)).toBe(false);
-		expect(
-			await db.selectFrom('visits').select('visited_at').orderBy('visited_at').execute()
-		).toEqual([{ visited_at: cutoff }, { visited_at: cutoff + 1 }]);
-		await purgeVisits(db);
-		expect(await db.selectFrom('visits').selectAll().execute()).toEqual([]);
 	} finally {
 		await db.destroy();
 	}

@@ -1,25 +1,25 @@
 import {
 	createVisitPeriod,
-	encodeVisitReports,
-	visitDays,
-	zeroVisitTotals,
-	type PreparedVisitReport,
-	type ReportScope,
-	type VisitSummary,
-	type VisitTotals
+	emptyDailyStatistics,
+	projectVisitDetails,
+	type DailyVisitStatistics,
+	type ReportScope
 } from '@goto/analytics';
 import { DatabaseSync } from 'node:sqlite';
-import { sql } from 'kysely';
+import { sql, type Kysely } from 'kysely';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { openDb, runMigrations } from '../index.js';
+import type { Database } from '../types.js';
 import {
-	clearVisitReports,
-	publishVisitReports,
+	addDailyVisitStatistics,
+	subtractDailyVisitStatistics,
+	clearDailyVisitStatistics,
+	deleteExpiredDailyStatistics,
 	readVisitDetails,
 	readOverviewVisitDetails,
 	readDomainVisitDetails,
 	readLinkVisitDetails,
-	readVisitSummary
+	readLastVisitActivity
 } from './storage.js';
 
 let db: Awaited<ReturnType<typeof openDb>>;
@@ -27,7 +27,7 @@ const domain = 'go.example.test';
 const overviewScope = { kind: 'overview' } as const;
 const domainScope = { kind: 'domain', domain } as const;
 const rootScope = { kind: 'link', domain, path: '/' } as const;
-const asOf = Date.UTC(2026, 3, 1);
+const period = createVisitPeriod(3, Date.UTC(2026, 6, 1, 6));
 
 beforeEach(async () => {
 	db = await openDb(':memory:');
@@ -38,488 +38,344 @@ afterEach(async () => {
 	await db.destroy();
 });
 
-function preparedReport(
+function daily(
 	scope: ReportScope,
-	cutoff = asOf,
-	totals: VisitTotals = zeroVisitTotals(),
-	retentionMonths: 3 | 9 | 12 = 3
-): PreparedVisitReport {
-	const period = createVisitPeriod(retentionMonths, cutoff);
-	let summary: VisitSummary;
-	if (scope.kind === 'overview') {
-		summary = { version: 1, scope, period, totals, base: zeroVisitTotals(), domains: [] };
-	} else if (scope.kind === 'domain') {
-		summary = { version: 1, scope, period, totals, base: zeroVisitTotals(), links: [] };
-	} else {
-		summary = { version: 1, scope, period, totals };
-	}
-	const populated = totals.validVisits + totals.invalidVisits > 0;
+	validVisits = 1,
+	invalidVisits = 0,
+	hour = 10
+): DailyVisitStatistics {
+	const counts = { validVisits, invalidVisits };
 	return {
-		summary,
-		details: {
-			version: 4,
-			scope,
-			period,
-			daily: visitDays(period).map((day, index) => ({
-				...day,
-				...(index === 0 ? totals : zeroVisitTotals())
-			})),
-			browsers: populated ? [{ day: period.from.slice(0, 10), name: 'Firefox', ...totals }] : [],
-			operatingSystems: populated
-				? [{ day: period.from.slice(0, 10), name: 'Linux', ...totals }]
-				: [],
-			acceptedLanguages: populated
-				? [{ day: period.from.slice(0, 10), name: 'Other', ...totals }]
-				: []
-		}
+		...emptyDailyStatistics(scope, '2026-04-01'),
+		...counts,
+		lastVisitAt: Date.UTC(2026, 3, 1, hour),
+		browsers: [{ name: 'Firefox', ...counts }],
+		operatingSystems: [{ name: 'Linux', ...counts }],
+		acceptedLanguages: [
+			{ name: 'en', ...counts },
+			{ name: 'fr', ...counts }
+		]
 	};
 }
 
-test('reads summary and details for each explicit SQL scope including root', async () => {
-	const reports = [
-		preparedReport(overviewScope, asOf, { validVisits: 2, invalidVisits: 1 }),
-		preparedReport(domainScope, asOf, { validVisits: 1, invalidVisits: 1 }),
-		preparedReport(rootScope, asOf, { validVisits: 2, invalidVisits: 0 })
-	];
-	await publishVisitReports(db, encodeVisitReports(reports));
+async function writer<T>(work: (transaction: Kysely<Database>) => Promise<T>): Promise<T> {
+	return db.transaction().execute(async (transaction) => {
+		await transaction
+			.updateTable('visits')
+			.set({ processed: sql`processed` })
+			.where('id', '=', -1)
+			.execute();
+		return work(transaction);
+	});
+}
 
-	for (const report of reports) {
-		expect(await readVisitSummary(db, report.summary.scope)).toEqual(report.summary);
-		expect(await readVisitDetails(db, report.summary.scope)).toEqual(report.details);
+async function add(...deltas: DailyVisitStatistics[]): Promise<void> {
+	await writer((transaction) => addDailyVisitStatistics(transaction, deltas));
+}
+
+test('native daily UPSERT adds SQL counters and day-only JSON; oldest-first partial expiry keeps event activity', async () => {
+	const early = daily(rootScope, 2, 0, 1);
+	const later = daily(rootScope, 1, 0, 10);
+	const nextDay = {
+		...daily(rootScope, 4),
+		day: '2026-04-02',
+		lastVisitAt: Date.UTC(2026, 3, 2, 10)
+	};
+	await writer((transaction) => addDailyVisitStatistics(transaction, [early, nextDay]));
+	const untouched = await db
+		.selectFrom('visit_daily_statistics')
+		.selectAll()
+		.where('day', '=', nextDay.day)
+		.executeTakeFirstOrThrow();
+	const statements = vi.spyOn(DatabaseSync.prototype, 'prepare');
+	try {
+		await add(later);
+		expect(
+			await writer((transaction) => subtractDailyVisitStatistics(transaction, [early]))
+		).toEqual([]);
+		const upsert = statements.mock.calls.find(([query]) =>
+			/INSERT INTO visit_daily_statistics/i.test(query)
+		)?.[0];
+		expect(upsert).toMatch(/ON CONFLICT DO UPDATE/);
+		expect(upsert).toMatch(/valid_visits = visit_daily_statistics.valid_visits \+/);
+		expect(upsert).not.toContain('Firefox');
+		const subtraction = statements.mock.calls.find(([query]) =>
+			/^update "visit_daily_statistics"/i.test(query)
+		)?.[0];
+		expect(subtraction).toMatch(/valid_visits -/);
+		expect(subtraction).toMatch(/where "id" =/);
+	} finally {
+		statements.mockRestore();
 	}
+	const remaining = await db
+		.selectFrom('visit_daily_statistics')
+		.selectAll()
+		.where('day', '=', early.day)
+		.executeTakeFirstOrThrow();
+	expect(remaining).toMatchObject({
+		valid_visits: 1,
+		invalid_visits: 0,
+		last_visit_at: later.lastVisitAt
+	});
+	expect(JSON.parse(remaining.browsers_json)).toEqual(later.browsers);
+	expect(JSON.parse(remaining.accepted_languages_json)).toEqual(later.acceptedLanguages);
 	expect(
 		await db
-			.selectFrom('analytics_reports')
-			.select(['scope_kind', 'domain', 'path'])
-			.orderBy('id')
+			.selectFrom('visit_daily_statistics')
+			.selectAll()
+			.where('day', '=', nextDay.day)
+			.executeTakeFirstOrThrow()
+	).toEqual(untouched);
+	const details = await readVisitDetails(db, rootScope, period);
+	expect(details.version).toBe(5);
+	expect(details.daily[0]).toMatchObject({ partial: true, validVisits: 1, invalidVisits: 0 });
+	expect(details.lastActivityAt).toBe('2026-04-02T10:00:00.000Z');
+	await writer((transaction) => subtractDailyVisitStatistics(transaction, [later]));
+	expect(
+		await db
+			.selectFrom('visit_daily_statistics')
+			.select('id')
+			.where('day', '=', early.day)
 			.execute()
-	).toEqual([
-		{ scope_kind: 'overview', domain: null, path: null },
-		{ scope_kind: 'domain', domain, path: null },
-		{ scope_kind: 'link', domain, path: '/' }
-	]);
+	).toEqual([]);
 });
 
-test('overview details use one SQL snapshot with only current domain details and no summaries', async () => {
-	const overview = preparedReport(overviewScope, asOf, { validVisits: 8, invalidVisits: 2 });
-	const current = preparedReport(domainScope, asOf, { validVisits: 3, invalidVisits: 1 });
-	const historical = preparedReport({ kind: 'domain', domain: 'removed.example.test' });
-	await publishVisitReports(
-		db,
-		encodeVisitReports([overview, current, historical, preparedReport(rootScope)])
+test('missing or inconsistent removals report exact mismatches without changing those rows or stopping siblings', async () => {
+	const siblingScope = { kind: 'link', domain, path: '/ok' } as const;
+	await add(daily(domainScope), daily(rootScope, 2), daily(siblingScope, 3, 1));
+	const before = await db.selectFrom('visit_daily_statistics').selectAll().orderBy('id').execute();
+	const domainRow = before.find((row) => row.scope_kind === 'domain')!;
+	const rootRow = before.find((row) => row.path === '/')!;
+	const siblingRow = before.find((row) => row.path === '/ok')!;
+	const missing = daily(overviewScope);
+	const underflow = daily(domainScope, 2);
+	const overlappingLanguages = {
+		...daily(rootScope),
+		acceptedLanguages: [{ name: 'en', validVisits: 1, invalidVisits: 0 }]
+	};
+	const mismatches = await writer((transaction) =>
+		subtractDailyVisitStatistics(transaction, [
+			missing,
+			underflow,
+			overlappingLanguages,
+			daily(siblingScope, 1, 1)
+		])
 	);
-	await db.updateTable('analytics_reports').set({ summary_json: '{}' }).execute();
+	expect(mismatches).toEqual([
+		{
+			scope: overviewScope,
+			day: missing.day,
+			rowId: null,
+			reason: 'missing',
+			stored: null,
+			removing: { validVisits: 1, invalidVisits: 0 }
+		},
+		{
+			scope: domainScope,
+			day: underflow.day,
+			rowId: domainRow.id,
+			reason: 'contribution-mismatch',
+			stored: { validVisits: 1, invalidVisits: 0 },
+			removing: { validVisits: 2, invalidVisits: 0 }
+		},
+		{
+			scope: rootScope,
+			day: overlappingLanguages.day,
+			rowId: rootRow.id,
+			reason: 'contribution-mismatch',
+			stored: { validVisits: 2, invalidVisits: 0 },
+			removing: { validVisits: 1, invalidVisits: 0 }
+		}
+	]);
+	const after = await db.selectFrom('visit_daily_statistics').selectAll().orderBy('id').execute();
+	expect(after.filter((row) => row.id !== siblingRow.id)).toEqual(
+		before.filter((row) => row.id !== siblingRow.id)
+	);
+	const remaining = daily(siblingScope, 2);
+	expect(after.find((row) => row.id === siblingRow.id)).toEqual({
+		...siblingRow,
+		valid_visits: remaining.validVisits,
+		invalid_visits: remaining.invalidVisits,
+		browsers_json: JSON.stringify(remaining.browsers),
+		operating_systems_json: JSON.stringify(remaining.operatingSystems),
+		accepted_languages_json: JSON.stringify(remaining.acceptedLanguages)
+	});
+});
+
+test('expiry deletes fully expired orphan days by event time and keeps activity at the cutoff in the same day', async () => {
+	const expired = daily(overviewScope, 3, 1, 1);
+	const boundary = daily(domainScope, 2, 0, 10);
+	await add(expired, boundary);
+	expect(await db.selectFrom('visits').selectAll().execute()).toEqual([]);
+	const kept = await db
+		.selectFrom('visit_daily_statistics')
+		.selectAll()
+		.where('scope_kind', '=', 'domain')
+		.executeTakeFirstOrThrow();
+	await deleteExpiredDailyStatistics(db, boundary.lastVisitAt);
+	expect(await db.selectFrom('visit_daily_statistics').selectAll().execute()).toEqual([kept]);
+});
+
+test('daily writes and raw processing share caller rollback, with no independent commit', async () => {
 	await db
-		.updateTable('analytics_reports')
-		.set({ details_json: '{}' })
+		.insertInto('visits')
+		.values({
+			domain,
+			path: '/',
+			outcome: 'invalid',
+			visited_at: Date.UTC(2026, 3, 1, 1),
+			ip: '127.0.0.1',
+			user_agent: null,
+			accept_language: null,
+			browser: 'Firefox',
+			os: 'Linux'
+		})
+		.execute();
+	await expect(
+		writer(async (transaction) => {
+			await addDailyVisitStatistics(transaction, [daily(overviewScope), daily(rootScope)]);
+			await transaction.updateTable('visits').set({ processed: 1 }).execute();
+			throw new Error('abort visit batch');
+		})
+	).rejects.toThrow('abort visit batch');
+	expect(await db.selectFrom('visit_daily_statistics').selectAll().execute()).toEqual([]);
+	expect(await db.selectFrom('visits').select('processed').execute()).toEqual([{ processed: 0 }]);
+});
+
+test('overview selects only current domains in one SQL read and derives zeros for new scopes', async () => {
+	const overview = daily(overviewScope, 8, 2);
+	const current = daily(domainScope, 3, 1);
+	await add(
+		overview,
+		current,
+		daily(rootScope),
+		daily({ kind: 'domain', domain: 'removed.example.test' })
+	);
+	await db
+		.updateTable('visit_daily_statistics')
+		.set({ browsers_json: '["private malformed cache"]' })
 		.where(({ or, eb }) =>
 			or([eb('scope_kind', '=', 'link'), eb('domain', '=', 'removed.example.test')])
 		)
 		.execute();
+	const before = await db.selectFrom('visit_daily_statistics').selectAll().execute();
 	const statements = vi.spyOn(DatabaseSync.prototype, 'prepare');
 	try {
-		expect(await readOverviewVisitDetails(db, [domain, 'new.example.test'])).toEqual({
-			overview: overview.details,
-			domains: [{ domain, details: current.details }]
-		});
-		expect(statements).toHaveBeenCalledTimes(1);
-		const query = statements.mock.calls[0]?.[0];
-		expect(query).toMatch(
-			/^select\s+"scope_kind",\s*"domain",\s*"details_json"\s+from\s+"analytics_reports"/i
-		);
-		expect(query).not.toMatch(/summary_json|\bvisits\b|\bjoin\b/i);
-	} finally {
-		statements.mockRestore();
-	}
-});
-
-test('overview details preserve missing reports rather than inventing zero domains', async () => {
-	expect(await readOverviewVisitDetails(db, [domain])).toBeNull();
-	const current = preparedReport(domainScope);
-	await publishVisitReports(db, encodeVisitReports([current]));
-	expect(await readOverviewVisitDetails(db, [domain])).toBeNull();
-	const overview = preparedReport(overviewScope);
-	await publishVisitReports(db, encodeVisitReports([overview, current]));
-	expect(await readOverviewVisitDetails(db, [])).toEqual({
-		overview: overview.details,
-		domains: []
-	});
-	expect(await readOverviewVisitDetails(db, ['new.example.test'])).toEqual({
-		overview: overview.details,
-		domains: []
-	});
-});
-
-test('overview details reject malformed or mismatched domain scope, policy and window', async () => {
-	const overview = preparedReport(overviewScope);
-	const current = preparedReport(domainScope);
-	await publishVisitReports(db, encodeVisitReports([overview, current]));
-	for (const details of [
-		{},
-		{ ...current.details, version: 3 },
-		overview.details,
-		{ ...current.details, scope: { kind: 'domain', domain: 'wrong.example.test' } },
-		preparedReport(domainScope, asOf + 86_400_000).details,
-		preparedReport(domainScope, asOf, zeroVisitTotals(), 9).details
-	]) {
-		await db
-			.updateTable('analytics_reports')
-			.set({ details_json: JSON.stringify(details) })
-			.where('scope_kind', '=', 'domain')
-			.execute();
-		await expect(readOverviewVisitDetails(db, [domain])).rejects.toThrow(
-			/^Invalid analytics report$/
-		);
-	}
-});
-
-test('overview details reject an invalid overview independently of summary JSON', async () => {
-	await publishVisitReports(db, encodeVisitReports([preparedReport(overviewScope)]));
-	for (const details of [{}, preparedReport(domainScope).details]) {
-		await db
-			.updateTable('analytics_reports')
-			.set({ details_json: JSON.stringify(details) })
-			.execute();
-		await expect(readOverviewVisitDetails(db, [])).rejects.toThrow(/^Invalid analytics report$/);
-	}
-});
-
-test('domain details use one SQL snapshot with current paths and root, without summaries', async () => {
-	const current = preparedReport(domainScope, asOf, { validVisits: 3, invalidVisits: 1 });
-	const root = preparedReport(rootScope);
-	const docs = preparedReport({ kind: 'link', domain, path: '/docs' });
-	const removed = preparedReport({ kind: 'link', domain, path: '/removed' });
-	const otherDomain = preparedReport({ kind: 'domain', domain: 'other.example.test' });
-	const otherLink = preparedReport({ kind: 'link', domain: 'other.example.test', path: '/docs' });
-	await publishVisitReports(
-		db,
-		encodeVisitReports([
-			preparedReport(overviewScope),
-			current,
-			root,
-			docs,
-			removed,
-			otherDomain,
-			otherLink
-		])
-	);
-	await db.updateTable('analytics_reports').set({ summary_json: '{}' }).execute();
-	await db
-		.updateTable('analytics_reports')
-		.set({ details_json: '{}' })
-		.where(({ or, eb }) =>
-			or([
-				eb('scope_kind', '=', 'overview'),
-				eb('domain', '=', 'other.example.test'),
-				eb('path', '=', '/removed')
-			])
-		)
-		.execute();
-	const statements = vi.spyOn(DatabaseSync.prototype, 'prepare');
-	try {
-		expect(await readDomainVisitDetails(db, domain, ['/docs', '/docs', '/new'])).toEqual({
-			domain: current.details,
-			links: [
-				{ path: '/', details: root.details },
-				{ path: '/docs', details: docs.details }
+		expect(
+			await readOverviewVisitDetails(db, [domain, domain, 'new.example.test'], period)
+		).toEqual({
+			overview: projectVisitDetails(overviewScope, period, [overview]),
+			domains: [
+				{ domain, details: projectVisitDetails(domainScope, period, [current]) },
+				{
+					domain: 'new.example.test',
+					details: projectVisitDetails({ kind: 'domain', domain: 'new.example.test' }, period, [])
+				}
 			]
 		});
 		expect(statements).toHaveBeenCalledTimes(1);
-		const query = statements.mock.calls[0]?.[0];
-		expect(query).toMatch(
-			/^select\s+"scope_kind",\s*"path",\s*"details_json"\s+from\s+"analytics_reports"/i
-		);
-		expect(query).not.toMatch(/summary_json|\bvisits\b|\bjoin\b/i);
+		const query = statements.mock.calls[0]![0];
+		expect(query).toContain('domain IN');
+		expect(query).not.toMatch(/\bvisits\b|\bjoin\b|\bsum\s*\(/i);
 	} finally {
 		statements.mockRestore();
 	}
+	expect(await db.selectFrom('visit_daily_statistics').selectAll().execute()).toEqual(before);
 });
 
-test('domain details require a domain report and preserve missing paths', async () => {
-	expect(await readDomainVisitDetails(db, domain, ['/docs'])).toBeNull();
-	await publishVisitReports(db, encodeVisitReports([preparedReport(rootScope)]));
-	expect(await readDomainVisitDetails(db, domain, [])).toBeNull();
-	const current = preparedReport(domainScope);
-	await publishVisitReports(db, encodeVisitReports([current]));
-	expect(await readDomainVisitDetails(db, domain, ['/docs'])).toEqual({
-		domain: current.details,
-		links: []
-	});
-});
-
-test('domain details validate the requested domain independently of summary JSON', async () => {
-	const current = preparedReport(domainScope);
-	await publishVisitReports(db, encodeVisitReports([current]));
-	await db
-		.updateTable('analytics_reports')
-		.set({
-			summary_json: '{}',
-			details_json: JSON.stringify({
-				...current.details,
-				scope: { kind: 'domain', domain: 'wrong.example.test' }
-			})
-		})
-		.execute();
-	await expect(readDomainVisitDetails(db, domain, [])).rejects.toThrow(
-		/^Invalid analytics report$/
+test('domain and selected-link readers bind exact path/domain pairs, include Root, and ignore distractors', async () => {
+	const path = "/' OR 1=1 --";
+	const link = { kind: 'link', domain, path } as const;
+	const other = { kind: 'link', domain: 'other.example.test', path: '/faq' } as const;
+	await add(
+		daily(domainScope, 6, 2),
+		daily(rootScope, 1),
+		daily(link, 5),
+		daily(other, 7),
+		daily({ kind: 'link', domain, path: '/faq' }, 99),
+		daily({ kind: 'link', domain: 'other.example.test', path }, 99)
 	);
-});
-
-test('domain details validate each selected path scope', async () => {
-	const root = preparedReport(rootScope);
-	await publishVisitReports(db, encodeVisitReports([preparedReport(domainScope), root]));
 	await db
-		.updateTable('analytics_reports')
-		.set({ details_json: JSON.stringify({ ...root.details, scope: domainScope }) })
+		.updateTable('visit_daily_statistics')
+		.set({ accepted_languages_json: '["private"]' })
 		.where('scope_kind', '=', 'link')
-		.execute();
-	await expect(readDomainVisitDetails(db, domain, [])).rejects.toThrow(
-		/^Invalid analytics report$/
-	);
-});
-
-test('domain details require selected paths to share the domain publication period', async () => {
-	await publishVisitReports(
-		db,
-		encodeVisitReports([preparedReport(domainScope), preparedReport(rootScope)])
-	);
-	await db
-		.updateTable('analytics_reports')
-		.set({ details_json: JSON.stringify(preparedReport(rootScope, asOf + 86_400_000).details) })
-		.where('scope_kind', '=', 'link')
-		.execute();
-	await expect(readDomainVisitDetails(db, domain, [])).rejects.toThrow(
-		/^Invalid analytics report$/
-	);
-});
-
-test('link details read deduplicated exact members in one statement without parent reports', async () => {
-	const otherDomain = 'other.example.test';
-	const docs = preparedReport({ kind: 'link', domain, path: '/docs' }, asOf, {
-		validVisits: 3,
-		invalidVisits: 1
-	});
-	const faq = preparedReport({ kind: 'link', domain, path: '/faq' });
-	const otherDocs = preparedReport({ kind: 'link', domain: otherDomain, path: '/docs' });
-	const excluded = [
-		preparedReport(overviewScope),
-		preparedReport(domainScope),
-		preparedReport(rootScope),
-		preparedReport({ kind: 'link', domain: otherDomain, path: '/faq' })
-	];
-	await publishVisitReports(db, encodeVisitReports([docs, faq, otherDocs, ...excluded]));
-	await db.updateTable('analytics_reports').set({ summary_json: '{}' }).execute();
-	await db
-		.updateTable('analytics_reports')
-		.set({ details_json: '{}' })
-		.where(({ or, and, eb }) =>
-			or([
-				eb('scope_kind', '!=', 'link'),
-				eb('path', '=', '/'),
-				and([eb('domain', '=', otherDomain), eb('path', '=', '/faq')])
-			])
-		)
-		.execute();
-	const statements = vi.spyOn(DatabaseSync.prototype, 'prepare');
-	try {
-		const report = await readLinkVisitDetails(db, [
-			{ domain, path: '/docs' },
-			{ domain, path: '/faq' },
-			{ domain: otherDomain, path: '/docs' },
-			{ domain, path: '/docs' }
-		]);
-		expect(report).toEqual({
-			period: docs.details.period,
-			links: expect.arrayContaining([
-				{ domain, path: '/docs', details: docs.details },
-				{ domain, path: '/faq', details: faq.details },
-				{ domain: otherDomain, path: '/docs', details: otherDocs.details }
-			])
-		});
-		expect(report?.links).toHaveLength(3);
-		expect(statements).toHaveBeenCalledTimes(1);
-		const query = statements.mock.calls[0]?.[0];
-		expect(query).toMatch(
-			/^select\s+"scope_kind",\s*"domain",\s*"path",\s*"details_json"\s+from\s+"analytics_reports"/i
-		);
-		expect(query).not.toMatch(/summary_json|\bvisits\b|\bjoin\b/i);
-	} finally {
-		statements.mockRestore();
-	}
-});
-
-test('link details require every member while accepting an explicitly prepared zero', async () => {
-	const member = { domain, path: '/docs' };
-	expect(await readLinkVisitDetails(db, [])).toBeNull();
-	expect(await readLinkVisitDetails(db, [member])).toBeNull();
-	const zero = preparedReport({ kind: 'link', ...member });
-	await publishVisitReports(db, encodeVisitReports([zero]));
-	expect(await readLinkVisitDetails(db, [member])).toEqual({
-		period: zero.details.period,
-		links: [{ ...member, details: zero.details }]
-	});
-	expect(await readLinkVisitDetails(db, [member, { domain, path: '/new' }])).toBeNull();
-});
-
-test('link details validate each selected identity and require a common full period', async () => {
-	const members = [
-		{ domain, path: '/docs' },
-		{ domain, path: '/faq' }
-	];
-	const docs = preparedReport({ kind: 'link', domain, path: '/docs' });
-	const faq = preparedReport({ kind: 'link', domain, path: '/faq' });
-	await publishVisitReports(db, encodeVisitReports([docs, faq]));
-	await db
-		.updateTable('analytics_reports')
-		.set({ details_json: JSON.stringify({ ...faq.details, scope: docs.details.scope }) })
+		.where('domain', '=', domain)
 		.where('path', '=', '/faq')
 		.execute();
-	await expect(readLinkVisitDetails(db, members)).rejects.toThrow(/^Invalid analytics report$/);
+	const domainDetails = await readDomainVisitDetails(db, domain, [path, path, '/new'], period);
+	expect(domainDetails.links.map(({ path }) => path)).toEqual(['/', path, '/new']);
+	expect(domainDetails.links[0]!.details.daily[0]!.validVisits).toBe(1);
+	expect(domainDetails.links[2]!.details.lastActivityAt).toBeNull();
+	const selected = await readLinkVisitDetails(db, [link, other, link], period);
+	expect(
+		selected.links.map(({ domain, path, details }) => ({
+			domain,
+			path,
+			visits: details.daily[0]!.validVisits
+		}))
+	).toEqual([
+		{ domain, path, visits: 5 },
+		{ domain: other.domain, path: other.path, visits: 7 }
+	]);
+	expect(await readLinkVisitDetails(db, [], period)).toEqual({ period, links: [] });
+});
+
+test('successful empty reads give zeros/activity null; view time advances without writes and zero clears derived rows', async () => {
+	const empty = await readOverviewVisitDetails(db, [domain], period);
+	expect(empty.overview).toEqual(projectVisitDetails(overviewScope, period, []));
+	expect(empty.domains[0]!.details).toEqual(projectVisitDetails(domainScope, period, []));
+	expect(await readLastVisitActivity(db, period)).toBeNull();
+	await add(daily(overviewScope), daily(domainScope, 1, 0, 11));
+	const before = await db.selectFrom('visit_daily_statistics').selectAll().execute();
+	const nextPeriod = createVisitPeriod(3, Date.UTC(2026, 7, 2));
+	expect((await readVisitDetails(db, overviewScope, nextPeriod)).lastActivityAt).toBeNull();
+	expect(await readLastVisitActivity(db, nextPeriod)).toBeNull();
+	expect(await db.selectFrom('visit_daily_statistics').selectAll().execute()).toEqual(before);
+	expect(await readLastVisitActivity(db, period)).toBe('2026-04-01T10:00:00.000Z');
+	await clearDailyVisitStatistics(db);
+	expect((await readVisitDetails(db, overviewScope, period)).lastActivityAt).toBeNull();
+});
+
+test('selected corrupt day JSON fails with a static error, while a failed table read is not reported as zero', async () => {
+	await add(daily(overviewScope));
 	await db
-		.updateTable('analytics_reports')
-		.set({
-			details_json: JSON.stringify(
-				preparedReport({ kind: 'link', domain, path: '/faq' }, asOf + 86_400_000).details
-			)
-		})
-		.where('path', '=', '/faq')
+		.updateTable('visit_daily_statistics')
+		.set({ browsers_json: '[{"name":"private IP","validVisits":99,"invalidVisits":0}]' })
 		.execute();
-	await expect(readLinkVisitDetails(db, members)).rejects.toThrow(/^Invalid analytics report$/);
-});
-
-test('publication replaces the complete batch, including when the replacement is empty', async () => {
-	await publishVisitReports(
-		db,
-		encodeVisitReports([preparedReport(overviewScope), preparedReport(domainScope)])
+	await expect(readVisitDetails(db, overviewScope, period)).rejects.toThrow(
+		/^Invalid analytics report$/
 	);
-	const replacement = preparedReport(overviewScope, asOf + 86_400_000);
-	await publishVisitReports(db, encodeVisitReports([replacement]));
-
-	expect(await readVisitSummary(db, overviewScope)).toEqual(replacement.summary);
-	expect(await readVisitSummary(db, domainScope)).toBeNull();
-	await publishVisitReports(db, []);
-	expect(await db.selectFrom('analytics_reports').select('id').execute()).toEqual([]);
+	await expect(
+		writer((transaction) => addDailyVisitStatistics(transaction, [daily(overviewScope)]))
+	).rejects.toThrow(/^Invalid analytics report$/);
+	await expect(
+		writer((transaction) => subtractDailyVisitStatistics(transaction, [daily(overviewScope)]))
+	).rejects.toThrow(/^Invalid analytics report$/);
+	await db.schema.dropTable('visit_daily_statistics').execute();
+	await expect(readVisitDetails(db, overviewScope, period)).rejects.toThrow();
+	await expect(readLastVisitActivity(db, period)).rejects.toThrow();
 });
 
-test('native uniqueness and JSON failures roll back publication deletion', async () => {
-	const original = preparedReport(overviewScope);
-	await publishVisitReports(db, encodeVisitReports([original]));
-	const [replacement] = encodeVisitReports([preparedReport(domainScope)]);
-	if (!replacement) throw new Error('Expected an encoded report fixture');
-
-	for (const batch of [
-		[replacement, replacement],
-		[{ ...replacement, summaryJson: '{' }],
-		[{ ...replacement, detailsJson: '{' }]
-	]) {
-		await expect(publishVisitReports(db, batch)).rejects.toThrow();
-		expect(await readVisitSummary(db, overviewScope)).toEqual(original.summary);
-		expect(await readVisitDetails(db, overviewScope)).toEqual(original.details);
-		expect(await readVisitSummary(db, domainScope)).toBeNull();
-	}
-});
-
-test('missing scopes are null, not implicit empty reports or parent fallbacks', async () => {
-	const report = preparedReport(domainScope);
-	if (!('links' in report.summary)) throw new Error('Expected a domain fixture');
-	report.summary.links = [{ path: '/new', totals: zeroVisitTotals() }];
-	await publishVisitReports(db, encodeVisitReports([report]));
-
-	expect(await readVisitSummary(db, overviewScope)).toBeNull();
-	expect(await readVisitSummary(db, { kind: 'link', domain, path: '/new' })).toBeNull();
-	expect(await readVisitDetails(db, rootScope)).toBeNull();
-	await clearVisitReports(db);
-	expect(await readVisitSummary(db, domainScope)).toBeNull();
-	expect(await db.selectFrom('analytics_reports').select('id').execute()).toEqual([]);
-});
-
-test('summary and details readers select and decode only their own column', async () => {
-	const report = preparedReport(overviewScope);
-	const rows = encodeVisitReports([report]);
-	const [row] = rows;
-	if (!row) throw new Error('Expected an encoded report fixture');
-	await publishVisitReports(db, rows);
-	await db.updateTable('analytics_reports').set({ details_json: '{}' }).execute();
-
-	const statements = vi.spyOn(DatabaseSync.prototype, 'prepare');
-	try {
-		expect(await readVisitSummary(db, overviewScope)).toEqual(report.summary);
-		expect(statements.mock.calls.map(([query]) => query)).toEqual([
-			expect.stringMatching(/^select\s+"summary_json"\s+from\s+/i)
-		]);
-		statements.mockClear();
-		await expect(readVisitDetails(db, overviewScope)).rejects.toThrow('Invalid analytics report');
-		expect(statements.mock.calls.map(([query]) => query)).toEqual([
-			expect.stringMatching(/^select\s+"details_json"\s+from\s+/i)
-		]);
-	} finally {
-		statements.mockRestore();
-	}
-	await db
-		.updateTable('analytics_reports')
-		.set({ summary_json: '{}', details_json: row.detailsJson })
-		.execute();
-	expect(await readVisitDetails(db, overviewScope)).toEqual(report.details);
-	await expect(readVisitSummary(db, overviewScope)).rejects.toThrow('Invalid analytics report');
-});
-
-test('database constraints reject invalid scope shapes, duplicate identities and malformed JSON', async () => {
-	const reports = encodeVisitReports(
-		[overviewScope, domainScope, rootScope].map((scope) => preparedReport(scope))
-	);
-	await publishVisitReports(db, reports);
-
-	for (const report of reports) {
-		const scope = report.scope;
+test('daily SQL identities are unique by scope/day and preserve independent outcomes and dates', async () => {
+	await add(daily(overviewScope, 2, 1), daily(domainScope, 2, 1), daily(rootScope));
+	const rows = await db.selectFrom('visit_daily_statistics').selectAll().execute();
+	for (const row of rows) {
 		await expect(
 			db
-				.insertInto('analytics_reports')
-				.values({
-					scope_kind: scope.kind,
-					domain: scope.kind === 'overview' ? null : scope.domain,
-					path: scope.kind === 'link' ? scope.path : null,
-					summary_json: report.summaryJson,
-					details_json: report.detailsJson
-				})
+				.insertInto('visit_daily_statistics')
+				.values({ ...row, id: undefined })
 				.execute()
 		).rejects.toThrow();
 	}
-	await expect(
-		sql`INSERT INTO analytics_reports (scope_kind, domain, path, summary_json, details_json)
-		VALUES ('overview', 'bad.example.test', NULL, '{}', '{}')`.execute(db)
-	).rejects.toThrow();
-	await expect(
-		sql`INSERT INTO analytics_reports (scope_kind, domain, path, summary_json, details_json)
-		VALUES ('domain', NULL, NULL, '{}', '{}')`.execute(db)
-	).rejects.toThrow();
-	await expect(
-		sql`INSERT INTO analytics_reports (scope_kind, domain, path, summary_json, details_json)
-		VALUES ('link', 'go.example.test', NULL, '{}', '{}')`.execute(db)
-	).rejects.toThrow();
-	await expect(
-		sql`INSERT INTO analytics_reports (scope_kind, domain, path, summary_json, details_json)
-		VALUES ('unknown', NULL, NULL, '{}', '{}')`.execute(db)
-	).rejects.toThrow();
-	await expect(
-		sql`INSERT INTO analytics_reports (scope_kind, domain, path, summary_json, details_json)
-		VALUES ('domain', '', NULL, '{}', '{}')`.execute(db)
-	).rejects.toThrow();
-	await expect(
-		sql`INSERT INTO analytics_reports (scope_kind, domain, path, summary_json, details_json)
-		VALUES ('link', '', '/docs', '{}', '{}')`.execute(db)
-	).rejects.toThrow();
-	await expect(
-		sql`INSERT INTO analytics_reports (scope_kind, domain, path, summary_json, details_json)
-		VALUES ('link', 'go.example.test', '', '{}', '{}')`.execute(db)
-	).rejects.toThrow();
-	await expect(
-		sql`INSERT INTO analytics_reports (scope_kind, domain, path, summary_json, details_json)
-		VALUES ('link', 'go.example.test', 'docs', '{}', '{}')`.execute(db)
-	).rejects.toThrow();
-	await expect(
-		db.updateTable('analytics_reports').set({ summary_json: '{' }).execute()
-	).rejects.toThrow();
-	await expect(
-		db.updateTable('analytics_reports').set({ details_json: '{' }).execute()
-	).rejects.toThrow();
+	const first = rows[0]!;
+	await db
+		.insertInto('visit_daily_statistics')
+		.values({
+			...first,
+			id: undefined,
+			day: '2026-04-02',
+			last_visit_at: Date.UTC(2026, 3, 2, 1)
+		})
+		.execute();
+	expect(await db.selectFrom('visit_daily_statistics').select('id').execute()).toHaveLength(4);
 });

@@ -9,9 +9,19 @@ import type { LinkVisitDetails } from '@goto/db/visit-reports';
 
 export function combineTagVisits(
 	report: LinkVisitDetails
-): Pick<VisitDetails, 'period' | 'daily' | 'browsers' | 'operatingSystems' | 'acceptedLanguages'> {
+): Pick<
+	VisitDetails,
+	'period' | 'lastActivityAt' | 'daily' | 'browsers' | 'operatingSystems' | 'acceptedLanguages'
+> {
 	const countsByDay = new Map<string, VisitTotals>();
+	let lastActivityAt: string | null = null;
 	for (const { details } of report.links) {
+		if (
+			details.lastActivityAt !== null &&
+			(lastActivityAt === null || Date.parse(details.lastActivityAt) > Date.parse(lastActivityAt))
+		) {
+			lastActivityAt = details.lastActivityAt;
+		}
 		for (const point of details.daily) {
 			const day = point.start.slice(0, 10);
 			const counts = countsByDay.get(day) ?? zeroVisitTotals();
@@ -26,6 +36,7 @@ export function combineTagVisits(
 	});
 	return {
 		period: report.period,
+		lastActivityAt,
 		daily,
 		browsers: combineNamedCounts(report.links.map(({ details }) => details.browsers)),
 		operatingSystems: combineNamedCounts(

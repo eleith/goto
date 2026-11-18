@@ -31,7 +31,7 @@
 	siteTitle={data.title}
 	title="Link"
 	documentTitle={`Link — ${data.domain}${data.path}`}
-	updatedAt={data.asOf}
+	lastActivityAt={data.lastActivityAt}
 	overviewHref={`/admin?period=${timeframe}`}
 >
 	{#snippet actions()}
@@ -118,13 +118,13 @@
 			{#if data.validFrom}
 				<dt>Starts</dt>
 				<dd>
-					<time datetime={data.validFrom}>{formatUtc(data.validFrom)}</time>
+					<time datetime={data.validFrom}>{formatUtc(data.validFrom)} UTC</time>
 				</dd>
 			{/if}
 			{#if data.validUntil}
 				<dt>Expires</dt>
 				<dd>
-					<time datetime={data.validUntil}>{formatUtc(data.validUntil)}</time>
+					<time datetime={data.validUntil}>{formatUtc(data.validUntil)} UTC</time>
 				</dd>
 			{/if}
 			{#if data.tags.length > 0}

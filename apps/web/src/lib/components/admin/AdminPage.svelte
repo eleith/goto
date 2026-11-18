@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import AdminNav from './AdminNav.svelte';
-	import { formatUpdated, formatUpdatedCompact } from './format.js';
+	import { formatLastVisit, formatLastVisitCompact } from './format.js';
 	import '#lib/styles/admin.css';
 
 	let {
@@ -10,7 +10,7 @@
 		documentTitle,
 		context,
 		overviewHref = '/admin',
-		updatedAt = null,
+		lastActivityAt = null,
 		actions,
 		children
 	}: {
@@ -19,13 +19,13 @@
 		documentTitle?: string;
 		context?: Snippet;
 		overviewHref?: string;
-		updatedAt?: number | null;
+		lastActivityAt?: number | null;
 		actions?: Snippet;
 		children: Snippet;
 	} = $props();
 
-	let updatedText = $derived(formatUpdated(updatedAt));
-	let compactUpdatedText = $derived(formatUpdatedCompact(updatedAt));
+	let activityText = $derived(formatLastVisit(lastActivityAt));
+	let compactActivityText = $derived(formatLastVisitCompact(lastActivityAt));
 </script>
 
 <svelte:head><title>{documentTitle ?? heading} — {siteTitle}</title></svelte:head>
@@ -36,14 +36,14 @@
 			<div class="admin-title">
 				<h1 title={heading}>{heading}</h1>
 				{#if context}<div class="admin-context">{@render context()}</div>{/if}
-				{#if updatedAt !== null}
+				{#if lastActivityAt !== null}
 					<time
 						class="admin-updated"
-						datetime={new Date(updatedAt).toISOString()}
-						title={updatedText}
+						datetime={new Date(lastActivityAt).toISOString()}
+						title="Last visit {activityText} UTC"
 					>
-						<span class="admin-updated-full">{updatedText}</span>
-						<span class="admin-updated-compact">{compactUpdatedText}</span>
+						<span class="admin-updated-full">Last visit {activityText} UTC</span>
+						<span class="admin-updated-compact">Last visit {compactActivityText} UTC</span>
 					</time>
 				{/if}
 			</div>

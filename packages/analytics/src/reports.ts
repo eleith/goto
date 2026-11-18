@@ -35,50 +35,6 @@ export const ReportPeriodSchema = Type.Object(
 );
 export type ReportPeriod = Static<typeof ReportPeriodSchema>;
 
-const headers = {
-	version: Type.Literal(1),
-	period: ReportPeriodSchema,
-	totals: VisitTotalsSchema
-};
-
-export const OverviewSummarySchema = Type.Object(
-	{
-		...headers,
-		scope: Type.Object({ kind: Type.Literal('overview') }, exact),
-		base: VisitTotalsSchema,
-		domains: Type.Array(Type.Object({ domain, totals: VisitTotalsSchema }, exact))
-	},
-	exact
-);
-export type OverviewSummary = Static<typeof OverviewSummarySchema>;
-
-export const DomainSummarySchema = Type.Object(
-	{
-		...headers,
-		scope: Type.Object({ kind: Type.Literal('domain'), domain }, exact),
-		base: VisitTotalsSchema,
-		links: Type.Array(Type.Object({ path, totals: VisitTotalsSchema }, exact))
-	},
-	exact
-);
-export type DomainSummary = Static<typeof DomainSummarySchema>;
-
-export const LinkSummarySchema = Type.Object(
-	{
-		...headers,
-		scope: Type.Object({ kind: Type.Literal('link'), domain, path }, exact)
-	},
-	exact
-);
-export type LinkSummary = Static<typeof LinkSummarySchema>;
-
-export const VisitSummarySchema = Type.Union([
-	OverviewSummarySchema,
-	DomainSummarySchema,
-	LinkSummarySchema
-]);
-export type VisitSummary = Static<typeof VisitSummarySchema>;
-
 const dailyNamedCounts = Type.Object(
 	{
 		day,
@@ -92,9 +48,10 @@ export type DailyVisitCountByName = Static<typeof dailyNamedCounts>;
 
 export const VisitDetailsSchema = Type.Object(
 	{
-		version: Type.Literal(4),
+		version: Type.Literal(5),
 		scope: ReportScopeSchema,
 		period: ReportPeriodSchema,
+		lastActivityAt: Type.Union([instant, Type.Null()]),
 		daily: Type.Array(
 			Type.Object(
 				{
@@ -122,17 +79,6 @@ export const VisitDetailsSchema = Type.Object(
 	exact
 );
 export type VisitDetails = Static<typeof VisitDetailsSchema>;
-
-export interface PreparedVisitReport {
-	summary: VisitSummary;
-	details: VisitDetails;
-}
-
-export interface SerializedVisitReport {
-	scope: ReportScope;
-	summaryJson: string;
-	detailsJson: string;
-}
 
 export function zeroVisitTotals(): VisitTotals {
 	return { validVisits: 0, invalidVisits: 0 };

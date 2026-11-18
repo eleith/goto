@@ -9,7 +9,8 @@ test('combines outcomes and overlapping named counts without changing member det
 	const firstDay = '2026-03-15';
 	const lastDay = '2026-06-15';
 	const first: VisitDetails = {
-		version: 4,
+		version: 5,
+		lastActivityAt: '2026-06-15T09:00:00.000Z',
 		scope: { kind: 'link', domain: 'one.example.test', path: '/docs' },
 		period,
 		daily: days.map((day) => {
@@ -33,7 +34,8 @@ test('combines outcomes and overlapping named counts without changing member det
 		]
 	};
 	const second: VisitDetails = {
-		version: 4,
+		version: 5,
+		lastActivityAt: '2026-06-15T10:00:00.000Z',
 		scope: { kind: 'link', domain: 'two.example.test', path: '/docs' },
 		period,
 		daily: days
@@ -70,6 +72,7 @@ test('combines outcomes and overlapping named counts without changing member det
 
 	expect(combineTagVisits(report)).toEqual({
 		period,
+		lastActivityAt: second.lastActivityAt,
 		daily: days.map((day) => {
 			let counts = zeroVisitTotals();
 			if (day.start.startsWith(firstDay)) counts = { validVisits: 6, invalidVisits: 3 };

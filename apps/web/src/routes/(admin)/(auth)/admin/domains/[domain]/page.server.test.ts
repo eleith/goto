@@ -57,8 +57,10 @@ function details(scope: ReportScope, counts: Record<string, [number, number]>): 
 			validVisits,
 			invalidVisits
 		}));
+	const lastDay = Object.keys(counts).sort().at(-1);
 	return {
-		version: 4,
+		version: 5,
+		lastActivityAt: lastDay ? `${lastDay}T10:00:00.000Z` : null,
 		scope,
 		period,
 		daily,
@@ -104,6 +106,10 @@ const report = {
 	links: [
 		{ path: '/', details: rootDetails },
 		{ path: '/docs', details: docsDetails },
+		{
+			path: '/a/b',
+			details: { ...emptyDetails, scope: { kind: 'link' as const, domain, path: '/a/b' } }
+		},
 		{ path: '/a%2Fb', details: emptyDetails }
 	]
 };
@@ -126,7 +132,7 @@ test('projects compact domain breakdowns without exposing link series or dated n
 		retentionMonths: 3,
 		collectionEnabled: true,
 		available: true,
-		asOf: Date.parse(period.asOf),
+		lastActivityAt: Date.parse(domainDetails.lastActivityAt!),
 		linkCount: 3,
 		timeframes: ['7d', '30d', 'all'],
 		countsByTimeframe: {
@@ -184,7 +190,11 @@ test('projects compact domain breakdowns without exposing link series or dated n
 				path: '/a/b',
 				url: 'https://example.test/nested',
 				state: 'active',
-				countsByTimeframe: {},
+				countsByTimeframe: {
+					'7d': { validVisits: 0, invalidVisits: 0 },
+					'30d': { validVisits: 0, invalidVisits: 0 },
+					all: { validVisits: 0, invalidVisits: 0 }
+				},
 				href: '/admin/domains/go.example.test/links/a/b'
 			},
 			{
@@ -259,10 +269,17 @@ test('keeps root reachable through the domain fallback with no named links', asy
 	expect(data.countsByTimeframe.all).toEqual({ validVisits: 19, invalidVisits: 10 });
 });
 
-test('missing root details leave root visits unavailable without hiding non-root invalid counts', async () => {
+test('empty root history gives zero visits without hiding non-root invalid counts', async () => {
 	vi.mocked(readDomainDetails).mockResolvedValue({
-		domain: domainDetails,
-		links: [{ path: '/docs', details: docsDetails }]
+		...report,
+		links: report.links.map((link) =>
+			link.path === '/'
+				? {
+						path: '/',
+						details: { ...emptyDetails, scope: { kind: 'link' as const, domain, path: '/' } }
+					}
+				: link
+		)
 	});
 	const data = await load(request());
 	expect(data.available).toBe(true);
@@ -270,7 +287,11 @@ test('missing root details leave root visits unavailable without hiding non-root
 		path: '/',
 		url: null,
 		state: 'active',
-		countsByTimeframe: {},
+		countsByTimeframe: {
+			'7d': { validVisits: 0, invalidVisits: 0 },
+			'30d': { validVisits: 0, invalidVisits: 0 },
+			all: { validVisits: 0, invalidVisits: 0 }
+		},
 		href: '/admin/domains/go.example.test/links'
 	});
 	expect(data.countsByTimeframe.all).toEqual({ validVisits: 19, invalidVisits: 10 });

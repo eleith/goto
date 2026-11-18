@@ -162,7 +162,7 @@ test('explicit apply appends all configured domains in bounded batches without r
 			const rows = await reader.selectFrom('visits').selectAll().execute();
 			assert.equal(rows.length, 301);
 			const original = rows.find((row) => row.id === id);
-			assert.deepEqual({ ...original }, { id, ...existing });
+			assert.deepEqual({ ...original }, { id, processed: 0, ...existing });
 			const synthetic = rows.filter((row) => row.user_agent?.endsWith(' GotoSeed/17'));
 			for (const domain of Object.keys(fixture.domains)) {
 				assert.equal(synthetic.filter((row) => row.domain === domain).length, 100);
@@ -231,7 +231,7 @@ test('a failed second batch rolls back its partial writes and preserves committe
 			assert.equal(synthetic.length, 250);
 			assert.equal(rows.length, 251);
 			const original = rows.find((row) => row.id === id);
-			assert.deepEqual({ ...original }, { id, ...existing });
+			assert.deepEqual({ ...original }, { id, processed: 0, ...existing });
 		} finally {
 			await reader.destroy();
 		}

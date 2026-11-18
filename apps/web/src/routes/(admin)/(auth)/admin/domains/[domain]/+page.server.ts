@@ -66,14 +66,16 @@ export const load = (async ({ locals, params }) => {
 			};
 		})
 	];
-	const asOf = domainDetails ? Date.parse(domainDetails.period.asOf) : null;
+	const lastActivityAt = domainDetails?.lastActivityAt
+		? Date.parse(domainDetails.lastActivityAt)
+		: null;
 	const chart = domainDetails ? { daily: domainDetails.daily, period: domainDetails.period } : null;
 	return {
 		domain,
 		retentionMonths,
 		collectionEnabled,
 		available: domainDetails !== null,
-		asOf,
+		lastActivityAt,
 		linkCount: currentPaths.length,
 		timeframes,
 		countsByTimeframe,

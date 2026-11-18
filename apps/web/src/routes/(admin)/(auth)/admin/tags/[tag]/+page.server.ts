@@ -57,14 +57,14 @@ export const load = (async ({ locals, params }) => {
 			href: linkHref(domain, path)
 		};
 	});
-	const asOf = tagDetails ? Date.parse(tagDetails.period.asOf) : null;
+	const lastActivityAt = tagDetails?.lastActivityAt ? Date.parse(tagDetails.lastActivityAt) : null;
 	const chart = tagDetails ? { daily: tagDetails.daily, period: tagDetails.period } : null;
 	return {
 		tag,
 		retentionMonths,
 		collectionEnabled,
 		available: tagDetails !== null,
-		asOf,
+		lastActivityAt,
 		linkCount: members.length,
 		timeframes,
 		countsByTimeframe,

@@ -5,10 +5,10 @@ import { applyConfig, watchConfiguration } from './config-reload.js';
 import type { WorkerContext } from './context.js';
 import type { ShutdownResources } from './lifecycle.js';
 import { logger } from './logger.js';
-import { requestReportRefresh } from './report-schedule.js';
+import { requestVisitMaintenance } from './visit-maintenance-schedule.js';
 
 vi.mock('./logger.js', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
-vi.mock('./report-schedule.js', () => ({ requestReportRefresh: vi.fn() }));
+vi.mock('./visit-maintenance-schedule.js', () => ({ requestVisitMaintenance: vi.fn() }));
 vi.mock('@goto/config', async (importOriginal) => ({
 	...(await importOriginal<typeof import('@goto/config')>()),
 	startConfigReloading: vi.fn()
@@ -31,7 +31,7 @@ function configuration(
 }
 const engine = {} as OpenWorkflow;
 function context(): WorkerContext {
-	return { config: configuration().configuration, domains: {}, db: {} as WorkerContext['db'] };
+	return { config: configuration().configuration, db: {} as WorkerContext['db'] };
 }
 beforeEach(() => vi.resetAllMocks());
 afterEach(() => {
@@ -54,7 +54,7 @@ test('requests restart for either database path when collection remains enabled'
 	).toBe(false);
 	expect(restart).toHaveBeenCalledTimes(2);
 	expect(ctx.config).toBe(accepted);
-	expect(requestReportRefresh).not.toHaveBeenCalled();
+	expect(requestVisitMaintenance).not.toHaveBeenCalled();
 });
 
 test.each([
@@ -71,24 +71,24 @@ test.each([
 		expect(await applyConfig(next, initial, restart, ctx, engine)).toBe(false);
 		expect(ctx.config).toBe(initial.configuration);
 		expect(restart).not.toHaveBeenCalled();
-		expect(requestReportRefresh).not.toHaveBeenCalled();
+		expect(requestVisitMaintenance).not.toHaveBeenCalled();
 		expect(logger.warn).toHaveBeenCalledExactlyOnceWith(
 			'Analytics collection change requires coordinated restart; keeping current configuration'
 		);
 	}
 );
 
-test('waits for refreshed reports when retention changes', async () => {
+test('publishes positive retention and waits for maintenance before accepting the change', async () => {
 	const initial = configuration(undefined, 9);
 	const ctx = context();
 	ctx.config = initial.configuration;
 	const refreshed = Promise.withResolvers<void>();
-	vi.mocked(requestReportRefresh).mockReturnValueOnce(refreshed.promise);
+	vi.mocked(requestVisitMaintenance).mockReturnValueOnce(refreshed.promise);
 	const next = configuration();
 	const applying = applyConfig(next, initial, vi.fn(), ctx, engine);
 	await Promise.resolve();
 	expect(ctx.config.analytics.retention_months).toBe(3);
-	expect(requestReportRefresh).toHaveBeenCalledExactlyOnceWith(ctx, engine);
+	expect(requestVisitMaintenance).toHaveBeenCalledExactlyOnceWith(ctx, engine);
 	let accepted = false;
 	void applying.then(() => {
 		accepted = true;
@@ -99,29 +99,54 @@ test('waits for refreshed reports when retention changes', async () => {
 	expect(await applying).toBe(true);
 	expect(await applyConfig(configuration(undefined, 12), next, vi.fn(), ctx, engine)).toBe(true);
 	expect(ctx.config.analytics.retention_months).toBe(12);
-	expect(requestReportRefresh).toHaveBeenCalledTimes(2);
+	expect(requestVisitMaintenance).toHaveBeenCalledTimes(2);
 });
 
-test('refreshes report inventory after an accepted domain/link change', async () => {
+test('reconciles a positive context policy mismatch even when prepared retention is unchanged', async () => {
 	const initial = configuration();
-	const next = configuration();
-	next.domains['go.example.test'] = {
-		root: null,
-		links: {},
-		caseInsensitivePaths: {},
-		fallback: null,
-		provenance: { fallback: 'builtin' }
-	};
 	const ctx = context();
-	expect(await applyConfig(next, initial, vi.fn(), ctx, engine)).toBe(true);
-	expect(ctx.domains).toBe(next.domains);
-	expect(requestReportRefresh).toHaveBeenCalledOnce();
+	ctx.config.analytics.retention_months = 9;
+	expect(await applyConfig(initial, initial, vi.fn(), ctx, engine)).toBe(true);
+	expect(ctx.config).toBe(initial.configuration);
+	expect(requestVisitMaintenance).toHaveBeenCalledExactlyOnceWith(ctx, engine);
 });
 
-test('reports only new accepted tag warnings without requesting a report refresh', async () => {
+test.each([0, 3])(
+	'retention %s publishes inventory, destination and settings changes without database work',
+	async (months) => {
+		const initial = configuration(undefined, months);
+		const next = loadConfig(
+			{
+				...initial.configuration,
+				link_defaults: { forward_query: true },
+				domains: {
+					'go.example.test': {
+						links: { '/docs': { url: 'https://example.test/new', tags: ['updated'] } }
+					}
+				}
+			},
+			{ env: {} }
+		);
+		const ctx = context();
+		ctx.config = initial.configuration;
+		const query = vi.fn(() => {
+			throw new Error('Unexpected statistics database work');
+		});
+		ctx.db = { selectFrom: query, transaction: query } as unknown as WorkerContext['db'];
+		expect(await applyConfig(next, initial, vi.fn(), ctx, engine)).toBe(true);
+		expect(ctx.config).toBe(next.configuration);
+		expect(query).not.toHaveBeenCalled();
+		expect(requestVisitMaintenance).not.toHaveBeenCalled();
+	}
+);
+
+test('publishes appearance and warning changes without maintenance', async () => {
 	const initial = configuration();
 	const next = {
-		...initial,
+		...loadConfig(
+			{ ...initial.configuration, appearance: { primary_light_color: '#123456' } },
+			{ env: {} }
+		),
 		warnings: [{ path: '/domains/*/links/*/tags/0', message: 'Ignored blank tag' }]
 	};
 	const ctx = context();
@@ -131,19 +156,23 @@ test('reports only new accepted tag warnings without requesting a report refresh
 	);
 	expect(await applyConfig(next, next, vi.fn(), ctx, engine)).toBe(true);
 	expect(logger.warn).toHaveBeenCalledOnce();
-	expect(requestReportRefresh).not.toHaveBeenCalled();
+	expect(ctx.config).toBe(next.configuration);
+	expect(requestVisitMaintenance).not.toHaveBeenCalled();
 });
 
-test('a failed refresh on positive policy reconciliation requests shutdown', async () => {
+test('failed maintenance on positive policy reconciliation requests shutdown', async () => {
 	const initial = configuration(undefined, 9);
 	const ctx = context();
 	ctx.config = initial.configuration;
 	const failure = new Error('Private storage detail');
-	vi.mocked(requestReportRefresh).mockRejectedValueOnce(failure);
+	vi.mocked(requestVisitMaintenance).mockRejectedValueOnce(failure);
 	const stop = vi.fn();
 	await expect(applyConfig(configuration(), initial, stop, ctx, engine)).rejects.toBe(failure);
 	expect(ctx.config.analytics.retention_months).toBe(3);
 	expect(stop).toHaveBeenCalledOnce();
+	expect(logger.error).toHaveBeenCalledWith(
+		'Unable to apply worker configuration; stopping service'
+	);
 });
 
 test('initial reread restart waits until the monitor stop handle is owned', async () => {

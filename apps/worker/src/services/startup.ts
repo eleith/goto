@@ -16,8 +16,12 @@ import { createShutdown, type ShutdownResources } from './lifecycle.js';
 import { watchConfiguration } from './config-reload.js';
 import { logger } from './logger.js';
 import type { WorkerContext } from './context.js';
-import { configureReportSchedule, requestReportRefresh } from './report-schedule.js';
-import { registerReportWorkflow } from '../workflows/refresh-visit-reports.js';
+import {
+	configureVisitMaintenance,
+	requestVisitMaintenance
+} from './visit-maintenance-schedule.js';
+import { registerVisitMaintenance } from '../workflows/maintain-visits.js';
+import { warnIfDailyStatisticsMissing } from './update-daily-statistics.js';
 
 export interface WorkerService {
 	port: number;
@@ -50,9 +54,11 @@ export async function startWorkerService(
 	const stop = createShutdown(resources);
 	try {
 		const db = await openVisitDatabase(visitDatabasePath, resources);
+		if (prepared.configuration.analytics.retention_months > 0) {
+			await warnIfDailyStatisticsMissing(db);
+		}
 		const context: WorkerContext = {
 			config: prepared.configuration,
-			domains: prepared.domains,
 			db
 		};
 		const engine = await startWorkflowWorker(databasePath, context, resources);
@@ -89,12 +95,12 @@ async function startWorkflowWorker(
 	resources.backend = backend;
 	const engineLogger = createEngineLogger(logger);
 	const engine = new OpenWorkflow({ backend, logger: engineLogger });
-	registerReportWorkflow(engine, context);
-	await configureReportSchedule(context, engine);
+	registerVisitMaintenance(engine, context);
+	await configureVisitMaintenance(context, engine);
 	const workflowWorker = engine.newWorker({ concurrency: 1 });
 	resources.workflowWorker = workflowWorker;
 	await workflowWorker.start();
-	await requestReportRefresh(context, engine);
+	await requestVisitMaintenance(context, engine);
 	logger.info('Workflow worker started');
 	return engine;
 }

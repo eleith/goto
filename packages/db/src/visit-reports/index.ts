@@ -1,18 +1,17 @@
-export { aggregateVisitReports } from './queries.js';
 export {
-	clearVisitReports,
-	publishVisitReports,
+	addDailyVisitStatistics,
+	subtractDailyVisitStatistics,
+	deleteExpiredDailyStatistics,
+	clearDailyVisitStatistics,
 	readOverviewVisitDetails,
 	readDomainVisitDetails,
 	readLinkVisitDetails,
-	readVisitSummary,
-	readVisitDetails
+	readVisitDetails,
+	readLastVisitActivity
 } from './storage.js';
-export type { OverviewVisitDetails, DomainVisitDetails, LinkVisitDetails } from './storage.js';
 export type {
-	AggregatedVisitReports,
-	DailyVisitCounts,
-	DailyLanguageHeaderCounts,
-	ReportInventory,
-	DailyBrowserOsCounts
-} from './types.js';
+	DailyStatisticsMismatch,
+	OverviewVisitDetails,
+	DomainVisitDetails,
+	LinkVisitDetails
+} from './storage.js';

@@ -1,10 +1,10 @@
 import { defineWorkflowSpec, type Workflow } from 'openworkflow';
 
-export interface ReportRefreshInput {
+export interface VisitMaintenanceInput {
 	scheduled?: boolean;
 }
 
-export const reportSchedule = {
+export const visitMaintenanceSchedule = {
 	id: 'goto:retain-visits',
 	cron: '0 * * * *',
 	timezone: 'UTC',
@@ -12,11 +12,11 @@ export const reportSchedule = {
 };
 
 // Keep the durable identity so existing schedules and queued runs remain usable.
-export const refreshVisitReports: Workflow<
-	ReportRefreshInput,
+export const visitMaintenance: Workflow<
+	VisitMaintenanceInput,
 	'completed',
-	ReportRefreshInput
->['spec'] = defineWorkflowSpec<ReportRefreshInput, 'completed'>({
+	VisitMaintenanceInput
+>['spec'] = defineWorkflowSpec<VisitMaintenanceInput, 'completed'>({
 	name: 'retain-visits',
-	schedules: [reportSchedule]
+	schedules: [visitMaintenanceSchedule]
 });

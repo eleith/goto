@@ -6,19 +6,6 @@ export async function insertVisit(db: Kysely<Database>, visit: ClassifiedVisit):
 	return row.id;
 }
 
-export async function pruneVisits(db: Kysely<Database>, before: number): Promise<boolean> {
-	const batchSize = 1000;
-	const expired = db
-		.selectFrom('visits')
-		.select('id')
-		.where('visited_at', '<', before)
-		.orderBy('visited_at')
-		.orderBy('id')
-		.limit(batchSize);
-	const result = await db.deleteFrom('visits').where('id', 'in', expired).executeTakeFirstOrThrow();
-	return result.numDeletedRows === BigInt(batchSize);
-}
-
 export async function purgeVisits(db: Kysely<Database>): Promise<void> {
 	await db.deleteFrom('visits').execute();
 }

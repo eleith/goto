@@ -10,20 +10,20 @@ export function formatCount(value: number | null): string {
 }
 
 export function formatUtc(value: string): string {
-	return `${utcFormatter.format(new Date(value))} UTC`;
+	return utcFormatter.format(new Date(value));
 }
 
-export function formatUpdated(value: number | null): string {
+export function formatLastVisit(value: number | null): string {
 	if (value === null) return '';
 	const formatter = new Intl.DateTimeFormat('en', {
 		dateStyle: 'medium',
 		timeStyle: 'short',
 		timeZone: 'UTC'
 	});
-	return `Updated ${formatter.format(value)} UTC`;
+	return formatter.format(value);
 }
 
-export function formatUpdatedCompact(value: number | null): string {
+export function formatLastVisitCompact(value: number | null): string {
 	if (value === null) return '';
 	const formatter = new Intl.DateTimeFormat('en', {
 		dateStyle: 'short',
@@ -31,5 +31,5 @@ export function formatUpdatedCompact(value: number | null): string {
 		hourCycle: 'h23',
 		timeZone: 'UTC'
 	});
-	return `Updated ${formatter.format(value)} UTC`;
+	return formatter.format(value);
 }

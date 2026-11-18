@@ -29,7 +29,7 @@
 	siteTitle={data.title}
 	title="Root"
 	documentTitle={`Root — ${data.domain}`}
-	updatedAt={data.asOf}
+	lastActivityAt={data.lastActivityAt}
 	overviewHref={`/admin?period=${timeframe}`}
 >
 	{#snippet actions()}
