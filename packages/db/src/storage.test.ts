@@ -5,7 +5,14 @@ import { DatabaseSync } from 'node:sqlite';
 import { dirname, join } from 'node:path';
 import { Migrator, sql, type Migration } from 'kysely';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { insertVisit, openDb, runMigrations, type ClassifiedVisit } from './index.js';
+import {
+	addVisitTotals,
+	insertVisit,
+	openDb,
+	readLinkVisitCounts,
+	runMigrations,
+	type ClassifiedVisit
+} from './index.js';
 import { migrations } from './migrations/index.js';
 
 let directory: string;
@@ -45,8 +52,14 @@ test('opens a real WAL database and initializes the current schema once', async 
 		expect(await runMigrations(db)).toEqual(['0001_initial']);
 		const tables = await db.introspection.getTables();
 		const names = tables.map((table) => table.name);
-		expect(names).toEqual(expect.arrayContaining(['visits', 'visit_daily_statistics']));
-		expect(names).toHaveLength(2);
+		expect(names).toEqual(
+			expect.arrayContaining(['visits', 'visit_daily_statistics', 'visit_totals'])
+		);
+		expect(names).toHaveLength(3);
+		expect(
+			tables.find((table) => table.name === 'visits')?.columns.find(({ name }) => name === 'ip')
+				?.isNullable
+		).toBe(true);
 		expect(
 			tables
 				.find((table) => table.name === 'visit_daily_statistics')
@@ -82,6 +95,7 @@ test('persists request-time outcomes for the same logical path on different doma
 				...visit,
 				domain: 'tiny.example.test',
 				outcome: 'invalid',
+				ip: null,
 				user_agent: null,
 				accept_language: null,
 				browser: 'Other',
@@ -102,6 +116,7 @@ test('persists request-time outcomes for the same logical path on different doma
 				outcome: 'invalid',
 				id: ids[1],
 				processed: 0,
+				ip: null,
 				user_agent: null,
 				accept_language: null,
 				browser: 'Other',
@@ -111,6 +126,45 @@ test('persists request-time outcomes for the same logical path on different doma
 		await expect(insertVisit(reader, visit)).rejects.toThrow();
 	} finally {
 		await reader.destroy();
+	}
+});
+
+test('link recovery keeps the same visit counts across an uncommitted worker rollup and its commit', async () => {
+	const path = join(directory, 'visit-counts.sqlite');
+	const writer = await openDb(path);
+	let reader: Awaited<ReturnType<typeof openDb>> | undefined;
+	try {
+		await runMigrations(writer);
+		await insertVisit(writer, visit);
+		await insertVisit(writer, { ...visit, outcome: 'invalid' });
+		await insertVisit(writer, { ...visit, domain: 'other.example.test' });
+		reader = await openDb(path, { readOnly: true });
+		const links = [
+			{ domain: visit.domain, path: visit.path },
+			{ domain: visit.domain, path: '/absent' }
+		];
+		const expected = [
+			{ ...links[0], visits: 1 },
+			{ ...links[1], visits: 0 }
+		];
+		const recovery = () => readLinkVisitCounts(reader!, links);
+		expect(await recovery()).toEqual(expected);
+		await writer.transaction().execute(async (transaction) => {
+			await addVisitTotals(transaction, [
+				{
+					scope: { kind: 'link', domain: visit.domain, path: visit.path },
+					totals: { validVisits: 1, invalidVisits: 0 }
+				}
+			]);
+			await transaction.updateTable('visits').set({ processed: 1 }).where('id', '=', 1).execute();
+			expect(await recovery()).toEqual(expected);
+		});
+		expect(await recovery()).toEqual(expected);
+		await insertVisit(writer, visit);
+		expect(await recovery()).toEqual([{ ...links[0], visits: 2 }, expected[1]]);
+	} finally {
+		await reader?.destroy();
+		await writer.destroy();
 	}
 });
 

@@ -1,6 +1,7 @@
 import { loadConfig, type DomainConfiguration } from '@goto/config';
 import { createVisitPeriod, visitDays, type VisitDetails } from '@goto/analytics';
 import { beforeEach, expect, test, vi } from 'vitest';
+import type { Application } from '#lib/server/application.js';
 import { prepareSnapshot } from '#lib/server/snapshot.js';
 import { readVisitDetails } from '#lib/server/visits/reports.js';
 import { load } from './+page.server.js';
@@ -61,8 +62,15 @@ function request(path = '/docs', options: { host?: string; retentionMonths?: num
 		},
 		{ env: {} }
 	);
+	const linkVisitCount = vi.fn((host: string, linkPath: string): number => {
+		if (host !== domain) throw new Error('Unexpected domain');
+		const visitCounts: Record<string, number> = { '/docs': 102, '/a/b': 3, '/a%2Fb': 8 };
+		return visitCounts[linkPath] ?? 0;
+	});
+	const snapshot = prepareSnapshot(prepared);
+	const application: Application = { currentSnapshot: () => snapshot, linkVisitCount };
 	return {
-		locals: { snapshot: prepareSnapshot(prepared) },
+		locals: { snapshot, application },
 		params: { domain: options.host ?? domain, path: path.slice(1) }
 	} as Parameters<typeof load>[0];
 }
@@ -100,7 +108,9 @@ const details: VisitDetails = {
 
 test('projects only requested link settings, series and compact window counts and breakdowns', async () => {
 	vi.mocked(readVisitDetails).mockResolvedValue(details);
-	const data = await load(request());
+	const event = request();
+	const data = await load(event);
+	expect(event.locals.application.linkVisitCount).toHaveBeenCalledExactlyOnceWith(domain, '/docs');
 	expect(readVisitDetails).toHaveBeenCalledExactlyOnceWith(expect.any(Object), {
 		kind: 'link',
 		domain,
@@ -109,6 +119,7 @@ test('projects only requested link settings, series and compact window counts an
 	expect(data).toEqual({
 		domain,
 		path: '/docs',
+		lifetimeVisits: 102,
 		...linkMetadata,
 		retentionMonths: 3,
 		collectionEnabled: true,
@@ -155,6 +166,7 @@ test('keeps decoded nested and literal-percent identities distinct', async () =>
 	const nested = await load(request('/a/b'));
 	const percent = await load(request('/a%2Fb'));
 	expect(nested.path).toBe('/a/b');
+	expect(nested.lifetimeVisits).toBe(3);
 	expect(nested).toMatchObject({
 		response: { url: 'https://example.test/nested', status_code: 301, forward_query: true },
 		redirectRules: [],
@@ -167,6 +179,7 @@ test('keeps decoded nested and literal-percent identities distinct', async () =>
 		tags: []
 	});
 	expect(percent.path).toBe('/a%2Fb');
+	expect(percent.lifetimeVisits).toBe(8);
 	expect(percent.state).toBe('disabled');
 	expect(percent.redirectRules).toEqual([
 		{ language: 'fr', os: null, to: 'https://example.test/percent-fr' }
@@ -194,6 +207,7 @@ test('rejects unknown scopes before reading and keeps unavailable counts absent'
 	vi.mocked(readVisitDetails).mockResolvedValue(null);
 	const data = await load(request());
 	expect(data.available).toBe(false);
+	expect(data.lifetimeVisits).toBe(102);
 	expect(data.browserVisitsByTimeframe).toEqual({});
 	expect(data.operatingSystemVisitsByTimeframe).toEqual({});
 	expect(data.chart).toBeNull();
@@ -204,8 +218,11 @@ test('rejects unknown scopes before reading and keeps unavailable counts absent'
 	expect(data.retentionMonths).toBe(3);
 });
 
-test('disabled analytics skips the report read and leaves link details usable', async () => {
-	const data = await load(request('/docs', { retentionMonths: 0 }));
+test('disabled analytics skips the finite report read and preserves live lifetime visits', async () => {
+	const event = request('/docs', { retentionMonths: 0 });
+	const data = await load(event);
+	expect(data.lifetimeVisits).toBe(102);
+	expect(event.locals.application.linkVisitCount).toHaveBeenCalledExactlyOnceWith(domain, '/docs');
 	expect(readVisitDetails).not.toHaveBeenCalled();
 	expect(data.collectionEnabled).toBe(false);
 	expect(data.browserVisitsByTimeframe).toEqual({});

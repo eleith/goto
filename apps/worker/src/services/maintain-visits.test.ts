@@ -6,7 +6,9 @@ import {
 	insertVisit,
 	processVisitBatch,
 	deleteExpiredVisitBatch,
-	purgeVisits,
+	deleteProcessedVisitBatch,
+	addVisitTotals,
+	readVisitTotals,
 	type ClassifiedVisit
 } from '@goto/db';
 import { readVisitDetails } from '@goto/db/visit-reports';
@@ -24,7 +26,8 @@ vi.mock('@goto/db', async (importOriginal) => {
 		...actual,
 		processVisitBatch: vi.fn(actual.processVisitBatch),
 		deleteExpiredVisitBatch: vi.fn(actual.deleteExpiredVisitBatch),
-		purgeVisits: vi.fn(actual.purgeVisits)
+		deleteProcessedVisitBatch: vi.fn(actual.deleteProcessedVisitBatch),
+		addVisitTotals: vi.fn(actual.addVisitTotals)
 	};
 });
 
@@ -37,7 +40,8 @@ afterEach(() => {
 	vi.restoreAllMocks();
 	vi.mocked(processVisitBatch).mockReset();
 	vi.mocked(deleteExpiredVisitBatch).mockReset();
-	vi.mocked(purgeVisits).mockReset();
+	vi.mocked(deleteProcessedVisitBatch).mockReset();
+	vi.mocked(addVisitTotals).mockReset();
 	vi.mocked(addDailyStatistics).mockReset();
 });
 
@@ -116,6 +120,22 @@ test('prepares bounded pending batches once and subtracts expired visits within 
 		expect(vi.mocked(addDailyStatistics).mock.calls.map(([, facts]) => facts.length)).toEqual([
 			1000, 4
 		]);
+		expect(vi.mocked(addVisitTotals).mock.calls[0]?.[1]).toEqual([
+			{ scope: overview, totals: { validVisits: 1000, invalidVisits: 0 } },
+			{ scope: domain, totals: { validVisits: 1000, invalidVisits: 0 } },
+			{ scope: docs, totals: { validVisits: 1000, invalidVisits: 0 } }
+		]);
+		expect(await readVisitTotals(ctx.db, overview)).toEqual({
+			validVisits: 1003,
+			invalidVisits: 1
+		});
+		expect(await readVisitTotals(ctx.db, domain)).toEqual({ validVisits: 1003, invalidVisits: 1 });
+		expect(await readVisitTotals(ctx.db, docs)).toEqual({ validVisits: 1002, invalidVisits: 0 });
+		expect(await readVisitTotals(ctx.db, root)).toEqual({ validVisits: 1, invalidVisits: 0 });
+		expect(await readVisitTotals(ctx.db, { ...docs, path: '/missing' })).toEqual({
+			validVisits: 0,
+			invalidVisits: 0
+		});
 		expect(await readTotals(ctx.db, domain)).toEqual({ validVisits: 2, invalidVisits: 1 });
 		expect(await readTotals(ctx.db, docs)).toEqual({ validVisits: 1, invalidVisits: 0 });
 		expect(await readTotals(ctx.db, root)).toEqual({ validVisits: 1, invalidVisits: 0 });
@@ -144,7 +164,7 @@ test('prepares bounded pending batches once and subtracts expired visits within 
 		try {
 			await maintainVisits(ctx, now);
 			for (const [query] of statements.mock.calls)
-				expect(query).not.toMatch(/^(insert|update).*visit_daily_statistics/i);
+				expect(query).not.toMatch(/^\s*(insert|update).*(visit_daily_statistics|visit_totals)/i);
 		} finally {
 			statements.mockRestore();
 		}
@@ -157,33 +177,40 @@ test('prepares bounded pending batches once and subtracts expired visits within 
 	}
 });
 
-test('zero clears daily output and all raw visits atomically without processing pending rows', async () => {
+test('zero counts minimal pending visits before cleanup, retries marked leftovers and preserves pending rows', async () => {
 	const ctx = await context();
 	try {
 		await insertVisit(ctx.db, { ...visit, visited_at: reportNow - 1 });
 		await maintainVisits(ctx, reportNow);
-		await insertVisit(ctx.db, { ...visit, visited_at: reportNow + 1 });
-		const daily = await ctx.db.selectFrom('visit_daily_statistics').selectAll().execute();
-		const raw = await ctx.db.selectFrom('visits').selectAll().execute();
-		ctx.config.analytics.retention_months = 0;
-		const actual = await vi.importActual<typeof import('@goto/db')>('@goto/db');
-		const failure = new Error('Purge interrupted after raw deletion');
-		vi.mocked(purgeVisits).mockImplementationOnce(async (transaction) => {
-			expect(transaction.isTransaction).toBe(true);
-			expect(await transaction.selectFrom('visit_daily_statistics').select('id').execute()).toEqual(
-				[]
-			);
-			await actual.purgeVisits(transaction);
-			throw failure;
+		await insertVisit(ctx.db, {
+			...visit,
+			ip: null,
+			browser: 'Other',
+			os: 'Other',
+			visited_at: reportNow - 1
 		});
+		await insertVisit(ctx.db, { ...visit, ip: null, visited_at: reportNow + 1 });
+		ctx.config.analytics.retention_months = 0;
+		vi.mocked(addDailyStatistics).mockClear();
+		const failure = new Error('Processed cleanup interrupted');
+		vi.mocked(deleteProcessedVisitBatch).mockRejectedValueOnce(failure);
 		await expect(maintainVisits(ctx, reportNow)).rejects.toBe(failure);
-		expect(await ctx.db.selectFrom('visit_daily_statistics').selectAll().execute()).toEqual(daily);
-		expect(await ctx.db.selectFrom('visits').selectAll().execute()).toEqual(raw);
-		vi.mocked(processVisitBatch).mockClear();
-		await maintainVisits(ctx, reportNow);
-		expect(await ctx.db.selectFrom('visits').selectAll().execute()).toEqual([]);
+		expect(await readVisitTotals(ctx.db, docs)).toEqual({ validVisits: 2, invalidVisits: 0 });
+		expect(await ctx.db.selectFrom('visits').select('processed').orderBy('id').execute()).toEqual([
+			{ processed: 1 },
+			{ processed: 1 },
+			{ processed: 0 }
+		]);
 		expect(await ctx.db.selectFrom('visit_daily_statistics').selectAll().execute()).toEqual([]);
-		expect(processVisitBatch).not.toHaveBeenCalled();
+		await maintainVisits(ctx, reportNow);
+		expect(await ctx.db.selectFrom('visits').select('processed').execute()).toEqual([
+			{ processed: 0 }
+		]);
+		expect(await readVisitTotals(ctx.db, docs)).toEqual({ validVisits: 2, invalidVisits: 0 });
+		await maintainVisits(ctx, reportNow + 2);
+		expect(await ctx.db.selectFrom('visits').selectAll().execute()).toEqual([]);
+		expect(await readVisitTotals(ctx.db, docs)).toEqual({ validVisits: 3, invalidVisits: 0 });
+		expect(addDailyStatistics).not.toHaveBeenCalled();
 	} finally {
 		await ctx.db.destroy();
 	}
@@ -216,6 +243,7 @@ test('partial daily cache loss warns with bounded examples, continues raw expiry
 			id: 0,
 			processed: 1,
 			visited_at: cutoff - 7 * 86_400_000,
+			ip: null,
 			user_agent: null,
 			accept_language: null
 		});
@@ -329,7 +357,7 @@ test('an inconsistent bucket is left unchanged while valid buckets and raw expir
 	}
 });
 
-test('a failed pending batch rolls back actual daily writes with its processed markers and retries', async () => {
+test('a failed pending batch rolls back counters and daily writes with its processed markers and retries', async () => {
 	const ctx = await context();
 	try {
 		await insertVisit(ctx.db, { ...visit, visited_at: reportNow - 1 });
@@ -352,7 +380,9 @@ test('a failed pending batch rolls back actual daily writes with its processed m
 		expect(await ctx.db.selectFrom('visits').select('processed').execute()).toEqual([
 			{ processed: 0 }
 		]);
+		expect(await readVisitTotals(ctx.db, docs)).toEqual({ validVisits: 0, invalidVisits: 0 });
 		await maintainVisits(ctx, reportNow);
+		expect(await readVisitTotals(ctx.db, docs)).toEqual({ validVisits: 1, invalidVisits: 0 });
 		expect((await readTotals(ctx.db, docs)).validVisits).toBe(1);
 		expect(await ctx.db.selectFrom('visits').select('processed').execute()).toEqual([
 			{ processed: 1 }

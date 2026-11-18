@@ -96,7 +96,7 @@ async function startWorkflowWorker(
 	const engineLogger = createEngineLogger(logger);
 	const engine = new OpenWorkflow({ backend, logger: engineLogger });
 	registerVisitMaintenance(engine, context);
-	await configureVisitMaintenance(context, engine);
+	await configureVisitMaintenance(engine);
 	const workflowWorker = engine.newWorker({ concurrency: 1 });
 	resources.workflowWorker = workflowWorker;
 	await workflowWorker.start();

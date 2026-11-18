@@ -30,6 +30,9 @@ services:
       - ../../packages/db/src:/m/packages/db/src:ro
       - ../../packages/analytics/src:/m/packages/analytics/src:ro
     restart: unless-stopped
+    depends_on:
+      goto-worker:
+        condition: service_healthy
     healthcheck:
       test:
         - CMD

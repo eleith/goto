@@ -17,7 +17,6 @@ export async function runVisitMaintenance(
 	step: VisitMaintenanceStep
 ): Promise<'completed'> {
 	if (input.scheduled) {
-		if (context.config.analytics.retention_months === 0) return 'completed';
 		const seconds = await step.run({ name: 'choose-jitter' }, chooseJitter);
 		const duration: `${number}s` = `${seconds}s`;
 		await step.sleep('retention-jitter', duration);

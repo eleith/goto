@@ -14,6 +14,7 @@ export const load = (async ({ locals, params }) => {
 	const path = `/${params.path ?? ''}`;
 	if (!Object.hasOwn(prepared.links, path)) throw error(404, 'Link not configured');
 	const link = prepared.links[path]!;
+	const lifetimeVisits = locals.application.linkVisitCount(domain, path);
 	const response = {
 		url: link.url,
 		status_code: link.status_code,
@@ -31,7 +32,10 @@ export const load = (async ({ locals, params }) => {
 	const retentionMonths = configuration.analytics.retention_months;
 	const collectionEnabled = retentionMonths !== 0;
 	const scope = { kind: 'link' as const, domain, path };
-	const details = collectionEnabled ? await readVisitDetails(configuration, scope) : null;
+	let details: Awaited<ReturnType<typeof readVisitDetails>> = null;
+	if (collectionEnabled) {
+		details = await readVisitDetails(configuration, scope);
+	}
 	const timeframes = retentionMonths === 0 ? [] : availableVisitTimeframes(retentionMonths);
 	const windows = details
 		? timeframes.map((timeframe) => ({ timeframe, window: visitWindow(details.period, timeframe) }))
@@ -52,6 +56,7 @@ export const load = (async ({ locals, params }) => {
 	return {
 		domain,
 		path,
+		lifetimeVisits,
 		response,
 		redirectRules,
 		caseInsensitive: link.case_insensitive,

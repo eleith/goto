@@ -49,11 +49,16 @@ export async function watchConfiguration(
 		restartRequested = true;
 		if (watchOwned) shutdownForRestart();
 	}
+	function reportReloadFailure(): void {
+		if (restartRequested) return;
+		logger.warn(
+			'Invalid worker configuration update; previous configuration remains active until a valid update is loaded'
+		);
+	}
 	resources.stopWatch = await startConfigReloading({
 		...source,
 		onChange: (next, previous) => applyConfig(next, previous, requestRestart, context, engine),
-		onError: () =>
-			logger.error('Unable to apply worker configuration update; keeping current configuration')
+		onError: reportReloadFailure
 	});
 	watchOwned = true;
 	if (restartRequested) shutdownForRestart();
@@ -68,7 +73,7 @@ function canReloadConfiguration(
 	const previouslyCollectedVisits = previous.configuration.analytics.retention_months !== 0;
 	if (collectVisits !== previouslyCollectedVisits) {
 		logger.warn(
-			'Analytics collection change requires coordinated restart; keeping current configuration'
+			'Detailed analytics change requires coordinated restart; previous configuration remains active until a valid update is loaded'
 		);
 		return false;
 	}

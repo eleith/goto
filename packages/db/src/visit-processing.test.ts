@@ -4,6 +4,7 @@ import { afterEach, beforeEach, expect, test } from 'vitest';
 import {
 	captureVisitBoundary,
 	deleteExpiredVisitBatch,
+	deleteProcessedVisitBatch,
 	insertVisit,
 	openDb,
 	processVisitBatch,
@@ -108,6 +109,30 @@ test('subtracts and deletes only expired processed rows in bounded saved-ID batc
 	expect(await db.selectFrom('visit_daily_statistics').selectAll().execute()).toMatchObject([
 		{ scope_kind: 'overview', valid_visits: 2, invalid_visits: 0, last_visit_at: 20 }
 	]);
+});
+
+test('zero cleanup removes bounded processed rows only within the captured ID boundary', async () => {
+	await db
+		.insertInto('visits')
+		.values([
+			...Array.from({ length: 1001 }, () => ({ ...visit, processed: 1 as const })),
+			{ ...visit, processed: 0 }
+		])
+		.execute();
+	const throughId = await captureVisitBoundary(db);
+	await db
+		.insertInto('visits')
+		.values({ ...visit, processed: 1 })
+		.execute();
+	expect(await deleteProcessedVisitBatch(db, throughId)).toBe(true);
+	expect(await deleteProcessedVisitBatch(db, throughId)).toBe(false);
+	expect(await deleteProcessedVisitBatch(db, throughId)).toBe(false);
+	expect(await db.selectFrom('visits').select(['id', 'processed']).orderBy('id').execute()).toEqual(
+		[
+			{ id: 1002, processed: 0 },
+			{ id: 1003, processed: 1 }
+		]
+	);
 });
 
 test('failed retained-statistics removal rolls back its writes and preserves processed raw rows', async () => {

@@ -34,7 +34,9 @@ test('atomic YAML saves update redirects while invalid saves retain the last wor
 	await save('site: [\n');
 	await expect
 		.poll(appServer.logs, polling)
-		.toContain('Invalid configuration update; keeping current configuration');
+		.toContain(
+			'Invalid configuration update; previous configuration remains active until a valid update is loaded'
+		);
 	expect(await destination()).toBe(link.url);
 
 	link.url = 'https://example.org/recovered';

@@ -325,7 +325,7 @@ test('rejects unknown domains before reading and keeps unavailable inventory usa
 	expect(data.linkCount).toBe(3);
 });
 
-test('disabled collection reads no reports and preserves current inventory', async () => {
+test('disabled analytics preserves current inventory without reports', async () => {
 	const root: RedirectResponse = {
 		url: 'https://example.test/start',
 		status_code: 301,

@@ -9,7 +9,7 @@ export interface VisitTable {
 	path: string;
 	outcome: VisitOutcome;
 	visited_at: number;
-	ip: string;
+	ip: string | null;
 	user_agent: string | null;
 	accept_language: string | null;
 	browser: string;
@@ -30,7 +30,17 @@ export interface VisitDailyStatisticsTable {
 	accepted_languages_json: string;
 }
 
+export interface VisitTotalsTable {
+	id: Generated<number>;
+	scope_kind: 'overview' | 'domain' | 'link';
+	domain: string | null;
+	path: string | null;
+	valid_visits: number;
+	invalid_visits: number;
+}
+
 export interface Database {
+	visit_totals: VisitTotalsTable;
 	visits: VisitTable;
 	visit_daily_statistics: VisitDailyStatisticsTable;
 }

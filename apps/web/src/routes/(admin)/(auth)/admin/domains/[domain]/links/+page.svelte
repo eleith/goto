@@ -8,6 +8,7 @@
 	import AnalyticsSection from '#lib/components/admin/AnalyticsSection.svelte';
 	import StatCard from '#lib/components/admin/StatCard.svelte';
 	import ReportNotice from '#lib/components/admin/ReportNotice.svelte';
+	import { formatCount } from '#lib/components/admin/format.js';
 	import type { PageData } from './$types';
 	let { data }: { data: PageData } = $props();
 
@@ -48,6 +49,8 @@
 			<dd><a href={`${data.domainHref}?period=${timeframe}`}>{data.domain}</a></dd>
 			<dt>Address</dt>
 			<dd>{data.domain}/</dd>
+			<dt>All-time visits</dt>
+			<dd>{formatCount(data.lifetimeVisitTotals?.validVisits ?? null)}</dd>
 			<dt>Destination</dt>
 			<dd>
 				{#if data.response}
@@ -65,6 +68,7 @@
 				<dd>{data.response.forward_query ? 'Yes' : 'No'}</dd>
 			{/if}
 		</dl>
+		<p>Worker totals update hourly; pending visits are not yet included.</p>
 	</section>
 	<section id="fallback" class="admin-info" aria-labelledby="fallback-heading">
 		<h2 id="fallback-heading">Fallback</h2>

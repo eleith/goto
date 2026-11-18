@@ -1,10 +1,11 @@
 import { setImmediate } from 'node:timers/promises';
-import { createVisitPeriod, type ReportPeriod } from '@goto/analytics';
+import { createVisitPeriod, type ReportScope, type VisitTotals } from '@goto/analytics';
 import {
+	addVisitTotals,
 	captureVisitBoundary,
 	processVisitBatch,
 	deleteExpiredVisitBatch,
-	purgeVisits,
+	deleteProcessedVisitBatch,
 	type Visit
 } from '@goto/db';
 import {
@@ -20,35 +21,35 @@ import { logger } from './logger.js';
 interface Maintenance {
 	context: WorkerContext;
 	months: number;
-	period: ReportPeriod;
 	asOf: number;
 	throughId: number;
 }
 
 export async function maintainVisits(context: WorkerContext, asOf = Date.now()): Promise<void> {
 	const months = context.config.analytics.retention_months;
+	const throughId = await captureVisitBoundary(context.db);
+	const maintenance = { context, months, asOf, throughId };
+	if (!policyUnchanged(maintenance)) return;
+	await processPendingVisits(maintenance);
+	if (!policyUnchanged(maintenance)) return;
 	if (months === 0) {
-		await context.db.transaction().execute(async (transaction) => {
-			await clearDailyVisitStatistics(transaction);
-			await purgeVisits(transaction);
-		});
+		await clearDailyVisitStatistics(context.db);
+		await deleteProcessedVisits(maintenance);
 		return;
 	}
 	const period = createVisitPeriod(months, asOf);
-	const throughId = await captureVisitBoundary(context.db);
-	const maintenance = { context, months, period, asOf, throughId };
-	if (!policyUnchanged(maintenance)) return;
-	await processPendingVisits(maintenance);
-	await deleteExpiredVisits(maintenance);
+	const before = Date.parse(period.from);
+	await deleteExpiredVisits(maintenance, before);
 	if (policyUnchanged(maintenance)) {
-		await deleteExpiredDailyStatistics(context.db, Date.parse(period.from));
+		await deleteExpiredDailyStatistics(context.db, before);
 	}
 }
 
 async function processPendingVisits(maintenance: Maintenance): Promise<void> {
 	const { context, throughId, asOf } = maintenance;
 	async function applyStatistics(db: WorkerContext['db'], visits: Visit[]): Promise<void> {
-		await addDailyStatistics(db, visits.map(getVisitFacts));
+		await addBatchVisitTotals(db, visits);
+		if (maintenance.months > 0) await addDailyStatistics(db, visits.map(getVisitFacts));
 	}
 	while (policyUnchanged(maintenance)) {
 		const more = await processVisitBatch(context.db, { throughId, asOf }, applyStatistics);
@@ -57,9 +58,42 @@ async function processPendingVisits(maintenance: Maintenance): Promise<void> {
 	}
 }
 
-async function deleteExpiredVisits(maintenance: Maintenance): Promise<void> {
-	const { context, throughId, period } = maintenance;
-	const before = Date.parse(period.from);
+async function addBatchVisitTotals(
+	db: WorkerContext['db'],
+	visits: readonly Visit[]
+): Promise<void> {
+	const additions = new Map<string, { scope: ReportScope; totals: VisitTotals }>();
+	for (const visit of visits) {
+		const outcome = visit.path === '/' ? 'valid' : visit.outcome;
+		const scopes: ReportScope[] = [{ kind: 'overview' }, { kind: 'domain', domain: visit.domain }];
+		if (outcome === 'valid') {
+			scopes.push({ kind: 'link', domain: visit.domain, path: visit.path });
+		}
+		for (const scope of scopes) {
+			const key = JSON.stringify(scope);
+			let addition = additions.get(key);
+			if (!addition) {
+				addition = { scope, totals: { validVisits: 0, invalidVisits: 0 } };
+				additions.set(key, addition);
+			}
+			if (outcome === 'valid') addition.totals.validVisits++;
+			else addition.totals.invalidVisits++;
+		}
+	}
+	await addVisitTotals(db, [...additions.values()]);
+}
+
+async function deleteProcessedVisits(maintenance: Maintenance): Promise<void> {
+	const { context, throughId } = maintenance;
+	while (policyUnchanged(maintenance)) {
+		const more = await deleteProcessedVisitBatch(context.db, throughId);
+		await setImmediate();
+		if (!more) return;
+	}
+}
+
+async function deleteExpiredVisits(maintenance: Maintenance, before: number): Promise<void> {
+	const { context, throughId } = maintenance;
 	let batchMismatches: DailyStatisticsMismatch[];
 	let skippedBucketUpdates = 0;
 	const examples: DailyStatisticsMismatch[] = [];

@@ -73,7 +73,7 @@ test.each([
 		expect(restart).not.toHaveBeenCalled();
 		expect(requestVisitMaintenance).not.toHaveBeenCalled();
 		expect(logger.warn).toHaveBeenCalledExactlyOnceWith(
-			'Analytics collection change requires coordinated restart; keeping current configuration'
+			'Detailed analytics change requires coordinated restart; previous configuration remains active until a valid update is loaded'
 		);
 	}
 );
@@ -173,6 +173,31 @@ test('failed maintenance on positive policy reconciliation requests shutdown', a
 	expect(logger.error).toHaveBeenCalledWith(
 		'Unable to apply worker configuration; stopping service'
 	);
+});
+
+test('warns that a rejected update keeps the previous configuration until corrected', async () => {
+	const initial = configuration();
+	const ctx = context();
+	ctx.config = initial.configuration;
+	const shutdown = vi.fn(async () => {});
+	vi.mocked(startConfigReloading).mockResolvedValueOnce(async () => {});
+	await watchConfiguration(
+		{ path: '/config/goto.yaml', initial, load: async () => initial },
+		{},
+		shutdown,
+		ctx,
+		engine
+	);
+	const watcher = vi.mocked(startConfigReloading).mock.calls[0]![0];
+	watcher.onError(new Error('Private invalid YAML input'));
+	expect(ctx.config).toBe(initial.configuration);
+	expect(logger.warn).toHaveBeenCalledExactlyOnceWith(
+		'Invalid worker configuration update; previous configuration remains active until a valid update is loaded'
+	);
+	expect(shutdown).not.toHaveBeenCalled();
+	const corrected = configuration(undefined, 9);
+	expect(await watcher.onChange(corrected, initial)).toBe(true);
+	expect(ctx.config).toBe(corrected.configuration);
 });
 
 test('initial reread restart waits until the monitor stop handle is owned', async () => {

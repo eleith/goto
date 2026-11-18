@@ -8,10 +8,14 @@ import {
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { createApplication } from './application.js';
 import { createAuthentication } from './auth/index.js';
-import { createVisitRecorder } from './visits/recorder.js';
+import { createVisitWriter } from './visits/writer.js';
+import { readStoredLinkVisitCounts } from './visits/counts.js';
+import { handleIngress } from './dispatch.js';
+import type { IncomingMessage } from 'node:http';
 
 vi.mock('./auth/index.js', () => ({ createAuthentication: vi.fn(() => ({})) }));
-vi.mock('./visits/recorder.js', () => ({ createVisitRecorder: vi.fn() }));
+vi.mock('./visits/writer.js', () => ({ createVisitWriter: vi.fn() }));
+vi.mock('./visits/counts.js', () => ({ readStoredLinkVisitCounts: vi.fn() }));
 
 vi.mock('@goto/config', async (importOriginal) => ({
 	...(await importOriginal<typeof import('@goto/config')>()),
@@ -23,8 +27,9 @@ type ReloadOptions = Parameters<typeof startConfigReloading<PreparedConfiguratio
 const options = { cwd: '/deployment', env: {} };
 let reload: ReloadOptions;
 const stop = vi.fn();
-const stopRecorder = vi.fn();
-const recordVisit = vi.fn();
+const stopVisitWriter = vi.fn();
+const queueVisit = vi.fn();
+const waitUntilReady = vi.fn();
 
 function prepared(
 	destination = 'https://example.org/first',
@@ -46,7 +51,14 @@ beforeEach(() => {
 	vi.spyOn(console, 'warn').mockImplementation(() => {});
 	vi.spyOn(console, 'error').mockImplementation(() => {});
 	vi.mocked(loadConfigFile).mockResolvedValue(prepared());
-	vi.mocked(createVisitRecorder).mockReturnValue({ recordVisit, stop: stopRecorder });
+	waitUntilReady.mockResolvedValue(undefined);
+	stopVisitWriter.mockResolvedValue(undefined);
+	vi.mocked(readStoredLinkVisitCounts).mockResolvedValue([]);
+	vi.mocked(createVisitWriter).mockReturnValue({
+		waitUntilReady,
+		queueVisit,
+		stop: stopVisitWriter
+	});
 	vi.mocked(startConfigReloading).mockImplementation(async (options) => {
 		reload = options as ReloadOptions;
 		return stop;
@@ -69,18 +81,23 @@ test('uses a fixed path/environment and stops monitoring with the application', 
 	expect(application.currentSnapshot().configuration.auth).not.toHaveProperty('secret');
 	await application.close?.();
 	expect(stop).toHaveBeenCalledOnce();
-	expect(createVisitRecorder).toHaveBeenCalledExactlyOnceWith('/deployment/data/goto.sqlite');
-	expect(application.recordVisit).toBe(recordVisit);
-	expect(stopRecorder).toHaveBeenCalledOnce();
+	expect(createVisitWriter).toHaveBeenCalledExactlyOnceWith('/deployment/data/goto.sqlite');
+	expect(application.recordVisit).toEqual(expect.any(Function));
+	expect(waitUntilReady).toHaveBeenCalledOnce();
+	expect(readStoredLinkVisitCounts).toHaveBeenCalledExactlyOnceWith(
+		'/deployment/data/goto.sqlite',
+		[{ domain: 'go.example.test', path: '/docs' }]
+	);
+	expect(stopVisitWriter).toHaveBeenCalledOnce();
 });
 
 test('publishes valid changes, ignores equivalent data, and retains last good data on failure', async () => {
 	const application = await createApplication(options);
 	const initial = application.currentSnapshot();
-	expect(reload.onChange(prepared(), prepared())).toBe(true);
+	expect(await reload.onChange(prepared(), prepared())).toBe(true);
 	expect(application.currentSnapshot()).toBe(initial);
 	const next = prepared('https://example.org/second');
-	expect(reload.onChange(next, prepared())).toBe(true);
+	expect(await reload.onChange(next, prepared())).toBe(true);
 	const accepted = application.currentSnapshot();
 	expect(accepted).not.toBe(initial);
 	expect(accepted.domains['go.example.test']?.links['/docs']?.url).toBe(
@@ -89,9 +106,9 @@ test('publishes valid changes, ignores equivalent data, and retains last good da
 	reload.onError(new Error('private-parser-detail'));
 	expect(application.currentSnapshot()).toBe(accepted);
 	expect(createAuthentication).toHaveBeenCalledOnce();
-	expect(createVisitRecorder).toHaveBeenCalledOnce();
+	expect(createVisitWriter).toHaveBeenCalledOnce();
 	expect(console.warn).toHaveBeenCalledExactlyOnceWith(
-		'Invalid configuration update; keeping current configuration'
+		'Invalid configuration update; previous configuration remains active until a valid update is loaded'
 	);
 	await application.close?.();
 });
@@ -104,47 +121,60 @@ test.each([
 	const application = await createApplication(options);
 	const initial = application.currentSnapshot();
 
-	expect(reload.onChange(prepared('https://example.org/blocked', changes), prepared())).toBe(false);
+	expect(await reload.onChange(prepared('https://example.org/blocked', changes), prepared())).toBe(
+		false
+	);
 
 	expect(application.currentSnapshot()).toBe(initial);
 	expect(console.warn).toHaveBeenCalledExactlyOnceWith(
-		'Configuration change requires restart; keeping current configuration'
+		'Configuration change requires restart; previous configuration remains active until a valid update is loaded'
 	);
 	await application.close?.();
 });
 
-test('rejects live collection disable and the rest of its candidate until coordinated restart', async () => {
+test('rejects live detailed analytics disable and the rest of its candidate until coordinated restart', async () => {
 	const application = await createApplication(options);
 	const initial = application.currentSnapshot();
 	const next = prepared('https://example.org/blocked', { analytics: { retention_months: 0 } });
-	expect(reload.onChange(next, prepared())).toBe(false);
+	expect(await reload.onChange(next, prepared())).toBe(false);
 	expect(application.currentSnapshot()).toBe(initial);
-	expect(createVisitRecorder).toHaveBeenCalledOnce();
+	expect(createVisitWriter).toHaveBeenCalledOnce();
 	expect(console.warn).toHaveBeenCalledExactlyOnceWith(
-		'Analytics collection change requires coordinated restart; keeping current configuration'
+		'Detailed analytics change requires coordinated restart; previous configuration remains active until a valid update is loaded'
 	);
 	await application.close?.();
 });
 
-test('zero startup creates no recorder and rejects live enabling', async () => {
+test('starts visit writing with zero retention and rejects live detailed analytics enabling', async () => {
 	const initial = prepared('https://example.org/first', { analytics: { retention_months: 0 } });
 	vi.mocked(loadConfigFile).mockResolvedValueOnce(initial);
 	const application = await createApplication(options);
 	const snapshot = application.currentSnapshot();
-	expect(createVisitRecorder).not.toHaveBeenCalled();
-	expect(application.recordVisit).toBeUndefined();
-	expect(reload.onChange(prepared('https://example.org/blocked'), initial)).toBe(false);
+	expect(createVisitWriter).toHaveBeenCalledOnce();
+	expect(application.recordVisit).toEqual(expect.any(Function));
+	expect(readStoredLinkVisitCounts).toHaveBeenCalledOnce();
+	expect(send(application, '/docs')?.status).toBe(302);
+	expect(application.linkVisitCount('go.example.test', '/docs')).toBe(1);
+	expect(queueVisit).toHaveBeenCalledExactlyOnceWith(
+		expect.objectContaining({
+			path: '/docs',
+			ip: null,
+			user_agent: null,
+			accept_language: null
+		})
+	);
+	expect(await reload.onChange(prepared('https://example.org/blocked'), initial)).toBe(false);
 	expect(application.currentSnapshot()).toBe(snapshot);
 	await application.close?.();
-	expect(stopRecorder).not.toHaveBeenCalled();
+	expect(stopVisitWriter).toHaveBeenCalledOnce();
 });
 
-test('changes positive retention live without replacing the recorder', async () => {
+test('changes positive retention live without restarting visit writing', async () => {
 	const application = await createApplication(options);
 	const next = prepared('https://example.org/second', { analytics: { retention_months: 9 } });
-	expect(reload.onChange(next, prepared())).toBe(true);
+	expect(await reload.onChange(next, prepared())).toBe(true);
 	expect(application.currentSnapshot().configuration.analytics.retention_months).toBe(9);
-	expect(createVisitRecorder).toHaveBeenCalledOnce();
+	expect(createVisitWriter).toHaveBeenCalledOnce();
 	await application.close?.();
 });
 
@@ -156,14 +186,14 @@ test('reports tag warnings at startup and only changed warnings on accepted relo
 	expect(console.warn).toHaveBeenCalledExactlyOnceWith(
 		'Configuration warnings\n  /domains/*/links/*/tags/0: Ignored blank tag'
 	);
-	expect(reload.onChange(structuredClone(initial), initial)).toBe(true);
+	expect(await reload.onChange(structuredClone(initial), initial)).toBe(true);
 	expect(console.warn).toHaveBeenCalledOnce();
 
 	const next = {
 		...prepared('https://example.org/second'),
 		warnings: [warning, { path: '/domains/*/links/*/tags/1', message: 'Ignored dot-segment tag' }]
 	};
-	expect(reload.onChange(next, initial)).toBe(true);
+	expect(await reload.onChange(next, initial)).toBe(true);
 	expect(console.warn).toHaveBeenCalledTimes(2);
 	expect(application.currentSnapshot().domains['go.example.test']?.links['/docs']?.url).toBe(
 		'https://example.org/second'
@@ -171,10 +201,10 @@ test('reports tag warnings at startup and only changed warnings on accepted relo
 	await application.close?.();
 });
 
-test('closes the recorder if configuration monitoring cannot start', async () => {
+test('stops visit writing if configuration monitoring cannot start', async () => {
 	vi.mocked(startConfigReloading).mockRejectedValueOnce(new Error('Monitor startup failed'));
 	await expect(createApplication(options)).rejects.toThrow('Monitor startup failed');
-	expect(stopRecorder).toHaveBeenCalledOnce();
+	expect(stopVisitWriter).toHaveBeenCalledOnce();
 });
 
 test('invalid startup fails before registering a monitor', async () => {
@@ -183,7 +213,7 @@ test('invalid startup fails before registering a monitor', async () => {
 	await expect(createApplication(options)).rejects.toThrow('Invalid configuration');
 	expect(console.error).toHaveBeenCalledExactlyOnceWith('Invalid configuration');
 	expect(startConfigReloading).not.toHaveBeenCalled();
-	expect(createVisitRecorder).not.toHaveBeenCalled();
+	expect(createVisitWriter).not.toHaveBeenCalled();
 });
 
 test('reports only curated configuration issues during startup', async () => {
@@ -198,7 +228,7 @@ test('reports only curated configuration issues during startup', async () => {
 		'Invalid configuration\n  /url/app: Expected a canonical app origin'
 	);
 	expect(startConfigReloading).not.toHaveBeenCalled();
-	expect(createVisitRecorder).not.toHaveBeenCalled();
+	expect(createVisitWriter).not.toHaveBeenCalled();
 });
 
 test('does not expose arbitrary startup errors as configuration diagnostics', async () => {
@@ -207,4 +237,168 @@ test('does not expose arbitrary startup errors as configuration diagnostics', as
 
 	await expect(createApplication(options)).rejects.toBe(failure);
 	expect(console.error).not.toHaveBeenCalled();
+});
+
+function send(
+	application: Awaited<ReturnType<typeof createApplication>>,
+	path: string,
+	method = 'GET'
+) {
+	return handleIngress(
+		application,
+		{
+			headers: { host: 'go.example.test' },
+			rawHeaders: ['Host', 'go.example.test'],
+			url: path,
+			method,
+			socket: { remoteAddress: '127.0.0.1' }
+		} as IncomingMessage,
+		{}
+	);
+}
+
+function withNewLink() {
+	return prepared('https://example.org/second', {
+		domains: {
+			'go.example.test': {
+				links: {
+					'/docs': { url: 'https://example.org/second' },
+					'/new': { url: 'https://example.org/new' }
+				}
+			}
+		}
+	});
+}
+
+test('waits for visit storage readiness before loading saved counts or starting the monitor', async () => {
+	const ready = Promise.withResolvers<void>();
+	const entered = Promise.withResolvers<void>();
+	waitUntilReady.mockImplementationOnce(() => {
+		entered.resolve();
+		return ready.promise;
+	});
+	vi.mocked(readStoredLinkVisitCounts).mockResolvedValueOnce([
+		{ domain: 'go.example.test', path: '/docs', visits: 12 }
+	]);
+	const starting = createApplication(options);
+	await entered.promise;
+	expect(readStoredLinkVisitCounts).not.toHaveBeenCalled();
+	expect(startConfigReloading).not.toHaveBeenCalled();
+	ready.resolve();
+	const application = await starting;
+	expect(application.linkVisitCount('go.example.test', '/docs')).toBe(12);
+	expect(application.linkVisitCount('go.example.test', '/absent')).toBe(0);
+	await application.close?.();
+});
+
+test('fails startup and stops visit writing when saved visit counts are unavailable', async () => {
+	vi.mocked(readStoredLinkVisitCounts).mockRejectedValueOnce(
+		new Error('Link visit counts unavailable')
+	);
+	await expect(createApplication(options)).rejects.toThrow('Link visit counts unavailable');
+	expect(stopVisitWriter).toHaveBeenCalledOnce();
+	expect(startConfigReloading).not.toHaveBeenCalled();
+});
+
+test('preserves live counts while loading saved counts for new links before publishing a reload', async () => {
+	vi.mocked(readStoredLinkVisitCounts).mockResolvedValueOnce([
+		{ domain: 'go.example.test', path: '/docs', visits: 5 }
+	]);
+	const application = await createApplication(options);
+	const initial = application.currentSnapshot();
+	const recovered =
+		Promise.withResolvers<Array<{ domain: string; path: string; visits: number }>>();
+	vi.mocked(readStoredLinkVisitCounts).mockReturnValueOnce(recovered.promise);
+	const next = withNewLink();
+	const applying = reload.onChange(next, prepared());
+	expect(application.currentSnapshot()).toBe(initial);
+	expect(readStoredLinkVisitCounts).toHaveBeenLastCalledWith('/deployment/data/goto.sqlite', [
+		{ domain: 'go.example.test', path: '/new' }
+	]);
+	send(application, '/docs');
+	expect(application.linkVisitCount('go.example.test', '/docs')).toBe(6);
+	recovered.resolve([{ domain: 'go.example.test', path: '/new', visits: 9 }]);
+	expect(await applying).toBe(true);
+	expect(application.currentSnapshot().domains['go.example.test']?.links['/new']).toBeDefined();
+	expect(application.linkVisitCount('go.example.test', '/docs')).toBe(6);
+	expect(application.linkVisitCount('go.example.test', '/new')).toBe(9);
+
+	const removed = prepared('https://example.org/third', { domains: {} });
+	expect(await reload.onChange(removed, next)).toBe(true);
+	expect(await reload.onChange(next, removed)).toBe(true);
+	expect(readStoredLinkVisitCounts).toHaveBeenCalledTimes(2);
+	expect(application.linkVisitCount('go.example.test', '/docs')).toBe(6);
+	await application.close?.();
+});
+
+test('rejects the whole candidate when saved counts cannot load and accepts the corrected poll without losing counts', async () => {
+	const application = await createApplication(options);
+	const initial = application.currentSnapshot();
+	const next = withNewLink();
+	vi.mocked(readStoredLinkVisitCounts).mockRejectedValueOnce(new Error('private database detail'));
+	expect(await reload.onChange(next, prepared())).toBe(false);
+	expect(application.currentSnapshot()).toBe(initial);
+	send(application, '/docs');
+	expect(application.linkVisitCount('go.example.test', '/docs')).toBe(1);
+	expect(console.warn).toHaveBeenCalledExactlyOnceWith(
+		'Link visit counts unavailable; previous configuration remains active until a valid update is loaded'
+	);
+	expect(await reload.onChange(next, prepared())).toBe(true);
+	expect(application.linkVisitCount('go.example.test', '/docs')).toBe(1);
+	expect(application.linkVisitCount('go.example.test', '/new')).toBe(0);
+	await application.close?.();
+});
+
+test('shutdown prevents a pending candidate from publishing', async () => {
+	const application = await createApplication(options);
+	const initial = application.currentSnapshot();
+	const recovered =
+		Promise.withResolvers<Array<{ domain: string; path: string; visits: number }>>();
+	vi.mocked(readStoredLinkVisitCounts).mockReturnValueOnce(recovered.promise);
+	const applying = reload.onChange(withNewLink(), prepared());
+	await application.close?.();
+	recovered.resolve([{ domain: 'go.example.test', path: '/new', visits: 8 }]);
+	expect(await applying).toBe(false);
+	expect(application.currentSnapshot()).toBe(initial);
+	expect(await reload.onChange(withNewLink(), prepared())).toBe(false);
+});
+
+test('counts final canonical named GETs in memory before queue admission, not HEAD, root or invalid visits', async () => {
+	const initial = prepared('https://example.org/docs', {
+		domains: {
+			'go.example.test': {
+				links: {
+					'/docs': {
+						url: 'https://example.org/docs',
+						case_insensitive: true,
+						ignore_trailing_slash: true,
+						forward_path: true
+					},
+					'/off': { url: 'https://example.org/off', enabled: false },
+					'/loop': { url: 'https://example.org/loop' }
+				}
+			}
+		}
+	});
+	initial.domains['go.example.test']!.links['/loop']!.url = 'https://go.example.test/loop';
+	vi.mocked(loadConfigFile).mockResolvedValueOnce(initial);
+	const application = await createApplication(options);
+	let visitsAtAdmission: number | undefined;
+	queueVisit.mockImplementationOnce(() => {
+		visitsAtAdmission = application.linkVisitCount('go.example.test', '/docs');
+		throw new Error('Rejected by bounded admission');
+	});
+	expect(send(application, '/DOCS/?query=not-a-link-key')?.status).toBe(302);
+	expect(visitsAtAdmission).toBe(1);
+	expect(send(application, '/docs/guide')?.status).toBe(302);
+	expect(send(application, '/docs', 'HEAD')?.status).toBe(302);
+	expect(send(application, '/')?.status).toBe(404);
+	expect(send(application, '/missing')?.status).toBe(404);
+	expect(send(application, '/off')?.status).toBe(404);
+	expect(send(application, '/loop')?.status).toBe(404);
+	expect(application.linkVisitCount('go.example.test', '/docs')).toBe(2);
+	expect(application.linkVisitCount('go.example.test', '/off')).toBe(0);
+	expect(application.linkVisitCount('go.example.test', '/loop')).toBe(0);
+	expect(application.linkVisitCount('go.example.test', '/')).toBe(0);
+	await application.close?.();
 });

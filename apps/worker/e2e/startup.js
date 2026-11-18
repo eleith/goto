@@ -45,6 +45,21 @@ function visitCount(directory) {
 	}
 }
 
+function lifetimeVisitCount(directory) {
+	const db = new DatabaseSync(join(directory, 'data/goto.sqlite'), { readOnly: true });
+	try {
+		return (
+			db
+				.prepare(
+					"SELECT valid_visits + invalid_visits AS count FROM visit_totals WHERE scope_kind = 'overview'"
+				)
+				.get()?.count ?? 0
+		);
+	} finally {
+		db.close();
+	}
+}
+
 function dailyVisitCount(directory) {
 	const db = new DatabaseSync(join(directory, 'data/goto.sqlite'), { readOnly: true });
 	try {
@@ -91,7 +106,9 @@ async function checkStartup(mode, port = 0) {
 				}
 			})
 		);
-		if (mode === 'retention-change') await seedHistory(directory);
+		if (mode === 'retention-change' || mode === 'zero-accounting') await seedHistory(directory);
+		if (mode === 'database-failure')
+			await mkdir(join(directory, 'data/goto.sqlite'), { recursive: true });
 		const source = mode === 'source';
 		const entry = new URL(source ? '../src/index.ts' : '../dist/index.js', import.meta.url);
 		const register = fileURLToPath(new URL('../../../tools/register.mjs', import.meta.url));
@@ -136,7 +153,7 @@ async function checkStartup(mode, port = 0) {
 		const finished = Promise.race([closed, timedOut]);
 		void finished.catch(() => {});
 
-		if (mode === 'occupied-port') {
+		if (mode === 'occupied-port' || mode === 'database-failure') {
 			assert.deepEqual(await finished, { code: 1, signal: null });
 			assert.equal(message, undefined, 'Failed startup announced readiness');
 			assert(output.includes('Unable to start worker service'));
@@ -160,19 +177,22 @@ async function checkStartup(mode, port = 0) {
 			assert.deepEqual(await response.json(), { status: 'ok' });
 			const visits = visitCount(directory);
 			assert.equal(visits, mode === 'retention-change' ? 2 : 0);
+			assert.equal(
+				lifetimeVisitCount(directory),
+				mode === 'retention-change' || mode === 'zero-accounting' ? 3 : 0
+			);
 			const database = new DatabaseSync(join(directory, 'data/worker.sqlite'), {
 				readOnly: true
 			});
 			try {
 				const runs = database.prepare('SELECT count(*) AS count FROM workflow_runs').get().count;
-				if (mode === 'retention-change') assert(runs >= 1);
-				else assert.equal(runs, 0, 'Empty zero policy must not request analytics work');
+				if (mode === 'retention-change' || mode === 'zero-accounting') assert(runs >= 1);
+				else assert.equal(runs, 0, 'Empty zero policy needs no initial accounting run');
 				const schedule = database
 					.prepare('SELECT next_run_at FROM workflow_schedules WHERE id = ?')
 					.get('goto:retain-visits');
 				assert(schedule, 'Existing hourly maintenance identity must be registered');
-				if (mode === 'retention-change') assert(schedule.next_run_at);
-				else assert.equal(schedule.next_run_at, null, 'Zero policy must pause analytics');
+				assert(schedule.next_run_at, 'Hourly visit rollup must stay active at zero');
 			} finally {
 				database.close();
 			}
@@ -196,10 +216,15 @@ async function checkStartup(mode, port = 0) {
 					() => visitCount(directory) === 1 && dailyVisitCount(directory) === 1,
 					stopped.signal
 				);
+				assert.equal(
+					lifetimeVisitCount(directory),
+					3,
+					'Positive raw and daily expiry must preserve permanent visit totals'
+				);
 				configuration.analytics.retention_months = 0;
 				await saveConfiguration(path, configuration);
 				await waitUntil(
-					() => output.includes('Analytics collection change requires coordinated restart'),
+					() => output.includes('Detailed analytics change requires coordinated restart'),
 					stopped.signal
 				);
 				assert.equal(visitCount(directory), 1, 'Live collection disable must not remove history');
@@ -239,6 +264,8 @@ await checkStartup('compiled');
 await checkStartup('source');
 await checkStartup('storage-change');
 await checkStartup('retention-change');
+await checkStartup('zero-accounting');
+await checkStartup('database-failure');
 const occupied = createServer();
 await new Promise((resolve, reject) => {
 	occupied.once('error', reject);
@@ -252,5 +279,5 @@ try {
 	await new Promise((resolve) => occupied.close(resolve));
 }
 console.log(
-	'Compiled/source startup, config restart, paused empty zero policy, incremental daily preparation, live positive retention, restart-only collection, health, partial-startup cleanup, and shutdown passed'
+	'Compiled/source startup, config restart, active zero-policy rollup, startup accounting before cleanup, incremental daily preparation, permanent visit totals after expiry, live positive retention, restart-only collection, health, failed database readiness, partial-startup cleanup, and shutdown passed'
 );

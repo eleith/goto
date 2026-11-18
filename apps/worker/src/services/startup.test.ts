@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { emptyDailyStatistics } from '@goto/analytics';
-import { insertVisit, openDb, runMigrations } from '@goto/db';
+import { insertVisit, openDb, readVisitTotals, runMigrations } from '@goto/db';
 import { addDailyVisitStatistics } from '@goto/db/visit-reports';
 import { Worker } from 'openworkflow';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
@@ -45,7 +45,7 @@ async function writeConfiguration(
 
 const env = { HOST: '127.0.0.1', PORT: '0' };
 
-test('starts with zero-policy analytics paused, no run, tag warnings and healthy service', async () => {
+test('starts with zero-policy rollup active, no empty run, tag warnings and healthy service', async () => {
 	await writeConfiguration(undefined, ['', 'work']);
 	const warning = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
 	const start = vi.spyOn(Worker.prototype, 'start');
@@ -69,7 +69,7 @@ test('starts with zero-policy analytics paused, no run, tag warnings and healthy
 				state
 					.prepare('SELECT next_run_at FROM workflow_schedules WHERE id = ?')
 					.get('goto:retain-visits')?.next_run_at
-			).toBeNull();
+			).not.toBeNull();
 		} finally {
 			state.close();
 		}
@@ -85,7 +85,7 @@ test('starts with zero-policy analytics paused, no run, tag warnings and healthy
 	}
 });
 
-test('zero-policy startup purges existing raw and daily data once and remains paused', async () => {
+test('zero-policy startup accounts pending visits before readiness and clears raw and daily data', async () => {
 	await writeConfiguration(undefined, []);
 	const path = join(directory, 'data/visits.sqlite');
 	const db = await openDb(path);
@@ -108,7 +108,7 @@ test('zero-policy startup purges existing raw and daily data once and remains pa
 			path: '/docs',
 			outcome: 'valid',
 			visited_at: Date.now() - 1000,
-			ip: '127.0.0.1',
+			ip: null,
 			user_agent: null,
 			accept_language: null,
 			browser: 'Other',
@@ -123,6 +123,10 @@ test('zero-policy startup purges existing raw and daily data once and remains pa
 		try {
 			expect(await reader.selectFrom('visits').selectAll().execute()).toEqual([]);
 			expect(await reader.selectFrom('visit_daily_statistics').select('id').execute()).toEqual([]);
+			expect(await readVisitTotals(reader, { kind: 'overview' })).toEqual({
+				validVisits: 1,
+				invalidVisits: 0
+			});
 			const state = new DatabaseSync(join(directory, 'state/worker.sqlite'), { readOnly: true });
 			try {
 				expect(
@@ -132,7 +136,7 @@ test('zero-policy startup purges existing raw and daily data once and remains pa
 					state
 						.prepare('SELECT next_run_at FROM workflow_schedules WHERE id = ?')
 						.get('goto:retain-visits')?.next_run_at
-				).toBeNull();
+				).not.toBeNull();
 			} finally {
 				state.close();
 			}

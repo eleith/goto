@@ -2,11 +2,11 @@ import { EventEmitter } from 'node:events';
 import type { NewVisit } from '@goto/db';
 import { Piscina } from 'piscina';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { createVisitRecorder } from './recorder.js';
+import { createVisitWriter } from './writer.js';
 
 vi.mock('piscina', () => ({ Piscina: vi.fn() }));
 
-let pool: EventEmitter & { run: ReturnType<typeof vi.fn>; close: ReturnType<typeof vi.fn> };
+let writerThread: EventEmitter & { run: ReturnType<typeof vi.fn>; close: ReturnType<typeof vi.fn> };
 let initialized: ReturnType<typeof Promise.withResolvers<void>>;
 let writes: ReturnType<typeof Promise.withResolvers<void>>[];
 
@@ -25,7 +25,7 @@ beforeEach(() => {
 	vi.spyOn(console, 'warn').mockImplementation(() => {});
 	initialized = Promise.withResolvers<void>();
 	writes = [];
-	pool = Object.assign(new EventEmitter(), {
+	writerThread = Object.assign(new EventEmitter(), {
 		run: vi.fn((_value: unknown, options?: { name: string }) => {
 			if (options?.name === 'ready') return initialized.promise;
 			if (options?.name === 'close') return Promise.resolve();
@@ -36,7 +36,7 @@ beforeEach(() => {
 		close: vi.fn(async () => {})
 	});
 	vi.mocked(Piscina).mockImplementation(function () {
-		return pool as unknown as Piscina;
+		return writerThread as unknown as Piscina;
 	});
 });
 
@@ -46,50 +46,57 @@ afterEach(() => {
 });
 
 test('bounds unsettled visits and reports queue and insert failures separately', async () => {
-	const recorder = createVisitRecorder('/data/goto.sqlite');
-	recorder.recordVisit(visit);
+	const writer = createVisitWriter('/data/goto.sqlite');
+	writer.queueVisit(visit);
 	expect(writes).toHaveLength(0);
+	let ready = false;
+	void writer.waitUntilReady().then(() => {
+		ready = true;
+	});
+	await Promise.resolve();
+	expect(ready).toBe(false);
 	initialized.resolve();
-	await initialized.promise;
-	for (let index = 0; index < 1000; index++) recorder.recordVisit(visit);
-	recorder.recordVisit(visit);
-	recorder.recordVisit(visit);
+	await writer.waitUntilReady();
+	expect(ready).toBe(true);
+	for (let index = 0; index < 1000; index++) writer.queueVisit(visit);
+	writer.queueVisit(visit);
+	writer.queueVisit(visit);
 	expect(writes).toHaveLength(1000);
 	writes[0]!.reject(new Error('private database detail'));
 	await Promise.resolve();
-	recorder.recordVisit(visit);
+	writer.queueVisit(visit);
 	expect(writes).toHaveLength(1001);
 	expect(vi.mocked(console.warn).mock.calls).toEqual([
-		['Visit recording queue full (1000 outstanding); dropping analytics visit'],
+		['Visit recording queue full (1000 outstanding); dropping visit'],
 		['Visit tracking unavailable; some visits may not be recorded']
 	]);
-	await recorder.stop();
+	await writer.stop();
 });
 
 test('drops whole oversized events and warns once without logging their payload', async () => {
-	const recorder = createVisitRecorder('/data/goto.sqlite');
+	const writer = createVisitWriter('/data/goto.sqlite');
 	initialized.resolve();
-	await initialized.promise;
+	await writer.waitUntilReady();
 	const oversized = { ...visit, user_agent: 'x'.repeat(32 * 1024) };
-	recorder.recordVisit(oversized);
-	recorder.recordVisit(oversized);
+	writer.queueVisit(oversized);
+	writer.queueVisit(oversized);
 	expect(writes).toHaveLength(0);
 	expect(oversized.user_agent).toHaveLength(32 * 1024);
 	expect(console.warn).toHaveBeenCalledExactlyOnceWith(
-		'Visit payload exceeds 32 KiB; dropping analytics visit'
+		'Visit payload exceeds 32 KiB; dropping visit'
 	);
-	await recorder.stop();
+	await writer.stop();
 });
 
-test('stops admission and waits for database and pool closure', async () => {
+test('stops admission and waits for database and writer thread closure', async () => {
 	const closed = Promise.withResolvers<void>();
-	const poolClosed = Promise.withResolvers<void>();
-	const recorder = createVisitRecorder('/data/goto.sqlite');
+	const threadClosed = Promise.withResolvers<void>();
+	const writer = createVisitWriter('/data/goto.sqlite');
 	initialized.resolve();
-	await initialized.promise;
-	pool.run.mockImplementation(() => closed.promise);
-	pool.close.mockReturnValue(poolClosed.promise);
-	const stop = recorder.stop();
+	await writer.waitUntilReady();
+	writerThread.run.mockImplementation(() => closed.promise);
+	writerThread.close.mockReturnValue(threadClosed.promise);
+	const stop = writer.stop();
 	expect(Piscina).toHaveBeenCalledWith(
 		expect.objectContaining({
 			maxThreads: 1,
@@ -98,10 +105,10 @@ test('stops admission and waits for database and pool closure', async () => {
 			maxQueue: 1000
 		})
 	);
-	expect(recorder.stop()).toBe(stop);
-	recorder.recordVisit(visit);
-	expect(pool.run).toHaveBeenLastCalledWith(null, { name: 'close' });
-	expect(pool.close).toHaveBeenCalledOnce();
+	expect(writer.stop()).toBe(stop);
+	writer.queueVisit(visit);
+	expect(writerThread.run).toHaveBeenLastCalledWith(null, { name: 'close' });
+	expect(writerThread.close).toHaveBeenCalledOnce();
 	closed.resolve();
 	let stopped = false;
 	void stop.then(() => {
@@ -109,18 +116,19 @@ test('stops admission and waits for database and pool closure', async () => {
 	});
 	await Promise.resolve();
 	expect(stopped).toBe(false);
-	poolClosed.resolve();
+	threadClosed.resolve();
 	await stop;
 });
 
-test('initialization failures disable capture without propagating private errors', async () => {
-	const recorder = createVisitRecorder('/data/goto.sqlite');
+test('initialization failures reject readiness safely and disable capture', async () => {
+	const writer = createVisitWriter('/data/goto.sqlite');
+	const ready = writer.waitUntilReady();
 	initialized.reject(new Error('private database path'));
-	await Promise.resolve();
-	recorder.recordVisit(visit);
-	await recorder.stop();
+	await expect(ready).rejects.toThrow('Visit recording initialization failed');
+	writer.queueVisit(visit);
+	await writer.stop();
 	expect(writes).toHaveLength(0);
-	expect(pool.close).toHaveBeenCalledOnce();
+	expect(writerThread.close).toHaveBeenCalledOnce();
 	expect(console.warn).toHaveBeenCalledExactlyOnceWith(
 		'Visit tracking unavailable; some visits may not be recorded'
 	);

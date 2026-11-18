@@ -9,9 +9,10 @@ export const load = (async ({ locals }) => {
 	const retentionMonths = configuration.analytics.retention_months;
 	const collectionEnabled = retentionMonths !== 0;
 	const currentDomains = Object.keys(snapshot.domains);
-	const report = collectionEnabled
-		? await readOverviewDetails(configuration, currentDomains)
-		: null;
+	let report: Awaited<ReturnType<typeof readOverviewDetails>> = null;
+	if (collectionEnabled) {
+		report = await readOverviewDetails(configuration, currentDomains);
+	}
 	const timeframes = retentionMonths === 0 ? [] : availableVisitTimeframes(retentionMonths);
 	const overview = report?.overview ?? null;
 	const windows = overview

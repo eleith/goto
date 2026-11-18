@@ -2,18 +2,13 @@ import type { OpenWorkflow } from 'openworkflow';
 import { visitMaintenance, visitMaintenanceSchedule } from '../workflows/specs.js';
 import type { WorkerContext } from './context.js';
 
-export async function configureVisitMaintenance(
-	context: WorkerContext,
-	engine: OpenWorkflow
-): Promise<void> {
+export async function configureVisitMaintenance(engine: OpenWorkflow): Promise<void> {
 	await engine.scheduleWorkflow(
 		visitMaintenance,
 		visitMaintenanceSchedule.input,
 		visitMaintenanceSchedule
 	);
-	if (context.config.analytics.retention_months === 0)
-		await engine.schedules.pause(visitMaintenanceSchedule.id);
-	else await engine.schedules.resume(visitMaintenanceSchedule.id);
+	await engine.schedules.resume(visitMaintenanceSchedule.id);
 }
 
 export async function requestVisitMaintenance(

@@ -33,29 +33,20 @@ async function context(): Promise<WorkerContext> {
 	return { config: prepared.configuration, db };
 }
 
-test('registers existing hourly maintenance and uses native resume or pause for the current policy', async () => {
+test('registers the existing hourly UTC schedule and always resumes operational rollup', async () => {
 	const { engine, sdk } = client();
-	const ctx = await context();
-	try {
-		await configureVisitMaintenance(ctx, sdk);
-		expect(engine.scheduleWorkflow).toHaveBeenCalledExactlyOnceWith(
-			visitMaintenance,
-			visitMaintenanceSchedule.input,
-			visitMaintenanceSchedule
-		);
-		expect(visitMaintenance.name).toBe('retain-visits');
-		expect(visitMaintenanceSchedule.id).toBe('goto:retain-visits');
-		expect(visitMaintenanceSchedule.cron).toBe('0 * * * *');
-		expect(visitMaintenanceSchedule.timezone).toBe('UTC');
-		expect(engine.schedules.resume).toHaveBeenCalledExactlyOnceWith(visitMaintenanceSchedule.id);
-		expect(engine.schedules.pause).not.toHaveBeenCalled();
-		ctx.config.analytics.retention_months = 0;
-		await configureVisitMaintenance(ctx, sdk);
-		expect(engine.schedules.pause).toHaveBeenCalledExactlyOnceWith(visitMaintenanceSchedule.id);
-		expect(engine.schedules.resume).toHaveBeenCalledTimes(1);
-	} finally {
-		await ctx.db.destroy();
-	}
+	await configureVisitMaintenance(sdk);
+	expect(engine.scheduleWorkflow).toHaveBeenCalledExactlyOnceWith(
+		visitMaintenance,
+		visitMaintenanceSchedule.input,
+		visitMaintenanceSchedule
+	);
+	expect(visitMaintenance.name).toBe('retain-visits');
+	expect(visitMaintenanceSchedule.id).toBe('goto:retain-visits');
+	expect(visitMaintenanceSchedule.cron).toBe('0 * * * *');
+	expect(visitMaintenanceSchedule.timezone).toBe('UTC');
+	expect(engine.schedules.resume).toHaveBeenCalledExactlyOnceWith(visitMaintenanceSchedule.id);
+	expect(engine.schedules.pause).not.toHaveBeenCalled();
 });
 
 test('positive startup maintenance waits for the natural SDK result even on an empty database', async () => {

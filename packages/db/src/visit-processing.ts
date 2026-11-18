@@ -73,6 +73,33 @@ export async function deleteExpiredVisitBatch(
 	});
 }
 
+export async function deleteProcessedVisitBatch(
+	db: Kysely<Database>,
+	throughId: number
+): Promise<boolean> {
+	return db.transaction().execute(async (transaction) => {
+		await reserveVisitWriter(transaction);
+		const visits = await transaction
+			.selectFrom('visits')
+			.select('id')
+			.where('processed', '=', 1)
+			.where('id', '<=', throughId)
+			.orderBy('id')
+			.limit(batchSize)
+			.execute();
+		if (visits.length === 0) return false;
+		await transaction
+			.deleteFrom('visits')
+			.where(
+				'id',
+				'in',
+				visits.map(({ id }) => id)
+			)
+			.execute();
+		return visits.length === batchSize;
+	});
+}
+
 async function reserveVisitWriter(db: Kysely<Database>): Promise<void> {
 	await db
 		.updateTable('visits')

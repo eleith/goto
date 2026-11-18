@@ -2,6 +2,7 @@ import { error } from '@sveltejs/kit';
 import { countBreakdownVisitsByTimeframe } from '@goto/analytics';
 import { availableVisitTimeframes, countVisitWindows, visitWindow } from '@goto/analytics/daily';
 import { readVisitDetails } from '#lib/server/visits/reports.js';
+import { readLifetimeVisitTotals } from '#lib/server/visits/totals.js';
 import type { PageServerLoad } from './$types';
 
 export const load = (async ({ locals, params }) => {
@@ -15,7 +16,11 @@ export const load = (async ({ locals, params }) => {
 	const retentionMonths = configuration.analytics.retention_months;
 	const collectionEnabled = retentionMonths !== 0;
 	const scope = { kind: 'link' as const, domain, path: '/' };
-	const details = collectionEnabled ? await readVisitDetails(configuration, scope) : null;
+	const lifetimeVisitTotals = await readLifetimeVisitTotals(configuration, scope);
+	let details: Awaited<ReturnType<typeof readVisitDetails>> = null;
+	if (collectionEnabled) {
+		details = await readVisitDetails(configuration, scope);
+	}
 	const timeframes = retentionMonths === 0 ? [] : availableVisitTimeframes(retentionMonths);
 	const windows = details
 		? timeframes.map((timeframe) => ({ timeframe, window: visitWindow(details.period, timeframe) }))
@@ -35,6 +40,7 @@ export const load = (async ({ locals, params }) => {
 
 	return {
 		domain,
+		lifetimeVisitTotals,
 		domainHref: `/admin/domains/${encodeURIComponent(domain)}`,
 		response,
 		fallback,

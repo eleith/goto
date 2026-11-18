@@ -27,9 +27,12 @@ export function handleIngress(
 			request.method ?? 'GET',
 			readRedirectRequestHeaders(request)
 		);
-		if (snapshot.configuration.analytics.retention_months !== 0) {
-			captureVisit(request, redirect.visit, application.recordVisit);
-		}
+		captureVisit(
+			request,
+			redirect.visit,
+			application.recordVisit,
+			snapshot.configuration.analytics.retention_months
+		);
 		return redirect.response;
 	}
 	if (ingress.url.origin === snapshot.configuration.url.app) {

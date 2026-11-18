@@ -241,7 +241,13 @@ test('shared credentials protect admin pages and sign-out removes access', async
 	await expect(page.getByRole('heading', { name: 'Link', exact: true })).toBeVisible();
 	await expect(context).toHaveCount(0);
 	await expect(redirectCard.getByRole('heading', { name: 'Redirect', exact: true })).toBeVisible();
-	await expect(redirectCard.locator('dt')).toHaveText(['Domain', 'Path', 'Destination', 'Rules']);
+	await expect(redirectCard.locator('dt')).toHaveText([
+		'Domain',
+		'Path',
+		'Destination',
+		'Rules',
+		'Visits'
+	]);
 	await expect(settingsCard.locator('dt')).toHaveText([
 		'HTTP status',
 		'Case insensitive',
@@ -390,6 +396,7 @@ test('shared credentials protect admin pages and sign-out removes access', async
 	await expect(rootDetails.locator('dd')).toHaveText([
 		'go.example.org',
 		'go.example.org/',
+		'1',
 		'Uses fallback'
 	]);
 	await expect(page.getByRole('region', { name: 'Fallback', exact: true })).toContainText(

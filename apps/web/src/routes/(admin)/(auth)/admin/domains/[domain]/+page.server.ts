@@ -15,9 +15,10 @@ export const load = (async ({ locals, params }) => {
 	const retentionMonths = configuration.analytics.retention_months;
 	const collectionEnabled = retentionMonths !== 0;
 	const currentPaths = Object.keys(prepared.links);
-	const report = collectionEnabled
-		? await readDomainDetails(configuration, domain, currentPaths)
-		: null;
+	let report: Awaited<ReturnType<typeof readDomainDetails>> = null;
+	if (collectionEnabled) {
+		report = await readDomainDetails(configuration, domain, currentPaths);
+	}
 	const domainDetails = report?.domain ?? null;
 	const timeframes = retentionMonths === 0 ? [] : availableVisitTimeframes(retentionMonths);
 	const windows = domainDetails

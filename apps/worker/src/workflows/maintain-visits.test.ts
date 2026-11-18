@@ -55,12 +55,12 @@ test('scheduled maintenance keeps durable jitter while immediate cleanup is not 
 	expect(maintainVisits).toHaveBeenCalledExactlyOnceWith(ctx);
 });
 
-test('queued scheduled work does nothing when the service starts with zero retention', async () => {
+test('zero retention keeps scheduled hit accounting with the same durable jitter', async () => {
 	const ctx = context();
 	ctx.config.analytics.retention_months = 0;
 	const { step, names, sleep } = steps();
 	expect(await runVisitMaintenance(ctx, { scheduled: true }, step)).toBe('completed');
-	expect(names).toEqual([]);
-	expect(sleep).not.toHaveBeenCalled();
-	expect(maintainVisits).not.toHaveBeenCalled();
+	expect(names).toEqual(['choose-jitter', 'retain-visits']);
+	expect(sleep).toHaveBeenCalledOnce();
+	expect(maintainVisits).toHaveBeenCalledExactlyOnceWith(ctx);
 });

@@ -8,10 +8,13 @@ export const load = (async ({ locals }) => {
 	const snapshot = locals.snapshot;
 	const configuration = snapshot.configuration;
 	const retentionMonths = configuration.analytics.retention_months;
-	const activity =
-		retentionMonths === 0
-			? { available: true, lastActivityAt: null }
-			: await readLastActivity(configuration);
+	let lastDataActivity: string | null = null;
+	let activityAvailable = true;
+	if (retentionMonths !== 0) {
+		const activity = await readLastActivity(configuration);
+		lastDataActivity = activity.lastActivityAt;
+		activityAvailable = activity.available;
+	}
 	const authMode = configuration.auth.oidc ? ('oidc' as const) : ('credentials' as const);
 
 	return {
@@ -19,8 +22,8 @@ export const load = (async ({ locals }) => {
 		appUrl: configuration.url.app,
 		authMode,
 		retentionMonths,
-		lastDataActivity: activity.lastActivityAt,
-		activityAvailable: activity.available,
+		lastDataActivity,
+		activityAvailable,
 		redirectStatusCode: configuration.link_defaults.status_code,
 		forwardQuery: configuration.link_defaults.forward_query,
 		caseInsensitive: configuration.link_defaults.case_insensitive,

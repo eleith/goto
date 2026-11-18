@@ -7,10 +7,12 @@ import type { Database } from './types.js';
 
 export { runMigrations } from './migrate.js';
 export { insertVisit, purgeVisits } from './visits.js';
+export { addVisitTotals, readVisitTotals, readLinkVisitCounts } from './visit-totals.js';
 export {
 	captureVisitBoundary,
 	processVisitBatch,
-	deleteExpiredVisitBatch
+	deleteExpiredVisitBatch,
+	deleteProcessedVisitBatch
 } from './visit-processing.js';
 export type { ClassifiedVisit, Database, NewVisit, Visit, VisitOutcome } from './types.js';
 

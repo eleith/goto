@@ -37,7 +37,7 @@ function application(): Application {
 		{ env: {} }
 	);
 	const snapshot = prepareSnapshot(prepared);
-	return { currentSnapshot: () => snapshot };
+	return { currentSnapshot: () => snapshot, linkVisitCount: () => 0 };
 }
 
 beforeEach(() => {

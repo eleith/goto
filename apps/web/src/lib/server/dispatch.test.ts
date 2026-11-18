@@ -33,7 +33,7 @@ const prepared = loadConfig(
 	{ env: {} }
 );
 const snapshot = prepareSnapshot(prepared);
-const application: Application = { currentSnapshot: () => snapshot };
+const application: Application = { currentSnapshot: () => snapshot, linkVisitCount: () => 0 };
 
 function request(host: string, url = '/schema.json', remoteAddress = '127.0.0.1') {
 	return {
@@ -170,7 +170,7 @@ test('captures invalid decoded paths even when the fallback redirects', () => {
 			}
 		}
 	};
-	const tracked = { currentSnapshot: () => fallbackSnapshot, recordVisit };
+	const tracked = { ...application, currentSnapshot: () => fallbackSnapshot, recordVisit };
 	const incoming = request('go.example.test', '/%6dissing?private=not-collected');
 	expect(handleIngress(tracked, incoming, {})?.status).toBe(302);
 	expect(recordVisit).toHaveBeenCalledExactlyOnceWith({
@@ -184,7 +184,7 @@ test('captures invalid decoded paths even when the fallback redirects', () => {
 	});
 });
 
-test('does not record HEAD, malformed, admin, unknown-host or disabled-analytics requests', () => {
+test('does not record HEAD, malformed, admin or unknown-host requests', () => {
 	const recordVisit = vi.fn();
 	const tracked = { ...application, recordVisit };
 	const head = request('go.example.test');
@@ -199,25 +199,53 @@ test('does not record HEAD, malformed, admin, unknown-host or disabled-analytics
 	expect(handleIngress(tracked, request('go.example.test', '/%'), {})?.status).toBe(400);
 	expect(handleIngress(tracked, request('unknown.example.test'), {})?.status).toBe(404);
 	expect(handleIngress(tracked, request('admin.example.test'), {})).toBeUndefined();
-	const disabled = {
+	expect(recordVisit).not.toHaveBeenCalled();
+});
+
+test('zero retention captures only identity, outcome and time without changing conditional routing', () => {
+	const recordVisit = vi.fn();
+	const minimal = {
 		...snapshot,
 		configuration: {
 			...snapshot.configuration,
 			analytics: { ...snapshot.configuration.analytics, retention_months: 0 as const }
 		}
 	};
-	expect(
-		handleIngress({ currentSnapshot: () => disabled, recordVisit }, request('go.example.test'), {})
-			?.status
-	).toBe(302);
-	expect(
-		handleIngress(
-			{ currentSnapshot: () => disabled, recordVisit },
-			request('go.example.test', '/missing'),
-			{}
-		)?.status
-	).toBe(404);
-	expect(recordVisit).not.toHaveBeenCalled();
+	const tracked = { ...application, currentSnapshot: () => minimal, recordVisit };
+	const incoming = request('go.example.test');
+	Object.assign(incoming.headers, {
+		'x-real-ip': '2001:db8::1',
+		'user-agent': 'Example agent (iPhone)',
+		'accept-language': 'fr-CA,en;q=0.9'
+	});
+	expect(handleIngress(tracked, incoming, {})?.headers.get('location')).toBe(
+		'https://destination.example.test/french-ios-schema'
+	);
+	expect(handleIngress(tracked, request('go.example.test', '/missing'), {})?.status).toBe(404);
+	expect(recordVisit.mock.calls).toEqual([
+		[
+			{
+				domain: 'go.example.test',
+				path: '/schema.json',
+				outcome: 'valid',
+				visited_at: expect.any(Number),
+				ip: null,
+				user_agent: null,
+				accept_language: null
+			}
+		],
+		[
+			{
+				domain: 'go.example.test',
+				path: '/missing',
+				outcome: 'invalid',
+				visited_at: expect.any(Number),
+				ip: null,
+				user_agent: null,
+				accept_language: null
+			}
+		]
+	]);
 });
 
 test('invalid client addresses and capture failures cannot prevent redirects', () => {
@@ -228,7 +256,8 @@ test('invalid client addresses and capture failures cannot prevent redirects', (
 	const malformed = request('go.example.test');
 	malformed.headers['x-real-ip'] = 'not-an-address';
 	expect(handleIngress(tracked, malformed, {})?.status).toBe(302);
-	expect(recordVisit).not.toHaveBeenCalled();
+	expect(recordVisit).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ ip: null }));
+	recordVisit.mockClear();
 	const direct = request('go.example.test');
 	direct.headers['x-forwarded-for'] = '203.0.113.1';
 	expect(handleIngress(tracked, direct, {})?.status).toBe(302);

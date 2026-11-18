@@ -21,7 +21,7 @@ function application(): Application {
 		{ env: {} }
 	);
 	const snapshot = prepareSnapshot(prepared);
-	return { currentSnapshot: () => snapshot };
+	return { currentSnapshot: () => snapshot, linkVisitCount: () => 0 };
 }
 
 function request(kind: 'web' | 'node'): Request | IncomingMessage {
@@ -105,7 +105,7 @@ test('carries the trusted request origin separately from the configured admin or
 test('an existing request retains its snapshot when the application publishes another', () => {
 	const initial = application().currentSnapshot();
 	let current = initial;
-	const runtime: Application = { currentSnapshot: () => current };
+	const runtime: Application = { currentSnapshot: () => current, linkVisitCount: () => 0 };
 	const first = request('web');
 	bindApplication(first, runtime);
 	current = prepareSnapshot(

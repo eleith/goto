@@ -8,7 +8,7 @@
 	import AnalyticsSection from '#lib/components/admin/AnalyticsSection.svelte';
 	import StatCard from '#lib/components/admin/StatCard.svelte';
 	import ReportNotice from '#lib/components/admin/ReportNotice.svelte';
-	import { formatUtc } from '#lib/components/admin/format.js';
+	import { formatCount, formatUtc } from '#lib/components/admin/format.js';
 	import TagPills from '#lib/components/admin/TagPills.svelte';
 	import type { PageData } from './$types';
 	let { data }: { data: PageData } = $props();
@@ -100,6 +100,8 @@
 					</ol>
 				</dd>
 			{/if}
+			<dt>Visits</dt>
+			<dd>{formatCount(data.lifetimeVisits)} (all time)</dd>
 		</dl>
 	</section>
 	<section class="admin-info" aria-labelledby="settings-heading">

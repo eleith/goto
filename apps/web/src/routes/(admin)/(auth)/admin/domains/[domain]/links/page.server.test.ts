@@ -3,10 +3,15 @@ import { createVisitPeriod, visitDays, type VisitDetails } from '@goto/analytics
 import { beforeEach, expect, test, vi } from 'vitest';
 import { prepareSnapshot } from '#lib/server/snapshot.js';
 import { readVisitDetails } from '#lib/server/visits/reports.js';
+import { readLifetimeVisitTotals } from '#lib/server/visits/totals.js';
 import { load } from './+page.server.js';
 
 vi.mock('#lib/server/visits/reports.js', () => ({ readVisitDetails: vi.fn() }));
-beforeEach(() => vi.resetAllMocks());
+vi.mock('#lib/server/visits/totals.js', () => ({ readLifetimeVisitTotals: vi.fn() }));
+beforeEach(() => {
+	vi.resetAllMocks();
+	vi.mocked(readLifetimeVisitTotals).mockResolvedValue(null);
+});
 
 const domain = 'go.example.test';
 const fallback: RedirectResponse = {
@@ -61,7 +66,14 @@ const rootDetails: VisitDetails = {
 
 test('supports historical root traffic without a configured root and preserves unavailable metadata', async () => {
 	vi.mocked(readVisitDetails).mockResolvedValue(rootDetails);
+	vi.mocked(readLifetimeVisitTotals).mockResolvedValue({ validVisits: 40, invalidVisits: 0 });
 	const data = await load(request());
+	expect(data.lifetimeVisitTotals).toEqual({ validVisits: 40, invalidVisits: 0 });
+	expect(readLifetimeVisitTotals).toHaveBeenCalledExactlyOnceWith(expect.any(Object), {
+		kind: 'link',
+		domain,
+		path: '/'
+	});
 	expect(readVisitDetails).toHaveBeenCalledExactlyOnceWith(expect.any(Object), {
 		kind: 'link',
 		domain,
@@ -97,6 +109,7 @@ test('supports historical root traffic without a configured root and preserves u
 	vi.mocked(readVisitDetails).mockResolvedValue(null);
 	const unavailable = await load(request());
 	expect(unavailable.available).toBe(false);
+	expect(unavailable.lifetimeVisitTotals).toEqual({ validVisits: 40, invalidVisits: 0 });
 	expect(unavailable.chart).toBeNull();
 	expect(unavailable.browserVisitsByTimeframe).toEqual({});
 	expect(unavailable.operatingSystemVisitsByTimeframe).toEqual({});
@@ -125,7 +138,8 @@ test('keeps root HTTP settings independent of link defaults and fallback with hi
 	expect(data.countsByTimeframe.all).toEqual({ validVisits: 7, invalidVisits: 0 });
 });
 
-test('keeps absent root and default or global fallback metadata usable without analytics', async () => {
+test('keeps lifetime root visit totals and fallback metadata usable without finite analytics', async () => {
+	vi.mocked(readLifetimeVisitTotals).mockResolvedValue({ validVisits: 40, invalidVisits: 0 });
 	const prepared = loadConfig(
 		{
 			auth: { credentials: { username: 'test', password: 'link-test-password' } },
@@ -139,6 +153,7 @@ test('keeps absent root and default or global fallback metadata usable without a
 		params: { domain }
 	} as Parameters<typeof load>[0];
 	const root = await load(event);
+	expect(root.lifetimeVisitTotals).toEqual({ validVisits: 40, invalidVisits: 0 });
 	expect(root.browserVisitsByTimeframe).toEqual({});
 	expect(root.operatingSystemVisitsByTimeframe).toEqual({});
 	expect(root.acceptedLanguageVisitsByTimeframe).toEqual({});
@@ -158,6 +173,11 @@ test('keeps absent root and default or global fallback metadata usable without a
 	);
 	event.locals.snapshot = prepareSnapshot(global);
 	const inherited = await load(event);
+	expect(inherited.lifetimeVisitTotals).toEqual({ validVisits: 40, invalidVisits: 0 });
+	expect(vi.mocked(readLifetimeVisitTotals).mock.calls.map(([, scope]) => scope)).toEqual([
+		{ kind: 'link', domain, path: '/' },
+		{ kind: 'link', domain, path: '/' }
+	]);
 	expect(inherited.browserVisitsByTimeframe).toEqual({});
 	expect(inherited.operatingSystemVisitsByTimeframe).toEqual({});
 	expect(inherited.acceptedLanguageVisitsByTimeframe).toEqual({});
@@ -169,7 +189,16 @@ test('keeps absent root and default or global fallback metadata usable without a
 	expect(readVisitDetails).not.toHaveBeenCalled();
 });
 
+test('unavailable lifetime root visit totals do not suppress retained visits', async () => {
+	vi.mocked(readVisitDetails).mockResolvedValue(rootDetails);
+	const data = await load(request());
+	expect(data.lifetimeVisitTotals).toBeNull();
+	expect(data.available).toBe(true);
+	expect(data.countsByTimeframe.all).toEqual({ validVisits: 7, invalidVisits: 0 });
+});
+
 test('rejects unknown domains before reading root traffic', async () => {
 	await expect(load(request({ host: 'unknown.test' }))).rejects.toMatchObject({ status: 404 });
 	expect(readVisitDetails).not.toHaveBeenCalled();
+	expect(readLifetimeVisitTotals).not.toHaveBeenCalled();
 });

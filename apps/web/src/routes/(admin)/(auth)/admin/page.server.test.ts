@@ -251,7 +251,7 @@ test('unavailable storage keeps inventory usable without substituting zero count
 	expect(data.domains.map((row) => row.countsByTimeframe)).toEqual([{}, {}, {}]);
 });
 
-test('disabled collection reads no analytics and exposes only inventory with empty counts', async () => {
+test('disabled analytics keeps inventory while skipping reports', async () => {
 	const data = await load(request(0));
 	if (!data) throw new Error('Missing disabled page');
 	expect(data.collectionEnabled).toBe(false);
