@@ -37,6 +37,71 @@ describe('configuration loading', () => {
 		expect(input).toEqual(original);
 	});
 
+	it('accepts the inclusive safe-integer visit limit boundaries', () => {
+		const { configuration } = parseConfig(
+			`auth: {credentials: {username: admin, password: test-password}}
+domains:
+  go.example.com:
+    links:
+      /one: {url: https://example.com/one, max_visits: 1}
+      /largest: {url: https://example.com/largest, max_visits: ${Number.MAX_SAFE_INTEGER}}`,
+			options
+		);
+		expect(configuration.domains['go.example.com']?.links['/one']?.max_visits).toBe(1);
+		expect(configuration.domains['go.example.com']?.links['/largest']?.max_visits).toBe(
+			Number.MAX_SAFE_INTEGER
+		);
+	});
+
+	it.each([0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1, '2', null, true])(
+		'rejects a non-positive, unsafe or noninteger visit limit %j without coercion',
+		(max_visits) => {
+			expect(() =>
+				loadConfig(
+					{
+						...configurationInput(),
+						domains: {
+							'go.example.com': {
+								links: { '/docs': { url: 'https://example.com/docs', max_visits } }
+							}
+						}
+					},
+					options
+				)
+			).toThrow(ConfigError);
+		}
+	);
+
+	it('rejects visit limits outside individual named links', () => {
+		const input = configurationInput();
+		const domain = input.domains['go.example.com'];
+		for (const override of [
+			{ max_visits: 2 },
+			{ link_defaults: { max_visits: 2 } },
+			{ fallback: { url: 'https://example.com/missing', max_visits: 2 } },
+			{ domains: { 'go.example.com': { ...domain, max_visits: 2 } } },
+			{ domains: { 'go.example.com': { ...domain, link_defaults: { max_visits: 2 } } } },
+			{
+				domains: {
+					'go.example.com': {
+						...domain,
+						root: { url: 'https://example.com', max_visits: 2 }
+					}
+				}
+			},
+			{
+				domains: {
+					'go.example.com': {
+						...domain,
+						fallback: { url: 'https://example.com/missing', max_visits: 2 }
+					}
+				}
+			}
+		]) {
+			expect(() => loadConfig({ ...input, ...override }, options)).toThrow(ConfigError);
+		}
+	});
+
 	it('loads ordered conditional destinations with nested interpolation and accepts an empty list', () => {
 		const prepared = parseConfig(
 			`auth: {credentials: {username: admin, password: test-password}}

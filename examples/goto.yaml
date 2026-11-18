@@ -52,6 +52,7 @@ domains:
       /docs:
         url: https://example.org/documentation
         title: Documentation
+        max_visits: 1000
         tags: [work]
         forward_path: true
         forward_query: false

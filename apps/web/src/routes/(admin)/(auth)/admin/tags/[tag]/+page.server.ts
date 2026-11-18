@@ -52,7 +52,7 @@ export const load = (async ({ locals, params }) => {
 		return {
 			domain,
 			path,
-			state: currentLinkState(link, now),
+			state: currentLinkState(link, now, locals.application.linkVisitCount(domain, path)),
 			countsByTimeframe,
 			href: linkHref(domain, path)
 		};

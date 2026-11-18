@@ -64,6 +64,28 @@ describe('Goto editor schema', () => {
 		expect(definition(editor, 'AuthSecret')).not.toHaveProperty('default');
 	});
 
+	it('keeps named-link visit limits optional with safe-integer bounds and no default', () => {
+		const editor = createEditorSchema();
+		const link = definition(editor, 'LinkConfiguration');
+		const limit = property(link, 'max_visits');
+		expect(link.required).not.toContain('max_visits');
+		expect(limit).toMatchObject({
+			type: 'integer',
+			minimum: 1,
+			maximum: Number.MAX_SAFE_INTEGER
+		});
+		expect(limit).not.toHaveProperty('default');
+		for (const schema of [
+			editor,
+			definition(editor, 'LinkDefaults'),
+			definition(editor, 'DomainLinkDefaults'),
+			definition(editor, 'DomainConfiguration'),
+			definition(editor, 'RedirectResponse')
+		]) {
+			expect(object(schema.properties)).not.toHaveProperty('max_visits');
+		}
+	});
+
 	it('keeps named-link rules optional while requiring a destination and nonempty strict conditions', () => {
 		const editor = createEditorSchema();
 		const link = definition(editor, 'LinkConfiguration');

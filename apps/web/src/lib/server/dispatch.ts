@@ -25,6 +25,7 @@ export function handleIngress(
 			ingress.host,
 			request.url!,
 			request.method ?? 'GET',
+			application.linkVisitCount,
 			readRedirectRequestHeaders(request)
 		);
 		captureVisit(

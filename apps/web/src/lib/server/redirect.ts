@@ -28,6 +28,8 @@ export interface RedirectOptions extends RedirectRequestHeaders {
 	now?: number;
 }
 
+type ReadLinkVisitCount = (domain: string, path: string) => number;
+
 interface ParsedTarget {
 	path: string;
 	query: string;
@@ -52,6 +54,7 @@ export function resolveRedirect(
 	host: string,
 	target: string,
 	method: string,
+	readLinkVisitCount: ReadLinkVisitCount,
 	options: RedirectOptions = {}
 ): RedirectResult {
 	const now = options.now ?? Date.now();
@@ -67,7 +70,7 @@ export function resolveRedirect(
 		return { response };
 	}
 
-	const resolved = resolveVisitResponse(domain, host, parsed, now, options);
+	const resolved = resolveVisitResponse(domain, host, parsed, now, readLinkVisitCount, options);
 	const response = resolved.response;
 	if (method === 'HEAD') return { response };
 	const visit: ResolvedVisit = {
@@ -155,9 +158,11 @@ function redirectResponse(destination: string, status: number, vary?: string): R
 
 function selectVisitRedirect(
 	domain: Immutable<PreparedDomain>,
+	host: string,
 	requestedPath: string,
 	now: number,
-	requestHeaders: RedirectRequestHeaders
+	readLinkVisitCount: ReadLinkVisitCount,
+	options: RedirectOptions
 ): SelectedVisitRedirect {
 	if (requestedPath === '/') {
 		let redirect = domain.root;
@@ -171,12 +176,13 @@ function selectVisitRedirect(
 	}
 
 	const link = domain.links[match.path]!;
-	if (currentLinkState(link, now) !== 'active') {
+	const visits = readLinkVisitCount(host, match.path);
+	if (currentLinkState(link, now, visits) !== 'active') {
 		return { path: match.path, suffix: '', redirect: domain.fallback, outcome: 'invalid' };
 	}
 
 	if (link.redirect !== undefined && link.redirect.length > 0) {
-		const destination = selectConditionalDestination(link.url, link.redirect, requestHeaders);
+		const destination = selectConditionalDestination(link.url, link.redirect, options);
 		return {
 			path: match.path,
 			suffix: match.suffix,
@@ -197,13 +203,16 @@ function resolveVisitResponse(
 	host: string,
 	target: ParsedTarget,
 	now: number,
-	requestHeaders: RedirectRequestHeaders
+	readLinkVisitCount: ReadLinkVisitCount,
+	options: RedirectOptions
 ): ResolvedResponse {
 	const { path, suffix, redirect, outcome, vary } = selectVisitRedirect(
 		domain,
+		host,
 		target.path,
 		now,
-		requestHeaders
+		readLinkVisitCount,
+		options
 	);
 
 	if (redirect === null) {

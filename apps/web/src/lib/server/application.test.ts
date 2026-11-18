@@ -242,12 +242,13 @@ test('does not expose arbitrary startup errors as configuration diagnostics', as
 function send(
 	application: Awaited<ReturnType<typeof createApplication>>,
 	path: string,
-	method = 'GET'
+	method = 'GET',
+	headers: IncomingMessage['headers'] = {}
 ) {
 	return handleIngress(
 		application,
 		{
-			headers: { host: 'go.example.test' },
+			headers: { host: 'go.example.test', ...headers },
 			rawHeaders: ['Host', 'go.example.test'],
 			url: path,
 			method,
@@ -400,5 +401,150 @@ test('counts final canonical named GETs in memory before queue admission, not HE
 	expect(application.linkVisitCount('go.example.test', '/off')).toBe(0);
 	expect(application.linkVisitCount('go.example.test', '/loop')).toBe(0);
 	expect(application.linkVisitCount('go.example.test', '/')).toBe(0);
+	await application.close?.();
+});
+
+test.each([0, 3])(
+	'allows the Nth canonical GET, then exhausts without consuming HEAD at retention %s',
+	async (retentionMonths) => {
+		const initial = prepared('https://example.org/docs', {
+			analytics: { retention_months: retentionMonths },
+			domains: {
+				'go.example.test': {
+					fallback: { url: 'https://example.org/inactive', status_code: 307 },
+					links: {
+						'/docs': {
+							url: 'https://example.org/docs',
+							max_visits: 2,
+							forward_path: true,
+							forward_query: true,
+							redirect: [{ if: { language: 'fr', os: 'ios' }, to: 'https://example.org/french' }]
+						}
+					}
+				}
+			}
+		});
+		vi.mocked(loadConfigFile).mockResolvedValueOnce(initial);
+		vi.mocked(readStoredLinkVisitCounts).mockResolvedValueOnce([
+			{ domain: 'go.example.test', path: '/docs', visits: 1 }
+		]);
+		const application = await createApplication(options);
+		const headers = { 'accept-language': 'fr', 'user-agent': 'iPhone' };
+
+		const head = send(application, '/DOCS/guide?x=1', 'HEAD', headers);
+		expect(head?.headers.get('location')).toBe('https://example.org/french/guide?x=1');
+		expect(application.linkVisitCount('go.example.test', '/docs')).toBe(1);
+		expect(queueVisit).not.toHaveBeenCalled();
+
+		let visitsAtAdmission: number | undefined;
+		queueVisit.mockImplementationOnce(() => {
+			visitsAtAdmission = application.linkVisitCount('go.example.test', '/docs');
+		});
+		const lastAllowed = send(application, '/%64ocs/?x=1', 'GET', headers);
+		expect(lastAllowed?.headers.get('location')).toBe('https://example.org/french?x=1');
+		expect(lastAllowed?.headers.get('vary')).toBe('Accept-Language, User-Agent');
+		expect(visitsAtAdmission).toBe(2);
+		expect(queueVisit).toHaveBeenCalledExactlyOnceWith(
+			expect.objectContaining({
+				path: '/docs',
+				outcome: 'valid',
+				user_agent: retentionMonths === 0 ? null : 'iPhone',
+				accept_language: retentionMonths === 0 ? null : 'fr'
+			})
+		);
+
+		const exhaustedHead = send(application, '/docs/guide', 'HEAD', headers);
+		expect(exhaustedHead?.status).toBe(307);
+		expect(exhaustedHead?.headers.get('location')).toBe('https://example.org/inactive');
+		expect(queueVisit).toHaveBeenCalledOnce();
+		const exhausted = send(application, '/DOCS/?x=2', 'GET', headers);
+		expect(exhausted?.status).toBe(307);
+		expect(exhausted?.headers.get('location')).toBe('https://example.org/inactive');
+		expect(queueVisit).toHaveBeenLastCalledWith(
+			expect.objectContaining({ domain: 'go.example.test', path: '/docs', outcome: 'invalid' })
+		);
+		expect(application.linkVisitCount('go.example.test', '/docs')).toBe(2);
+		expect(readStoredLinkVisitCounts).toHaveBeenCalledOnce();
+		await application.close?.();
+	}
+);
+
+test('final redirect guards leave a limited link available until a valid GET succeeds', async () => {
+	const initial = prepared('https://example.org/docs', {
+		domains: {
+			'go.example.test': {
+				links: {
+					'/docs': {
+						url: 'https://example.org/docs',
+						max_visits: 1,
+						forward_path: true,
+						redirect: [{ if: { language: 'fr' }, to: 'https://example.org/french' }]
+					}
+				}
+			}
+		}
+	});
+	initial.domains['go.example.test']!.links['/docs']!.redirect![0]!.to =
+		'https://go.example.test/DOCS/again';
+	vi.mocked(loadConfigFile).mockResolvedValueOnce(initial);
+	const application = await createApplication(options);
+
+	expect(send(application, '/docs/start', 'GET', { 'accept-language': 'fr' })?.status).toBe(404);
+	expect(send(application, '/docs/%00')?.status).toBe(404);
+	expect(application.linkVisitCount('go.example.test', '/docs')).toBe(0);
+	expect(queueVisit.mock.calls.map(([visit]) => visit.outcome)).toEqual(['invalid', 'invalid']);
+	expect(send(application, '/docs')?.status).toBe(302);
+	expect(application.linkVisitCount('go.example.test', '/docs')).toBe(1);
+	expect(send(application, '/docs')?.status).toBe(404);
+	expect(application.linkVisitCount('go.example.test', '/docs')).toBe(1);
+	expect(queueVisit).toHaveBeenLastCalledWith(
+		expect.objectContaining({ path: '/docs', outcome: 'invalid' })
+	);
+	await application.close?.();
+});
+
+test('raising, lowering, removing and restoring a limit preserves the live count without rereading storage', async () => {
+	function configurationWithLimit(maxVisits: number | undefined) {
+		return prepared('https://example.org/docs', {
+			domains: {
+				'go.example.test': {
+					links: {
+						'/docs': {
+							url: 'https://example.org/docs',
+							...(maxVisits === undefined ? {} : { max_visits: maxVisits })
+						}
+					}
+				}
+			}
+		});
+	}
+	const initial = configurationWithLimit(2);
+	vi.mocked(loadConfigFile).mockResolvedValueOnce(initial);
+	vi.mocked(readStoredLinkVisitCounts).mockResolvedValueOnce([
+		{ domain: 'go.example.test', path: '/docs', visits: 2 }
+	]);
+	const application = await createApplication(options);
+	expect(send(application, '/docs')?.status).toBe(404);
+
+	const raised = configurationWithLimit(3);
+	expect(await reload.onChange(raised, initial)).toBe(true);
+	expect(send(application, '/docs')?.status).toBe(302);
+	expect(application.linkVisitCount('go.example.test', '/docs')).toBe(3);
+
+	const lowered = configurationWithLimit(1);
+	expect(await reload.onChange(lowered, raised)).toBe(true);
+	expect(send(application, '/docs')?.status).toBe(404);
+	expect(application.linkVisitCount('go.example.test', '/docs')).toBe(3);
+
+	const unlimited = configurationWithLimit(undefined);
+	expect(await reload.onChange(unlimited, lowered)).toBe(true);
+	expect(send(application, '/docs')?.status).toBe(302);
+	expect(application.linkVisitCount('go.example.test', '/docs')).toBe(4);
+
+	const restored = configurationWithLimit(4);
+	expect(await reload.onChange(restored, unlimited)).toBe(true);
+	expect(send(application, '/docs')?.status).toBe(404);
+	expect(application.linkVisitCount('go.example.test', '/docs')).toBe(4);
+	expect(readStoredLinkVisitCounts).toHaveBeenCalledOnce();
 	await application.close?.();
 });

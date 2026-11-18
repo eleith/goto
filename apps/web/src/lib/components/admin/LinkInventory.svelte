@@ -62,7 +62,8 @@
 						{#if link.state === 'active'}Active
 						{:else if link.state === 'disabled'}Disabled
 						{:else if link.state === 'scheduled'}Scheduled
-						{:else if link.state === 'expired'}Expired{/if}
+						{:else if link.state === 'expired'}Expired
+						{:else if link.state === 'exhausted'}Limit Exceeded{/if}
 					</span>
 					{#if collectionEnabled}
 						<span class="admin-inventory-count">

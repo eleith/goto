@@ -1,4 +1,4 @@
-import { loadConfig, type DomainConfiguration } from '@goto/config';
+import { loadConfig, type DomainConfiguration, type LinkConfiguration } from '@goto/config';
 import { createVisitPeriod, visitDays, type VisitDetails } from '@goto/analytics';
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { Application } from '#lib/server/application.js';
@@ -20,13 +20,17 @@ const linkMetadata = {
 	caseInsensitive: false,
 	ignoreTrailingSlash: false,
 	forwardPath: true,
+	maxVisits: null,
 	state: 'active',
 	validFrom: '2000-01-01T00:00:00Z',
 	validUntil: '2100-01-01T00:00:00Z',
 	tags: ['guides', 'reference']
 };
 
-function request(path = '/docs', options: { host?: string; retentionMonths?: number } = {}) {
+function request(
+	path = '/docs',
+	options: { host?: string; retentionMonths?: number; link?: Partial<LinkConfiguration> } = {}
+) {
 	const domainConfiguration: Partial<DomainConfiguration> = {
 		link_defaults: { forward_query: true, ignore_trailing_slash: false },
 		links: {
@@ -42,7 +46,8 @@ function request(path = '/docs', options: { host?: string; retentionMonths?: num
 				enabled: true,
 				valid_from: '2000-01-01T00:00:00Z',
 				valid_until: '2100-01-01T00:00:00Z',
-				tags: ['guides', 'reference']
+				tags: ['guides', 'reference'],
+				...options.link
 			},
 			'/a/b': { url: 'https://example.test/nested', enabled: true, tags: [] },
 			'/a%2Fb': {
@@ -163,8 +168,18 @@ test('keeps decoded nested and literal-percent identities distinct', async () =>
 	vi.mocked(readVisitDetails)
 		.mockResolvedValueOnce({ ...details, scope: { kind: 'link', domain, path: '/a/b' } })
 		.mockResolvedValueOnce({ ...details, scope: { kind: 'link', domain, path: '/a%2Fb' } });
-	const nested = await load(request('/a/b'));
-	const percent = await load(request('/a%2Fb'));
+	const nestedEvent = request('/a/b');
+	const percentEvent = request('/a%2Fb');
+	const nested = await load(nestedEvent);
+	const percent = await load(percentEvent);
+	expect(nestedEvent.locals.application.linkVisitCount).toHaveBeenCalledExactlyOnceWith(
+		domain,
+		'/a/b'
+	);
+	expect(percentEvent.locals.application.linkVisitCount).toHaveBeenCalledExactlyOnceWith(
+		domain,
+		'/a%2Fb'
+	);
 	expect(nested.path).toBe('/a/b');
 	expect(nested.lifetimeVisits).toBe(3);
 	expect(nested).toMatchObject({
@@ -173,6 +188,7 @@ test('keeps decoded nested and literal-percent identities distinct', async () =>
 		caseInsensitive: false,
 		ignoreTrailingSlash: false,
 		forwardPath: false,
+		maxVisits: null,
 		state: 'active',
 		validFrom: null,
 		validUntil: null,
@@ -180,6 +196,7 @@ test('keeps decoded nested and literal-percent identities distinct', async () =>
 	});
 	expect(percent.path).toBe('/a%2Fb');
 	expect(percent.lifetimeVisits).toBe(8);
+	expect(percent.maxVisits).toBeNull();
 	expect(percent.state).toBe('disabled');
 	expect(percent.redirectRules).toEqual([
 		{ language: 'fr', os: null, to: 'https://example.test/percent-fr' }
@@ -218,8 +235,26 @@ test('rejects unknown scopes before reading and keeps unavailable counts absent'
 	expect(data.retentionMonths).toBe(3);
 });
 
-test('disabled analytics skips the finite report read and preserves live lifetime visits', async () => {
-	const event = request('/docs', { retentionMonths: 0 });
+test.each([
+	{ maxVisits: 102, state: 'exhausted' },
+	{ maxVisits: 103, state: 'active' }
+])(
+	'projects configured max $maxVisits and $state from one lifetime lookup',
+	async ({ maxVisits, state }) => {
+		vi.mocked(readVisitDetails).mockResolvedValue(details);
+		const event = request('/docs', { link: { max_visits: maxVisits } });
+		const data = await load(event);
+		expect(data).toMatchObject({ maxVisits, state, lifetimeVisits: 102 });
+		expect(event.locals.application.linkVisitCount).toHaveBeenCalledExactlyOnceWith(
+			domain,
+			'/docs'
+		);
+		expect(data.countsByTimeframe.all).toEqual({ validVisits: 15, invalidVisits: 5 });
+	}
+);
+
+test('disabled analytics preserves a configured limit and exhaustion without a finite report read', async () => {
+	const event = request('/docs', { retentionMonths: 0, link: { max_visits: 102 } });
 	const data = await load(event);
 	expect(data.lifetimeVisits).toBe(102);
 	expect(event.locals.application.linkVisitCount).toHaveBeenCalledExactlyOnceWith(domain, '/docs');
@@ -233,5 +268,5 @@ test('disabled analytics skips the finite report read and preserves live lifetim
 	expect(data.chart).toBeNull();
 	expect(data.countsByTimeframe).toEqual({});
 	expect(data.acceptedLanguageVisitsByTimeframe).toEqual({});
-	expect(data).toMatchObject(linkMetadata);
+	expect(data).toMatchObject({ ...linkMetadata, maxVisits: 102, state: 'exhausted' });
 });

@@ -1,6 +1,7 @@
 import { createVisitPeriod, visitDays, type VisitDetails } from '@goto/analytics';
 import { loadConfig } from '@goto/config';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import type { Application } from '#lib/server/application.js';
 import { prepareSnapshot } from '#lib/server/snapshot.js';
 import { readLinkDetails } from '#lib/server/visits/reports.js';
 import { load } from './+page.server.js';
@@ -35,7 +36,11 @@ const domains = {
 
 function request(
 	selectedTag = tag,
-	settings: { retentionMonths?: number; domains?: Record<string, unknown> } = {}
+	settings: {
+		retentionMonths?: number;
+		domains?: Record<string, unknown>;
+		visits?: Record<string, Record<string, number>>;
+	} = {}
 ) {
 	const prepared = loadConfig(
 		{
@@ -45,8 +50,13 @@ function request(
 		},
 		{ env: {} }
 	);
+	const snapshot = prepareSnapshot(prepared);
+	const linkVisitCount = vi.fn(
+		(domain: string, path: string): number => settings.visits?.[domain]?.[path] ?? 0
+	);
+	const application: Application = { currentSnapshot: () => snapshot, linkVisitCount };
 	return {
-		locals: { snapshot: prepareSnapshot(prepared) },
+		locals: { snapshot, application },
 		params: { tag: selectedTag }
 	} as Parameters<typeof load>[0];
 }
@@ -227,7 +237,12 @@ test('uses the already decoded literal parameter without decoding percent escape
 		period,
 		links: [{ domain: firstDomain, path: '/a%2Fb', details: percentDetails }]
 	});
-	const data = await load(request('%2F'));
+	const event = request('%2F');
+	const data = await load(event);
+	expect(event.locals.application.linkVisitCount).toHaveBeenCalledExactlyOnceWith(
+		firstDomain,
+		'/a%2Fb'
+	);
 	expect(data.tag).toBe('%2F');
 	expect(data.lastActivityAt).toBeNull();
 	expect(data.countsByTimeframe.all).toEqual({ validVisits: 0, invalidVisits: 0 });
@@ -257,6 +272,41 @@ test('unavailable reports preserve all current members but expose no partial tra
 		'/admin/domains/tiny.example.test/links/docs'
 	]);
 });
+
+test.each([0, 3])(
+	'tag rows use domain-specific live counts with %i-month analytics',
+	async (retentionMonths) => {
+		vi.mocked(readLinkDetails).mockResolvedValue(report);
+		const event = request(tag, {
+			retentionMonths,
+			domains: {
+				[firstDomain]: {
+					links: { '/docs': { url: 'https://example.test/docs', tags: [tag], max_visits: 100 } }
+				},
+				[secondDomain]: {
+					links: { '/docs': { url: 'https://example.test/other', tags: [tag], max_visits: 100 } }
+				}
+			},
+			visits: { [firstDomain]: { '/docs': 100 }, [secondDomain]: { '/docs': 3 } }
+		});
+		const data = await load(event);
+		expect(data.links.map(({ domain, path, state }) => ({ domain, path, state }))).toEqual([
+			{ domain: firstDomain, path: '/docs', state: 'exhausted' },
+			{ domain: secondDomain, path: '/docs', state: 'active' }
+		]);
+		expect(event.locals.application.linkVisitCount).toHaveBeenCalledTimes(2);
+		expect(event.locals.application.linkVisitCount).toHaveBeenNthCalledWith(
+			1,
+			firstDomain,
+			'/docs'
+		);
+		expect(event.locals.application.linkVisitCount).toHaveBeenNthCalledWith(
+			2,
+			secondDomain,
+			'/docs'
+		);
+	}
+);
 
 test('zero retention skips the report reader and keeps tag inventory without traffic controls', async () => {
 	const data = await load(request(tag, { retentionMonths: 0 }));

@@ -1,6 +1,7 @@
 import { loadConfig, type DomainConfiguration, type RedirectResponse } from '@goto/config';
 import { createVisitPeriod, visitDays, type ReportScope, type VisitDetails } from '@goto/analytics';
 import { beforeEach, expect, test, vi } from 'vitest';
+import type { Application } from '#lib/server/application.js';
 import { prepareSnapshot } from '#lib/server/snapshot.js';
 import { readDomainDetails } from '#lib/server/visits/reports.js';
 import { load } from './+page.server.js';
@@ -18,7 +19,8 @@ function request(
 		fallback?: RedirectResponse;
 		globalFallback?: RedirectResponse;
 		retentionMonths?: number;
-		links?: Record<string, { url: string; enabled?: boolean }>;
+		links?: Record<string, { url: string; enabled?: boolean; max_visits?: number }>;
+		visits?: Record<string, number>;
 	} = {}
 ) {
 	const links = settings.links ?? {
@@ -38,8 +40,14 @@ function request(
 	};
 	if (settings.globalFallback) configuration.fallback = settings.globalFallback;
 	const prepared = loadConfig(configuration, { env: {} });
+	const snapshot = prepareSnapshot(prepared);
+	const linkVisitCount = vi.fn((host: string, path: string): number => {
+		if (host !== domain) throw new Error('Unexpected domain');
+		return settings.visits?.[path] ?? 0;
+	});
+	const application: Application = { currentSnapshot: () => snapshot, linkVisitCount };
 	return {
-		locals: { snapshot: prepareSnapshot(prepared) },
+		locals: { snapshot, application },
 		params: { domain: host }
 	} as Parameters<typeof load>[0];
 }
@@ -324,6 +332,30 @@ test('rejects unknown domains before reading and keeps unavailable inventory usa
 	});
 	expect(data.linkCount).toBe(3);
 });
+
+test.each([0, 3])(
+	'domain rows use canonical live counts with %i-month analytics',
+	async (retentionMonths) => {
+		vi.mocked(readDomainDetails).mockResolvedValue(report);
+		const event = request(domain, {
+			retentionMonths,
+			links: {
+				'/docs': { url: 'https://example.test/docs', enabled: false, max_visits: 2 },
+				'/a%2Fb': { url: 'https://example.test/percent', max_visits: 8 }
+			},
+			visits: { '/docs': 2, '/a%2Fb': 8 }
+		});
+		const data = await load(event);
+		expect(data.links.map(({ path, state, href }) => ({ path, state, href }))).toEqual([
+			{ path: '/', state: 'active', href: '/admin/domains/go.example.test/links' },
+			{ path: '/docs', state: 'disabled', href: '/admin/domains/go.example.test/links/docs' },
+			{ path: '/a%2Fb', state: 'exhausted', href: '/admin/domains/go.example.test/links/a%252Fb' }
+		]);
+		expect(event.locals.application.linkVisitCount).toHaveBeenCalledTimes(2);
+		expect(event.locals.application.linkVisitCount).toHaveBeenNthCalledWith(1, domain, '/docs');
+		expect(event.locals.application.linkVisitCount).toHaveBeenNthCalledWith(2, domain, '/a%2Fb');
+	}
+);
 
 test('disabled analytics preserves current inventory without reports', async () => {
 	const root: RedirectResponse = {

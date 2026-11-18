@@ -298,6 +298,14 @@ const LinkConfigurationSchema = Type.Object(
 		description: Type.Optional(Type.String()),
 		tags: ref(TagsSchema, { default: [] }),
 		enabled: Type.Boolean({ default: true }),
+		max_visits: Type.Optional(
+			Type.Integer({
+				minimum: 1,
+				maximum: Number.MAX_SAFE_INTEGER,
+				description:
+					'Best-effort limit on qualifying successful GET redirects for this canonical named path. Omit for unlimited visits; not inherited and not an exact quota guarantee.'
+			})
+		),
 		status_code: Type.Optional(ref(RedirectStatusSchema)),
 		forward_query: Type.Optional(Type.Boolean()),
 		case_insensitive: Type.Optional(Type.Boolean()),

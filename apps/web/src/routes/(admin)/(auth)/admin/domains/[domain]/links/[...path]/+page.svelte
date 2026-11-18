@@ -117,6 +117,10 @@
 			<dd>{data.forwardPath ? 'Yes' : 'No'}</dd>
 			<dt>Query forwarding</dt>
 			<dd>{data.response.forward_query ? 'Yes' : 'No'}</dd>
+			{#if data.maxVisits !== null}
+				<dt>Max visits</dt>
+				<dd>{formatCount(data.maxVisits)}</dd>
+			{/if}
 			{#if data.validFrom}
 				<dt>Starts</dt>
 				<dd>
@@ -149,6 +153,8 @@
 				<StatCard label="Status" value="Scheduled" />
 			{:else if data.state === 'expired'}
 				<StatCard label="Status" value="Expired" />
+			{:else if data.state === 'exhausted'}
+				<StatCard label="Status" value="Limit Exceeded" />
 			{/if}
 		</div>
 		{#if data.chart && window}

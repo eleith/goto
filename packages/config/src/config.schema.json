@@ -471,6 +471,12 @@
 				"description": { "type": "string" },
 				"tags": { "default": [], "$ref": "#/$defs/Tags" },
 				"enabled": { "default": true, "type": "boolean" },
+				"max_visits": {
+					"minimum": 1,
+					"maximum": 9007199254740991,
+					"description": "Best-effort limit on qualifying successful GET redirects for this canonical named path. Omit for unlimited visits; not inherited and not an exact quota guarantee.",
+					"type": "integer"
+				},
 				"status_code": { "$ref": "#/$defs/RedirectStatus" },
 				"forward_query": { "type": "boolean" },
 				"case_insensitive": { "type": "boolean" },

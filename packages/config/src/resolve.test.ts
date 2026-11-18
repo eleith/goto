@@ -192,6 +192,22 @@ describe('direct self-loop validation', () => {
 });
 
 describe('effective domains', () => {
+	it('carries a named-link visit limit without defaulting unlimited sibling links', () => {
+		const input = configurationInput({
+			'/limited': { url: 'https://example.com/limited', max_visits: 42 },
+			'/unlimited': { url: 'https://example.com/unlimited' }
+		});
+		const original = structuredClone(input);
+		const { configuration, domains } = loadConfig(input, options);
+		expect(configuration.domains['go.example.com']?.links['/limited']?.max_visits).toBe(42);
+		expect(domains['go.example.com']?.links['/limited']?.max_visits).toBe(42);
+		expect(configuration.domains['go.example.com']?.links['/unlimited']).not.toHaveProperty(
+			'max_visits'
+		);
+		expect(domains['go.example.com']?.links['/unlimited']).not.toHaveProperty('max_visits');
+		expect(input).toEqual(original);
+	});
+
 	it('normalizes prepared language conditions without changing authored rules or adding conditions', () => {
 		const input = configurationInput({
 			'/docs': {

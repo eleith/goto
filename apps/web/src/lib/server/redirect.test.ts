@@ -14,6 +14,10 @@ const destination = 'https://destination.example.test/page';
 const fallbackUrl = 'https://fallback.example.test/landing?owned=one#section';
 const fallback = preparedResponse({ url: fallbackUrl });
 
+function zeroLinkVisitCount(): number {
+	return 0;
+}
+
 function preparedResponse(overrides: Partial<RedirectResponse> = {}): RedirectResponse {
 	return { url: destination, status_code: 302, forward_query: false, ...overrides };
 }
@@ -79,7 +83,7 @@ describe('exact single-decode lookup', () => {
 		['/100%25', '/100%'],
 		['/docs?next=/missing?part=two', '/docs']
 	])('%s resolves logical key %s', (target, path) => {
-		const { response, visit } = resolveRedirect(domain, host, target, 'GET');
+		const { response, visit } = resolveRedirect(domain, host, target, 'GET', zeroLinkVisitCount);
 
 		expect(response.status).toBe(302);
 		const expectedUrl = path === '/' ? domain.root?.url : domain.links[path]?.url;
@@ -97,7 +101,7 @@ describe('exact single-decode lookup', () => {
 		'/docs%3Fignored=one',
 		'/docs%23fragment'
 	])('%s is not normalized, prefix-matched or reparsed', (target) => {
-		const { response, visit } = resolveRedirect(domain, host, target, 'GET');
+		const { response, visit } = resolveRedirect(domain, host, target, 'GET', zeroLinkVisitCount);
 
 		expect(response.status).toBe(404);
 		expect(visit?.outcome).toBe('invalid');
@@ -115,19 +119,28 @@ describe('exact single-decode lookup', () => {
 		const domain = preparedDomain(links);
 
 		for (const path of Object.keys(links)) {
-			expect(resolveRedirect(domain, host, path, 'GET').response.headers.get('location')).toBe(
-				destination
-			);
+			expect(
+				resolveRedirect(domain, host, path, 'GET', zeroLinkVisitCount).response.headers.get(
+					'location'
+				)
+			).toBe(destination);
 		}
-		expect(resolveRedirect(domain, host, '/inherited', 'GET').response.status).toBe(404);
+		expect(
+			resolveRedirect(domain, host, '/inherited', 'GET', zeroLinkVisitCount).response.status
+		).toBe(404);
 	});
 
 	test('resolves only the supplied domain namespace', () => {
 		const first = preparedDomain({ '/docs': preparedLink() });
 		const second = preparedDomain({ '/other': preparedLink() });
 
-		expect(resolveRedirect(first, host, '/docs', 'GET').response.status).toBe(302);
-		expect(resolveRedirect(second, 'other.example.test', '/docs', 'GET').response.status).toBe(404);
+		expect(resolveRedirect(first, host, '/docs', 'GET', zeroLinkVisitCount).response.status).toBe(
+			302
+		);
+		expect(
+			resolveRedirect(second, 'other.example.test', '/docs', 'GET', zeroLinkVisitCount).response
+				.status
+		).toBe(404);
 	});
 });
 
@@ -146,12 +159,12 @@ function matchingDomain(links: Record<string, LinkInput>): PreparedDomain {
 describe('flexible matching and forwarding', () => {
 	test('built-in aliases count against the authored key without enabling prefix matching', () => {
 		const domain = matchingDomain({ '/Docs': { url: destination } });
-		const matched = resolveRedirect(domain, host, '/DOCS/', 'GET');
+		const matched = resolveRedirect(domain, host, '/DOCS/', 'GET', zeroLinkVisitCount);
 		expect(matched.response.headers.get('location')).toBe(destination);
 		expect(matched.visit).toMatchObject({ path: '/Docs', outcome: 'valid' });
 		expect(matched.response.headers.has('vary')).toBe(false);
 
-		const unmatched = resolveRedirect(domain, host, '/docs/install', 'GET');
+		const unmatched = resolveRedirect(domain, host, '/docs/install', 'GET', zeroLinkVisitCount);
 		expect(unmatched.response.status).toBe(404);
 		expect(unmatched.visit).toMatchObject({ path: '/docs/install', outcome: 'invalid' });
 	});
@@ -174,7 +187,14 @@ describe('flexible matching and forwarding', () => {
 		});
 		const target = '/DOCS/Install%20Guide/%252F?tag=one&tag=two';
 		const options = { acceptLanguage: 'fr-CA,en;q=0.5' };
-		const { response, visit } = resolveRedirect(domain, host, target, 'GET', options);
+		const { response, visit } = resolveRedirect(
+			domain,
+			host,
+			target,
+			'GET',
+			zeroLinkVisitCount,
+			options
+		);
 		expect(response.headers.get('location')).toBe(
 			'https://target.example.test/base/Install%20Guide/%252F?keep=%2F&tag=one&tag=two#part'
 		);
@@ -182,7 +202,7 @@ describe('flexible matching and forwarding', () => {
 		expect(response.status).toBe(308);
 		expect(response.headers.get('cache-control')).toBe('no-store');
 		expect(response.headers.get('vary')).toBe('Accept-Language, User-Agent');
-		const head = resolveRedirect(domain, host, target, 'HEAD', options);
+		const head = resolveRedirect(domain, host, target, 'HEAD', zeroLinkVisitCount, options);
 		expect([...head.response.headers]).toEqual([...response.headers]);
 		expect(head.visit).toBeUndefined();
 	});
@@ -191,10 +211,22 @@ describe('flexible matching and forwarding', () => {
 		const authored = 'https://TARGET.example.test:443/base/?tag=old&keep=%2f#part';
 		const domain = matchingDomain({ '/docs': { url: authored, forward_path: true } });
 		expect(
-			resolveRedirect(domain, host, '/docs/Install?tag=new', 'GET').response.headers.get('location')
+			resolveRedirect(
+				domain,
+				host,
+				'/docs/Install?tag=new',
+				'GET',
+				zeroLinkVisitCount
+			).response.headers.get('location')
 		).toBe('https://target.example.test/base/Install?tag=old&keep=%2f#part');
 		expect(
-			resolveRedirect(domain, host, '/docs?tag=new', 'GET').response.headers.get('location')
+			resolveRedirect(
+				domain,
+				host,
+				'/docs?tag=new',
+				'GET',
+				zeroLinkVisitCount
+			).response.headers.get('location')
 		).toBe(authored);
 	});
 
@@ -203,7 +235,13 @@ describe('flexible matching and forwarding', () => {
 			'/docs': { url: destination, forward_path: true },
 			'/docs/api': { url: 'https://api.example.test/reference', forward_path: true }
 		});
-		const { response, visit } = resolveRedirect(domain, host, '/DOCS/api/Start', 'GET');
+		const { response, visit } = resolveRedirect(
+			domain,
+			host,
+			'/DOCS/api/Start',
+			'GET',
+			zeroLinkVisitCount
+		);
 		expect(response.headers.get('location')).toBe('https://api.example.test/reference/Start');
 		expect(visit).toMatchObject({ path: '/docs/api', outcome: 'valid' });
 	});
@@ -219,9 +257,16 @@ describe('flexible matching and forwarding', () => {
 			}
 		});
 		domain.fallback = fallback;
-		const { response, visit } = resolveRedirect(domain, host, '/DOCS/private/secret?x=1', 'GET', {
-			acceptLanguage: 'fr'
-		});
+		const { response, visit } = resolveRedirect(
+			domain,
+			host,
+			'/DOCS/private/secret?x=1',
+			'GET',
+			zeroLinkVisitCount,
+			{
+				acceptLanguage: 'fr'
+			}
+		);
 		expect(response.headers.get('location')).toBe(fallbackUrl);
 		expect(response.headers.has('vary')).toBe(false);
 		expect(visit).toMatchObject({ path: '/docs/private', outcome: 'invalid' });
@@ -231,7 +276,7 @@ describe('flexible matching and forwarding', () => {
 		'does not turn dangerous decoded suffixes into forwarded paths: %s',
 		(target) => {
 			const domain = matchingDomain({ '/docs': { url: destination, forward_path: true } });
-			const { response, visit } = resolveRedirect(domain, host, target, 'GET');
+			const { response, visit } = resolveRedirect(domain, host, target, 'GET', zeroLinkVisitCount);
 			expect(response.status).toBe(404);
 			expect(response.headers.has('location')).toBe(false);
 			expect(visit?.outcome).toBe('invalid');
@@ -244,15 +289,51 @@ describe('flexible matching and forwarding', () => {
 			{ if: { language: 'fr' }, to: 'https://go.example.test/DOCS/again' },
 			{ if: { os: 'ios' }, to: destination }
 		];
-		const { response, visit } = resolveRedirect(domain, host, '/docs/start', 'GET', {
-			acceptLanguage: 'fr',
-			userAgent: 'iPhone'
-		});
+		const { response, visit } = resolveRedirect(
+			domain,
+			host,
+			'/docs/start',
+			'GET',
+			zeroLinkVisitCount,
+			{
+				acceptLanguage: 'fr',
+				userAgent: 'iPhone'
+			}
+		);
 		expect(response.status).toBe(404);
 		expect(response.headers.has('location')).toBe(false);
 		expect(response.headers.get('cache-control')).toBe('no-store');
 		expect(response.headers.get('vary')).toBe('Accept-Language, User-Agent');
 		expect(visit).toMatchObject({ path: '/docs', outcome: 'invalid' });
+	});
+});
+
+describe('named-link visit limits', () => {
+	test('an exhausted prefix winner uses its canonical count and fallback, never its parent', () => {
+		const domain = matchingDomain({
+			'/docs': { url: destination, forward_path: true },
+			'/docs/private': {
+				url: destination,
+				max_visits: 2,
+				forward_path: true,
+				redirect: [{ if: { language: 'fr' }, to: 'https://example.org/private' }]
+			}
+		});
+		domain.fallback = fallback;
+		const linkVisitCount = vi.fn(() => 2);
+		const { response, visit } = resolveRedirect(
+			domain,
+			host,
+			'/DOCS/private/secret?x=1',
+			'GET',
+			linkVisitCount,
+			{ acceptLanguage: 'fr' }
+		);
+
+		expect(linkVisitCount).toHaveBeenCalledExactlyOnceWith(host, '/docs/private');
+		expect(response.headers.get('location')).toBe(fallbackUrl);
+		expect(response.headers.has('vary')).toBe(false);
+		expect(visit).toMatchObject({ path: '/docs/private', outcome: 'invalid' });
 	});
 });
 
@@ -269,7 +350,7 @@ describe('HTTP responses', () => {
 			},
 			fallback
 		);
-		const { response, visit } = resolveRedirect(domain, host, '/docs', 'GET', {
+		const { response, visit } = resolveRedirect(domain, host, '/docs', 'GET', zeroLinkVisitCount, {
 			acceptLanguage: 'en',
 			userAgent: 'Unknown agent'
 		});
@@ -283,7 +364,13 @@ describe('HTTP responses', () => {
 		const url = 'https://例え.test/café?q=☕#完成';
 		const domain = preparedDomain({ '/docs': preparedLink({ url }) });
 
-		const { response } = resolveRedirect(domain, host, '/docs?ignored=one', 'GET');
+		const { response } = resolveRedirect(
+			domain,
+			host,
+			'/docs?ignored=one',
+			'GET',
+			zeroLinkVisitCount
+		);
 
 		expect(response.status).toBe(302);
 		expect(response.headers.get('location')).toBe(new URL(url).href);
@@ -293,7 +380,7 @@ describe('HTTP responses', () => {
 		'serves status %s with no-store',
 		(status) => {
 			const domain = preparedDomain({ '/docs': preparedLink({ status_code: status }) });
-			const { response } = resolveRedirect(domain, host, '/docs', 'GET');
+			const { response } = resolveRedirect(domain, host, '/docs', 'GET', zeroLinkVisitCount);
 
 			expect(response.status).toBe(status);
 			expect(response.headers.get('location')).toBe(destination);
@@ -305,7 +392,13 @@ describe('HTTP responses', () => {
 		'rejects %s without resolving a link or fallback',
 		(method) => {
 			const domain = preparedDomain({ '/docs': preparedLink() }, fallback);
-			const { response, visit } = resolveRedirect(domain, host, '/docs', method);
+			const { response, visit } = resolveRedirect(
+				domain,
+				host,
+				'/docs',
+				method,
+				zeroLinkVisitCount
+			);
 
 			expect(response.status).toBe(405);
 			expect(visit).toBeUndefined();
@@ -337,7 +430,7 @@ describe('HTTP responses', () => {
 		'/%FF'
 	])('rejects malformed raw target %j before using fallback', (target) => {
 		const domain = preparedDomain({}, fallback);
-		const { response, visit } = resolveRedirect(domain, host, target, 'GET');
+		const { response, visit } = resolveRedirect(domain, host, target, 'GET', zeroLinkVisitCount);
 
 		expect(response.status).toBe(400);
 		expect(visit).toBeUndefined();
@@ -375,8 +468,14 @@ describe('HTTP responses', () => {
 				fallback,
 				root
 			);
-			const { response: get } = resolveRedirect(domain, host, target, 'GET');
-			const { response: head, visit } = resolveRedirect(domain, host, target, 'HEAD');
+			const { response: get } = resolveRedirect(domain, host, target, 'GET', zeroLinkVisitCount);
+			const { response: head, visit } = resolveRedirect(
+				domain,
+				host,
+				target,
+				'HEAD',
+				zeroLinkVisitCount
+			);
 
 			expect(visit).toBeUndefined();
 
@@ -413,9 +512,16 @@ describe('validity and fallback', () => {
 			},
 			fallback
 		);
-		const { response, visit } = resolveRedirect(domain, host, '/docs?incoming=ignored', 'GET', {
-			now
-		});
+		const { response, visit } = resolveRedirect(
+			domain,
+			host,
+			'/docs?incoming=ignored',
+			'GET',
+			zeroLinkVisitCount,
+			{
+				now
+			}
+		);
 
 		expect(response.status).toBe(status);
 		expect(visit).toEqual({ domain: host, path: '/docs', outcome, visitedAt: now });
@@ -426,9 +532,9 @@ describe('validity and fallback', () => {
 	test('visit outcomes do not change with later link configuration', () => {
 		const link = preparedLink();
 		const domain = preparedDomain({ '/docs': link }, fallback);
-		const first = resolveRedirect(domain, host, '/docs', 'GET');
+		const first = resolveRedirect(domain, host, '/docs', 'GET', zeroLinkVisitCount);
 		link.enabled = false;
-		const next = resolveRedirect(domain, host, '/docs', 'GET');
+		const next = resolveRedirect(domain, host, '/docs', 'GET', zeroLinkVisitCount);
 		expect(first.visit?.outcome).toBe('valid');
 		expect(next.visit?.outcome).toBe('invalid');
 	});
@@ -438,7 +544,7 @@ describe('validity and fallback', () => {
 		try {
 			const domain = preparedDomain({ '/docs': preparedLink({ valid_from: from }) });
 
-			const { response, visit } = resolveRedirect(domain, host, '/docs', 'GET');
+			const { response, visit } = resolveRedirect(domain, host, '/docs', 'GET', zeroLinkVisitCount);
 			expect(response.status).toBe(302);
 			expect(visit).toEqual({ domain: host, path: '/docs', outcome: 'valid', visitedAt: start });
 		} finally {
@@ -450,7 +556,14 @@ describe('validity and fallback', () => {
 		'inactive links can fall back to 404',
 		(link) => {
 			const domain = preparedDomain({ '/docs': link });
-			const { response, visit } = resolveRedirect(domain, host, '/docs', 'GET', { now: end });
+			const { response, visit } = resolveRedirect(
+				domain,
+				host,
+				'/docs',
+				'GET',
+				zeroLinkVisitCount,
+				{ now: end }
+			);
 
 			expect(response.status).toBe(404);
 			expect(visit?.outcome).toBe('invalid');
@@ -467,7 +580,13 @@ describe('validity and fallback', () => {
 		});
 		const domain = preparedDomain({}, fallback, root);
 
-		const { response, visit } = resolveRedirect(domain, host, '/?from=root', 'GET');
+		const { response, visit } = resolveRedirect(
+			domain,
+			host,
+			'/?from=root',
+			'GET',
+			zeroLinkVisitCount
+		);
 		expect(response.status).toBe(308);
 		expect(response.headers.get('location')).toBe(
 			'https://destination.example.test/home?from=root'
@@ -475,14 +594,20 @@ describe('validity and fallback', () => {
 		expect(response.headers.get('cache-control')).toBe('no-store');
 		expect(visit).toMatchObject({ path: '/', outcome: 'valid' });
 
-		const missing = resolveRedirect(domain, host, '/home', 'GET');
+		const missing = resolveRedirect(domain, host, '/home', 'GET', zeroLinkVisitCount);
 		expect(missing.response.headers.get('location')).toBe(fallbackUrl);
 		expect(missing.visit).toMatchObject({ path: '/home', outcome: 'invalid' });
 	});
 
 	test('a root request using fallback is still a valid Root visit', () => {
 		const domain = preparedDomain({}, fallback);
-		const { response, visit } = resolveRedirect(domain, host, '/?incoming=ignored', 'GET');
+		const { response, visit } = resolveRedirect(
+			domain,
+			host,
+			'/?incoming=ignored',
+			'GET',
+			zeroLinkVisitCount
+		);
 
 		expect(response.status).toBe(302);
 		expect(response.headers.get('location')).toBe(fallbackUrl);
@@ -491,7 +616,7 @@ describe('validity and fallback', () => {
 
 	test('a root request returning 404 is still a valid Root visit', () => {
 		const domain = preparedDomain();
-		const { response, visit } = resolveRedirect(domain, host, '/', 'GET');
+		const { response, visit } = resolveRedirect(domain, host, '/', 'GET', zeroLinkVisitCount);
 		expect(response.status).toBe(404);
 		expect(visit).toMatchObject({ path: '/', outcome: 'valid' });
 	});
@@ -502,7 +627,8 @@ describe('validity and fallback', () => {
 			domain,
 			host,
 			'/missing/nested?owned=replaced&new=value',
-			'GET'
+			'GET',
+			zeroLinkVisitCount
 		);
 
 		expect(response.status).toBe(302);
@@ -522,7 +648,13 @@ describe('validity and fallback', () => {
 			configuredFallback
 		);
 
-		const { response, visit } = resolveRedirect(domain, host, '/disabled?incoming=present', 'GET');
+		const { response, visit } = resolveRedirect(
+			domain,
+			host,
+			'/disabled?incoming=present',
+			'GET',
+			zeroLinkVisitCount
+		);
 
 		expect(response.status).toBe(307);
 		expect(response.headers.get('location')).toBe(
@@ -536,7 +668,13 @@ describe('query forwarding', () => {
 	test('off preserves the authored URL exactly', () => {
 		const authored = 'https://TARGET.example.test:443/p%61th?tag=old&keep=%2f&tag=older#part%20one';
 		const domain = preparedDomain({ '/docs': preparedLink({ url: authored }) });
-		const { response } = resolveRedirect(domain, host, '/docs?tag=new&incoming=yes', 'GET');
+		const { response } = resolveRedirect(
+			domain,
+			host,
+			'/docs?tag=new&incoming=yes',
+			'GET',
+			zeroLinkVisitCount
+		);
 
 		expect(response.headers.get('location')).toBe(authored);
 	});
@@ -563,7 +701,7 @@ describe('query forwarding', () => {
 		const domain = preparedDomain({
 			'/docs': preparedLink({ url: authored, forward_query: true })
 		});
-		const { response } = resolveRedirect(domain, host, `/docs?${query}`, 'GET');
+		const { response } = resolveRedirect(domain, host, `/docs?${query}`, 'GET', zeroLinkVisitCount);
 
 		expect(response.headers.get('location')).toBe(expected);
 		expect(domain.links['/docs']?.url).toBe(authored);
@@ -577,9 +715,11 @@ describe('query forwarding', () => {
 				'/docs': preparedLink({ url: authored, forward_query: true })
 			});
 
-			expect(resolveRedirect(domain, host, target, 'GET').response.headers.get('location')).toBe(
-				authored
-			);
+			expect(
+				resolveRedirect(domain, host, target, 'GET', zeroLinkVisitCount).response.headers.get(
+					'location'
+				)
+			).toBe(authored);
 		}
 	);
 });
@@ -593,7 +733,7 @@ describe('direct self-loops', () => {
 		['/docs', 'https:///go.example.test/docs', 'invalid']
 	])('runtime blocks a direct fallback loop: %s -> %s', (target, url, expectedOutcome) => {
 		const domain = preparedDomain({}, preparedResponse({ url, forward_query: true }));
-		const { response, visit } = resolveRedirect(domain, host, target, 'GET');
+		const { response, visit } = resolveRedirect(domain, host, target, 'GET', zeroLinkVisitCount);
 
 		expect(response.status).toBe(404);
 		expect(visit?.outcome).toBe(expectedOutcome);
@@ -607,7 +747,13 @@ describe('direct self-loops', () => {
 			forward_query: true
 		});
 		const domain = preparedDomain({}, fallback, root);
-		const { response, visit } = resolveRedirect(domain, host, '/?owned=new', 'GET');
+		const { response, visit } = resolveRedirect(
+			domain,
+			host,
+			'/?owned=new',
+			'GET',
+			zeroLinkVisitCount
+		);
 
 		expect(response.status).toBe(404);
 		expect(response.headers.has('location')).toBe(false);
@@ -620,7 +766,7 @@ describe('direct self-loops', () => {
 			{ '/docs': preparedLink({ url: 'https://go.example.test/docs' }) },
 			fallback
 		);
-		const { response, visit } = resolveRedirect(domain, host, '/docs', 'GET');
+		const { response, visit } = resolveRedirect(domain, host, '/docs', 'GET', zeroLinkVisitCount);
 
 		expect(response.status).toBe(404);
 		expect(response.headers.has('location')).toBe(false);
@@ -630,9 +776,13 @@ describe('direct self-loops', () => {
 	test('allows fallback to a different local path without graph analysis', () => {
 		const domain = preparedDomain({}, preparedResponse({ url: 'https://go.example.test/landing' }));
 
-		expect(resolveRedirect(domain, host, '/missing', 'GET').response.headers.get('location')).toBe(
-			'https://go.example.test/landing'
-		);
-		expect(resolveRedirect(domain, host, '/landing', 'GET').response.status).toBe(404);
+		expect(
+			resolveRedirect(domain, host, '/missing', 'GET', zeroLinkVisitCount).response.headers.get(
+				'location'
+			)
+		).toBe('https://go.example.test/landing');
+		expect(
+			resolveRedirect(domain, host, '/landing', 'GET', zeroLinkVisitCount).response.status
+		).toBe(404);
 	});
 });

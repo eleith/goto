@@ -25,7 +25,7 @@ export const load = (async ({ locals, params }) => {
 		os: rule.if.os ?? null,
 		to: rule.to
 	}));
-	const state = currentLinkState(link, Date.now());
+	const state = currentLinkState(link, Date.now(), lifetimeVisits);
 	const validFrom = link.valid_from ?? null;
 	const validUntil = link.valid_until ?? null;
 	const configuration = snapshot.configuration;
@@ -62,6 +62,7 @@ export const load = (async ({ locals, params }) => {
 		caseInsensitive: link.case_insensitive,
 		ignoreTrailingSlash: link.ignore_trailing_slash,
 		forwardPath: link.forward_path,
+		maxVisits: link.max_visits ?? null,
 		state,
 		validFrom,
 		validUntil,
