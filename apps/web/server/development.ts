@@ -1,7 +1,8 @@
 import type { Adapter, Emulator } from '@sveltejs/kit';
 import { getRequest, setResponse } from '@sveltejs/kit/node';
+import { readFile } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { dirname, relative } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isRunnableDevEnvironment, type ViteDevServer } from 'vite';
 import {
@@ -106,7 +107,14 @@ export class DevelopmentServer {
 	private async dispatch(request: IncomingMessage, response: ServerResponse, next: Next) {
 		const runtime = await this.runtime();
 		const application = await this.lifecycle.start();
-		const result = runtime.handleIngress(application, request, process.env, 'http');
+		const publicDir = this.server!.config.publicDir;
+		const result = await runtime.handleIngress(
+			application,
+			request,
+			process.env,
+			'http',
+			(path, method) => serveRedirectHostAsset(publicDir, path, method)
+		);
 		if (result) setResponse(response, result);
 		else next();
 	}
@@ -127,5 +135,24 @@ export class DevelopmentServer {
 		} catch {
 			this.server?.config.logger.error('Goto restart failed');
 		}
+	}
+}
+
+async function serveRedirectHostAsset(publicDir: string, path: string, method: 'GET' | 'HEAD') {
+	const headers = { 'cache-control': 'no-store' };
+	try {
+		const contents = await readFile(join(publicDir, path));
+		return new Response(method === 'HEAD' ? null : new Uint8Array(contents), {
+			headers: {
+				...headers,
+				'content-type': path.endsWith('.svg') ? 'image/svg+xml' : 'image/png',
+				'content-length': String(contents.byteLength)
+			}
+		});
+	} catch (error) {
+		if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+			return new Response(null, { status: 404, headers });
+		}
+		throw error;
 	}
 }

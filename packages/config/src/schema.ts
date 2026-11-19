@@ -6,6 +6,7 @@ import {
 	type TSchema
 } from '@sinclair/typebox';
 import { languageTagPattern } from './languages.js';
+import { reservedStaticPrefix } from './paths.js';
 import { hasControlCharacters } from './text.js';
 
 const ref = <T extends TSchema>(schema: T, options?: SchemaOptions) => {
@@ -322,18 +323,19 @@ const LinkConfigurationSchema = Type.Object(
 	}
 );
 
+const namedLinkKeyPattern = `^(?!${reservedStaticPrefix})/.+`;
+
 const DomainConfigurationSchema = Type.Object(
 	{
 		link_defaults: ref(DomainLinkDefaultsSchema, { default: {} }),
 		root: Type.Optional(ref(RedirectResponseSchema)),
 		fallback: Type.Optional(ref(RedirectResponseSchema)),
 		links: Type.Record(
-			Type.String({ pattern: '^/.+' }),
+			Type.String({ pattern: namedLinkKeyPattern }),
 			ref(LinkConfigurationSchema, { default: {} }),
 			{
 				additionalProperties: false,
-				description:
-					'Logical named paths. Keys preserve their spelling and are never interpolated or percent-decoded. Use readable canonical paths without spaces, trailing slashes, controls, backslashes, dot segments or :?#[]@. Configure / with the separate root response.'
+				description: `Logical named paths. Keys preserve their spelling and are never interpolated or percent-decoded. Use readable canonical paths without spaces, trailing slashes, controls, backslashes, dot segments or :?#[]. The ${reservedStaticPrefix} prefix is reserved for static files. Configure / with the separate root response.`
 			}
 		)
 	},

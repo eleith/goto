@@ -1,10 +1,12 @@
 <script lang="ts">
-	import { onMount, type Snippet } from 'svelte';
+	import { onMount } from 'svelte';
+	import type { LayoutProps } from './$types';
+	import DocumentHead from '#lib/components/appearance/DocumentHead.svelte';
 	import '#lib/styles/reset.css';
 	import '#lib/styles/theme.css';
 	import '#lib/styles/controls.css';
 
-	let { children }: { children: Snippet } = $props();
+	let { children, data }: LayoutProps = $props();
 
 	onMount(() => {
 		const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
@@ -19,4 +21,5 @@
 	});
 </script>
 
+<DocumentHead origin={data.origin ?? null} />
 {@render children()}

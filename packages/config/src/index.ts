@@ -11,6 +11,7 @@ export { isSelfRedirect } from './redirect.js';
 export {
 	isCanonicalPath,
 	normalizeHost,
+	reservedStaticPrefix,
 	resolveConfigPath,
 	resolveDeploymentRoot
 } from './paths.js';

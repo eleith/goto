@@ -6,6 +6,20 @@ import { loadConfig } from './load.js';
 const options = { env: {} };
 const redirectHost = 'go.example.test';
 
+it('allows @ in links outside the reserved /@static/ prefix', () => {
+	const destination = { url: 'https://example.com/destination' };
+	const { domains } = loadConfig(
+		configurationInput({ '/@alice': destination, '/@static': destination }),
+		options
+	);
+	expect(Object.keys(domains['go.example.com']!.links)).toEqual(['/@alice', '/@static']);
+	for (const path of ['/@static/favicon.svg', '/@static/notes']) {
+		expect(() => loadConfig(configurationInput({ [path]: destination }), options)).toThrow(
+			ConfigError
+		);
+	}
+});
+
 describe('direct self-loop validation', () => {
 	it.each([
 		{

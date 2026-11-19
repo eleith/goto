@@ -36,11 +36,16 @@ function isAuthority(value: string): boolean {
 	return /^(?:\[[^\]]+\]|[^:[\]]+)(?::[0-9]+)?$/.test(value);
 }
 
+export interface Ingress {
+	url: URL;
+	host: string;
+}
+
 export function readIngress(
 	request: IncomingMessage,
 	env: NodeJS.ProcessEnv = process.env,
 	defaultProtocol: 'http' | 'https' = 'https'
-): { url: URL; host: string } | undefined {
+): Ingress | undefined {
 	try {
 		if (hasDuplicateHeader(request, 'host')) return undefined;
 

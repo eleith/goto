@@ -496,9 +496,11 @@
 				"fallback": { "$ref": "#/$defs/RedirectResponse" },
 				"links": {
 					"additionalProperties": false,
-					"description": "Logical named paths. Keys preserve their spelling and are never interpolated or percent-decoded. Use readable canonical paths without spaces, trailing slashes, controls, backslashes, dot segments or :?#[]@. Configure / with the separate root response.",
+					"description": "Logical named paths. Keys preserve their spelling and are never interpolated or percent-decoded. Use readable canonical paths without spaces, trailing slashes, controls, backslashes, dot segments or :?#[]. The /@static/ prefix is reserved for static files. Configure / with the separate root response.",
 					"type": "object",
-					"patternProperties": { "^/.+": { "default": {}, "$ref": "#/$defs/LinkConfiguration" } }
+					"patternProperties": {
+						"^(?!/@static/)/.+": { "default": {}, "$ref": "#/$defs/LinkConfiguration" }
+					}
 				}
 			}
 		}

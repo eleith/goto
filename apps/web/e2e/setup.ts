@@ -19,6 +19,7 @@ export default async function setup() {
 		await mkdir(projectDirectory);
 		for (const path of [
 			'src',
+			'static',
 			'server',
 			'server.js',
 			'package.json',

@@ -489,7 +489,9 @@ test('final redirect guards leave a limited link available until a valid GET suc
 	vi.mocked(loadConfigFile).mockResolvedValueOnce(initial);
 	const application = await createApplication(options);
 
-	expect(send(application, '/docs/start', 'GET', { 'accept-language': 'fr' })?.status).toBe(404);
+	const blocked = send(application, '/docs/start', 'GET', { 'accept-language': 'fr' });
+	expect(blocked?.status).toBe(404);
+	expect(blocked?.headers.get('vary')).toBe('Accept-Language');
 	expect(send(application, '/docs/%00')?.status).toBe(404);
 	expect(application.linkVisitCount('go.example.test', '/docs')).toBe(0);
 	expect(queueVisit.mock.calls.map(([visit]) => visit.outcome)).toEqual(['invalid', 'invalid']);

@@ -1,5 +1,5 @@
 import { matchLink, type MatchingDomain } from './matching.js';
-import { normalizeHost } from './paths.js';
+import { normalizeHost, reservedStaticPrefix } from './paths.js';
 
 export function isSelfRedirect(
 	destination: string,
@@ -20,6 +20,7 @@ export function isSelfRedirect(
 		if (!sameHost) return false;
 		const destinationPath = decodeURIComponent(url.pathname);
 		if (destinationPath === path) return true;
+		if (destinationPath.startsWith(reservedStaticPrefix)) return false;
 		if (domain === undefined || path === '/' || destinationPath === '/') return false;
 		const source = matchLink(domain, path);
 		const target = matchLink(domain, destinationPath);

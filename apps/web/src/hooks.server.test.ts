@@ -202,6 +202,7 @@ describe('admin group origin', () => {
 
 		expect(response.status).toBe(404);
 		expect(response.headers.get('cache-control')).toBe('no-store');
+		expect(await response.text()).toBe('Not found');
 		expect(resolve).not.toHaveBeenCalled();
 	});
 

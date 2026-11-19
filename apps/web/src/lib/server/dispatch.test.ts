@@ -3,7 +3,7 @@ import type { IncomingMessage } from 'node:http';
 import { expect, test, vi } from 'vitest';
 import type { Application } from './application.js';
 import { handleIngress } from './dispatch.js';
-import { requestApplication } from './request-context.js';
+import { requestApplication, requestContext } from './request-context.js';
 import { prepareSnapshot } from './snapshot.js';
 
 const prepared = loadConfig(
@@ -22,7 +22,9 @@ const prepared = loadConfig(
 							}
 						]
 					},
-					'/_app/version.json': { url: 'https://destination.example.test/asset' }
+					'/_app/version.json': { url: 'https://destination.example.test/asset' },
+					'/%40static/og.png': { url: 'https://destination.example.test/literal-percent' },
+					'/@static': { url: 'https://go.example.test/@static/og.png', forward_path: true }
 				}
 			},
 			'localhost:3000': {
@@ -45,11 +47,151 @@ function request(host: string, url = '/schema.json', remoteAddress = '127.0.0.1'
 	} as IncomingMessage;
 }
 
-test('only canonical admin requests reach the whole adapter with captured application context', () => {
+test('canonical admin requests reach the adapter with captured application context', () => {
 	const incoming = request('admin.example.test', '/_app/version.json');
 
 	expect(handleIngress(application, incoming, {})).toBeUndefined();
 	expect(requestApplication(incoming)).toBe(application);
+	expect(requestContext(incoming)).toMatchObject({
+		origin: 'https://admin.example.test',
+		snapshot
+	});
+});
+
+test('a redirect host with an explicit default port takes priority over the app origin', () => {
+	const overlap = prepareSnapshot(
+		loadConfig(
+			{
+				url: { app: 'http://admin.example.test' },
+				auth: { credentials: { username: 'example', password: 'unit-only-password' } },
+				domains: {
+					'admin.example.test:80': {
+						links: { '/schema.json': { url: 'https://destination.example.test/schema' } }
+					}
+				}
+			},
+			{ env: {} }
+		)
+	);
+	const recordVisit = vi.fn();
+	const tracked = { ...application, currentSnapshot: () => overlap, recordVisit };
+	const incoming = request('admin.example.test:80');
+	const response = handleIngress(tracked, incoming, {}, 'http');
+
+	expect(response?.status).toBe(302);
+	expect(response?.headers.get('location')).toBe('https://destination.example.test/schema');
+	expect(requestContext(incoming)).toBeUndefined();
+	expect(recordVisit).toHaveBeenCalledExactlyOnceWith(
+		expect.objectContaining({ domain: 'admin.example.test:80', path: '/schema.json' })
+	);
+});
+
+test('reserved assets bypass prefix redirects, fallback, and visit capture', () => {
+	const recordVisit = vi.fn();
+	const fallbackSnapshot = {
+		...snapshot,
+		domains: {
+			...snapshot.domains,
+			'go.example.test': {
+				...snapshot.domains['go.example.test']!,
+				fallback: {
+					url: 'https://fallback.example.test/',
+					status_code: 302 as const,
+					forward_query: false
+				}
+			}
+		}
+	};
+	const tracked = { ...application, currentSnapshot: () => fallbackSnapshot, recordVisit };
+
+	for (const method of ['GET', 'HEAD']) {
+		for (const path of ['/@static/favicon.svg', '/@static/og.png?version=1', '/@static/og.svg']) {
+			const incoming = request('go.example.test', path);
+			incoming.method = method;
+
+			expect(handleIngress(tracked, incoming, {})).toBeUndefined();
+			const context = requestContext(incoming);
+			expect(context?.application).toBe(tracked);
+			expect(context?.snapshot).toBe(fallbackSnapshot);
+			expect(context?.origin).toBe('https://go.example.test');
+		}
+	}
+	for (const pathname of ['/@static/missing.svg', '/%40static/missing.svg']) {
+		const missing = request('go.example.test', pathname);
+		expect(handleIngress(tracked, missing, {})?.status).toBe(404);
+		expect(requestContext(missing)).toBeUndefined();
+	}
+	expect(recordVisit).not.toHaveBeenCalled();
+});
+
+test('ingress uses the development asset reader only on the redirect host', async () => {
+	const recordVisit = vi.fn();
+	const tracked = { ...application, recordVisit };
+	const assetResponse = new Response('asset contents');
+	const serveAsset = vi.fn(async () => assetResponse);
+	const incoming = request('go.example.test', '/@static/og.svg?raw');
+
+	const response = await handleIngress(tracked, incoming, {}, 'http', serveAsset);
+
+	expect(response).toBe(assetResponse);
+	expect(serveAsset).toHaveBeenCalledExactlyOnceWith('/@static/og.svg', 'GET');
+	expect(requestContext(incoming)).toBeUndefined();
+	expect(recordVisit).not.toHaveBeenCalled();
+
+	const appRequest = request('admin.example.test', '/@static/og.svg');
+	expect(handleIngress(tracked, appRequest, {}, 'https', serveAsset)).toBeUndefined();
+	expect(requestApplication(appRequest)).toBe(tracked);
+	expect(serveAsset).toHaveBeenCalledOnce();
+});
+
+test('site asset URLs do not bypass public method restrictions', () => {
+	const recordVisit = vi.fn();
+	const incoming = request('go.example.test', '/@static/favicon.svg');
+	incoming.method = 'POST';
+	const response = handleIngress({ ...application, recordVisit }, incoming, {});
+
+	expect(response?.status).toBe(405);
+	expect(response?.headers.get('allow')).toBe('GET, HEAD');
+	expect(requestContext(incoming)).toBeUndefined();
+	expect(recordVisit).not.toHaveBeenCalled();
+});
+
+test('other public resource paths stay outside the adapter', async () => {
+	for (const path of ['/signin', '/_app/unclaimed.js']) {
+		const incoming = request('go.example.test', path);
+		const response = handleIngress(application, incoming, {});
+
+		expect(response?.status).toBe(404);
+		expect(await response?.text()).toContain('<title>Not found — Goto</title>');
+		expect(requestContext(incoming)).toBeUndefined();
+	}
+});
+
+test('the bare /@static forwarding link can redirect to a same-host asset', () => {
+	const incoming = request('go.example.test', '/%40static');
+	const response = handleIngress(application, incoming, {});
+
+	expect(response?.status).toBe(302);
+	expect(response?.headers.get('location')).toBe('https://go.example.test/@static/og.png');
+	expect(requestContext(incoming)).toBeUndefined();
+});
+
+test('literal-percent link keys keep single-decode routing instead of becoming asset requests', () => {
+	const incoming = request('go.example.test', '/%2540static/og.png');
+	const response = handleIngress(application, incoming, {});
+
+	expect(response?.status).toBe(302);
+	expect(response?.headers.get('location')).toBe(
+		'https://destination.example.test/literal-percent'
+	);
+	expect(requestContext(incoming)).toBeUndefined();
+
+	const recordVisit = vi.fn();
+	const encodedAsset = request('go.example.test', '/%40static/og.png?v=1');
+	const assetResponse = handleIngress({ ...application, recordVisit }, encodedAsset, {});
+	expect(assetResponse?.status).toBe(308);
+	expect(assetResponse?.headers.get('location')).toBe('/@static/og.png?v=1');
+	expect(recordVisit).not.toHaveBeenCalled();
 });
 
 test.each([
@@ -82,17 +224,29 @@ test('allows an actual internal probe without enrolling arbitrary hosts', () => 
 	).toBe(404);
 });
 
-test('rejects unknown hosts before the adapter instead of borrowing a fallback', () => {
-	const incoming = request('unknown.example.test', '/_app/version.json');
+test.each(['/_app/version.json', '/@static/favicon.svg'])(
+	'rejects unknown-host %s with a bare 404 before the adapter',
+	async (path) => {
+		const recordVisit = vi.fn();
+		const incoming = request('unknown.example.test', path);
+		const response = handleIngress({ ...application, recordVisit }, incoming, {});
 
-	expect(handleIngress(application, incoming, {})?.status).toBe(404);
-	expect(requestApplication(incoming)).toBeUndefined();
-});
+		expect(response?.status).toBe(404);
+		expect(await response?.text()).toBe('');
+		expect(requestContext(incoming)).toBeUndefined();
+		expect(recordVisit).not.toHaveBeenCalled();
+	}
+);
 
-test('rejects another origin on the admin authority before serving static assets', () => {
-	const incoming = request('admin.example.test', '/_app/version.json');
+test('rejects another origin on the admin authority before serving static assets', async () => {
+	for (const path of ['/_app/version.json', '/@static/favicon.svg']) {
+		const incoming = request('admin.example.test', path);
+		const response = handleIngress(application, incoming, {}, 'http');
 
-	expect(handleIngress(application, incoming, {}, 'http')?.status).toBe(404);
+		expect(response?.status).toBe(404);
+		expect(await response?.text()).toBe('');
+		expect(requestContext(incoming)).toBeUndefined();
+	}
 });
 
 test('does not trust forwarded authority unless explicitly configured', () => {
@@ -102,10 +256,12 @@ test('does not trust forwarded authority unless explicitly configured', () => {
 	expect(handleIngress(application, incoming, {})?.status).toBe(302);
 });
 
-test('rejects malformed ingress without reaching either handler', () => {
+test('rejects malformed ingress without reaching either handler', async () => {
 	const incoming = request('admin.example.test/other');
+	const response = handleIngress(application, incoming, {});
 
-	expect(handleIngress(application, incoming, {})?.status).toBe(400);
+	expect(response?.status).toBe(400);
+	expect(await response?.text()).toBe('');
 	expect(requestApplication(incoming)).toBeUndefined();
 });
 
@@ -221,7 +377,8 @@ test('zero retention captures only identity, outcome and time without changing c
 	expect(handleIngress(tracked, incoming, {})?.headers.get('location')).toBe(
 		'https://destination.example.test/french-ios-schema'
 	);
-	expect(handleIngress(tracked, request('go.example.test', '/missing'), {})?.status).toBe(404);
+	const missing = handleIngress(tracked, request('go.example.test', '/missing'), {});
+	expect(missing?.status).toBe(404);
 	expect(recordVisit.mock.calls).toEqual([
 		[
 			{
