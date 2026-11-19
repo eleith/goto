@@ -1,7 +1,8 @@
 import process from 'node:process';
-import { ConfigError, formatConfigError } from '@goto/config';
+import { ConfigError } from '@goto/config';
 import { startWorkerService, type WorkerService } from './services/startup.js';
 import { logger } from './services/logger.js';
+import { formatWorkerStartupFailure } from './services/startup-errors.js';
 
 let starting: Promise<WorkerService> | undefined;
 let stopping: Promise<void> | undefined;
@@ -34,7 +35,12 @@ try {
 	const value = process.env.SHUTDOWN_TIMEOUT ?? '30';
 	const seconds = Number(value);
 	if (!/^\d+(?:\.\d+)?$/.test(value) || !Number.isFinite(seconds) || seconds > 2_147_483.647) {
-		throw new Error('Invalid worker shutdown timeout');
+		throw new ConfigError([
+			{
+				path: '/SHUTDOWN_TIMEOUT',
+				message: 'Expected non-negative seconds no greater than 2147483.647'
+			}
+		]);
 	}
 	shutdownTimeout = seconds * 1000;
 	starting = startWorkerService({}, shutdown);
@@ -51,10 +57,7 @@ try {
 	}
 } catch (error) {
 	process.exitCode = 1;
-	const message =
-		error instanceof ConfigError
-			? formatConfigError(error, 'Unable to start worker service')
-			: 'Unable to start worker service';
+	const message = formatWorkerStartupFailure(error);
 	logger.error(message);
 	await shutdown();
 }

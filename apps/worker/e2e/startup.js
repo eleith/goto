@@ -156,7 +156,15 @@ async function checkStartup(mode, port = 0) {
 		if (mode === 'occupied-port' || mode === 'database-failure') {
 			assert.deepEqual(await finished, { code: 1, signal: null });
 			assert.equal(message, undefined, 'Failed startup announced readiness');
-			assert(output.includes('Unable to start worker service'));
+			assert(!output.includes('Worker service started'));
+			if (mode === 'database-failure') {
+				assert(output.includes('database_open_failed'));
+				assert(output.includes('SQLite could not open the database'));
+			} else {
+				assert(output.includes('health_server_failed'));
+				assert(output.includes('address or port is already in use'));
+			}
+			assert(!output.includes(directory), 'Startup logs must not include storage paths');
 		} else {
 			const readiness = new Promise((resolve, reject) => {
 				child.once('message', resolve);
