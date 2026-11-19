@@ -39,55 +39,16 @@ afterEach(() => {
 	vi.useRealTimers();
 });
 
-test('requests restart for either database path when collection remains enabled', async () => {
+test('publishes the retention increase and waits for maintenance before accepting it', async () => {
 	const initial = configuration();
-	const restart = vi.fn();
-	const ctx = context();
-	const accepted = ctx.config;
-	expect(await applyConfig(configuration(), initial, restart, ctx, engine)).toBe(true);
-	ctx.config = accepted;
-	expect(await applyConfig(configuration('./other.sqlite'), initial, restart, ctx, engine)).toBe(
-		false
-	);
-	expect(
-		await applyConfig(configuration(undefined, 3, './other.sqlite'), initial, restart, ctx, engine)
-	).toBe(false);
-	expect(restart).toHaveBeenCalledTimes(2);
-	expect(ctx.config).toBe(accepted);
-	expect(requestVisitMaintenance).not.toHaveBeenCalled();
-});
-
-test.each([
-	[3, 0],
-	[0, 9]
-])(
-	'collection %s to %s rejects the whole candidate without auto-restart',
-	async (before, after) => {
-		const initial = configuration(undefined, before);
-		const next = configuration('./changed-worker.sqlite', after);
-		const ctx = context();
-		ctx.config = initial.configuration;
-		const restart = vi.fn();
-		expect(await applyConfig(next, initial, restart, ctx, engine)).toBe(false);
-		expect(ctx.config).toBe(initial.configuration);
-		expect(restart).not.toHaveBeenCalled();
-		expect(requestVisitMaintenance).not.toHaveBeenCalled();
-		expect(logger.warn).toHaveBeenCalledExactlyOnceWith(
-			'Detailed analytics change requires coordinated restart; previous configuration remains active until a valid update is loaded'
-		);
-	}
-);
-
-test('publishes positive retention and waits for maintenance before accepting the change', async () => {
-	const initial = configuration(undefined, 9);
 	const ctx = context();
 	ctx.config = initial.configuration;
 	const refreshed = Promise.withResolvers<void>();
 	vi.mocked(requestVisitMaintenance).mockReturnValueOnce(refreshed.promise);
-	const next = configuration();
+	const next = configuration(undefined, 9);
 	const applying = applyConfig(next, initial, vi.fn(), ctx, engine);
 	await Promise.resolve();
-	expect(ctx.config.analytics.retention_months).toBe(3);
+	expect(ctx.config.analytics.retention_months).toBe(9);
 	expect(requestVisitMaintenance).toHaveBeenCalledExactlyOnceWith(ctx, engine);
 	let accepted = false;
 	void applying.then(() => {
@@ -160,15 +121,16 @@ test('publishes appearance and warning changes without maintenance', async () =>
 	expect(requestVisitMaintenance).not.toHaveBeenCalled();
 });
 
-test('failed maintenance on positive policy reconciliation requests shutdown', async () => {
-	const initial = configuration(undefined, 9);
+test('failed maintenance on a retention increase requests shutdown', async () => {
+	const initial = configuration();
 	const ctx = context();
 	ctx.config = initial.configuration;
 	const failure = new Error('Private storage detail');
 	vi.mocked(requestVisitMaintenance).mockRejectedValueOnce(failure);
 	const stop = vi.fn();
-	await expect(applyConfig(configuration(), initial, stop, ctx, engine)).rejects.toBe(failure);
-	expect(ctx.config.analytics.retention_months).toBe(3);
+	const next = configuration(undefined, 9);
+	await expect(applyConfig(next, initial, stop, ctx, engine)).rejects.toBe(failure);
+	expect(ctx.config.analytics.retention_months).toBe(9);
 	expect(stop).toHaveBeenCalledOnce();
 	expect(logger.error).toHaveBeenCalledWith(
 		'Unable to apply worker configuration; stopping service'
@@ -200,7 +162,7 @@ test('warns that a rejected update keeps the previous configuration until correc
 	expect(ctx.config).toBe(corrected.configuration);
 });
 
-test('initial reread restart waits until the monitor stop handle is owned', async () => {
+test('initial reread failure waits to shut down until the monitor stop handle is owned', async () => {
 	vi.useFakeTimers();
 	const initial = configuration();
 	const stopWatch = vi.fn(async () => {});
@@ -209,8 +171,11 @@ test('initial reread restart waits until the monitor stop handle is owned', asyn
 		await resources.stopWatch?.();
 	});
 	const monitor = Promise.withResolvers<() => Promise<void>>();
+	const failure = new Error('Private storage detail');
+	vi.mocked(requestVisitMaintenance).mockRejectedValueOnce(failure);
 	vi.mocked(startConfigReloading).mockImplementationOnce(async (options) => {
-		await options.onChange(configuration('./data/new.sqlite'), initial);
+		await expect(options.onChange(configuration(undefined, 9), initial)).rejects.toBe(failure);
+		options.onError(failure);
 		return monitor.promise;
 	});
 	const source = { path: '/config/goto.yaml', initial, load: async () => initial };

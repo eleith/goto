@@ -205,54 +205,21 @@ async function checkStartup(mode, port = 0) {
 				database.close();
 			}
 			assert.equal(dailyVisitCount(directory), mode === 'retention-change' ? 2 : 0);
-			if (mode === 'storage-change') {
-				const path = join(directory, 'config/goto.yaml');
-				const configuration = JSON.parse(await readFile(path, 'utf8'));
-				configuration.database = { worker_path: './data/restarted-worker.sqlite' };
-				await saveConfiguration(path, configuration);
-			} else if (mode === 'retention-change') {
+			if (mode === 'storage-change' || mode === 'retention-change') {
 				const stopped = new AbortController();
 				void finished.then(
 					() => stopped.abort(),
 					() => stopped.abort()
 				);
-				const path = join(directory, 'config/goto.yaml');
-				const configuration = JSON.parse(await readFile(path, 'utf8'));
-				configuration.analytics.retention_months = 3;
-				await saveConfiguration(path, configuration);
-				await waitUntil(
-					() => visitCount(directory) === 1 && dailyVisitCount(directory) === 1,
-					stopped.signal
-				);
-				assert.equal(
-					lifetimeVisitCount(directory),
-					3,
-					'Positive raw and daily expiry must preserve permanent visit totals'
-				);
-				configuration.analytics.retention_months = 0;
-				await saveConfiguration(path, configuration);
-				await waitUntil(
-					() => output.includes('Detailed analytics change requires coordinated restart'),
-					stopped.signal
-				);
-				assert.equal(visitCount(directory), 1, 'Live collection disable must not remove history');
+				const readOutput = () => output;
+				await verifyRestartOnlyEdit(mode, directory, readOutput, stopped.signal);
 				const stillRunning = await fetch(`http://127.0.0.1:${ready.port}/healthz`, {
 					signal: AbortSignal.timeout(2000)
 				});
-				assert.equal(
-					stillRunning.status,
-					200,
-					'Collection change must not auto-restart one service'
-				);
-				child.kill('SIGTERM');
-			} else {
-				child.kill('SIGTERM');
+				assert.equal(stillRunning.status, 200, 'A rejected edit must not stop the worker');
 			}
+			child.kill('SIGTERM');
 			assert.deepEqual(await finished, { code: 0, signal: null });
-			if (mode === 'storage-change') {
-				assert(output.includes('Worker configuration change requires restart'));
-				assert(!existsSync(join(directory, 'data/restarted-worker.sqlite')));
-			}
 		}
 		assert.equal(killed, false, 'Worker required forced termination');
 		assert(!output.includes('private-worker-smoke-password'));
@@ -266,6 +233,47 @@ async function checkStartup(mode, port = 0) {
 		}
 		await rm(directory, { recursive: true, force: true });
 	}
+}
+
+async function verifyRestartOnlyEdit(mode, directory, readOutput, signal) {
+	const path = join(directory, 'config/goto.yaml');
+	const configuration = JSON.parse(await readFile(path, 'utf8'));
+	if (mode === 'storage-change') {
+		configuration.database = { path: './data/replacement.sqlite' };
+		await saveConfiguration(path, configuration);
+		await waitUntil(
+			() => readOutput().includes('Database path change requires a coordinated restart'),
+			signal
+		);
+		assert(!existsSync(join(directory, 'data/replacement.sqlite')));
+		return;
+	}
+
+	configuration.analytics.retention_months = 3;
+	await saveConfiguration(path, configuration);
+	await waitUntil(
+		() => readOutput().includes('Retention reduction requires a coordinated restart'),
+		signal
+	);
+	assert.equal(visitCount(directory), 2, 'A live retention reduction must not delete visits');
+	assert.equal(
+		dailyVisitCount(directory),
+		2,
+		'A live retention reduction must not delete daily detail'
+	);
+
+	configuration.analytics.retention_months = 0;
+	await saveConfiguration(path, configuration);
+	await waitUntil(
+		() => readOutput().includes('Detailed analytics change requires a coordinated restart'),
+		signal
+	);
+	assert.equal(visitCount(directory), 2, 'Live collection disable must not remove history');
+	assert.equal(
+		lifetimeVisitCount(directory),
+		3,
+		'Expiry at startup must preserve permanent totals'
+	);
 }
 
 await checkStartup('compiled');
@@ -287,5 +295,5 @@ try {
 	await new Promise((resolve) => occupied.close(resolve));
 }
 console.log(
-	'Compiled/source startup, config restart, active zero-policy rollup, startup accounting before cleanup, incremental daily preparation, permanent visit totals after expiry, live positive retention, restart-only collection, health, failed database readiness, partial-startup cleanup, and shutdown passed'
+	'Compiled/source startup, restart-only database and retention changes, active zero-policy rollup, startup accounting before cleanup, incremental daily preparation, permanent visit totals after expiry, health, failed database readiness, partial-startup cleanup, and shutdown passed'
 );

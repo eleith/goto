@@ -19,12 +19,11 @@ interface ConfigurationSource {
 export async function applyConfig(
 	next: PreparedConfiguration,
 	previous: PreparedConfiguration,
-	onRestart: () => void,
+	onApplyFailure: () => void,
 	context: WorkerContext,
 	engine: OpenWorkflow
 ): Promise<boolean> {
-	if (!canReloadConfiguration(next, previous, onRestart)) return false;
-	await updateWorkerConfiguration(next, previous, context, engine, onRestart);
+	await updateWorkerConfiguration(next, previous, context, engine, onApplyFailure);
 	logConfigurationReload(next, previous);
 	return true;
 }
@@ -37,57 +36,35 @@ export async function watchConfiguration(
 	engine: OpenWorkflow
 ): Promise<void> {
 	let watchOwned = false;
-	let restartRequested = false;
-	function shutdownForRestart(): void {
+	let shutdownRequested = false;
+	function shutdownAfterApplyFailure(): void {
 		void shutdown().catch(() => {
 			process.exitCode = 1;
 			logger.error('Unable to shut down worker after configuration change');
 		});
 	}
-	function requestRestart(): void {
-		if (restartRequested) return;
-		restartRequested = true;
-		if (watchOwned) shutdownForRestart();
+	function requestShutdown(): void {
+		if (shutdownRequested) return;
+		shutdownRequested = true;
+		if (watchOwned) shutdownAfterApplyFailure();
 	}
 	function reportReloadFailure(): void {
-		if (restartRequested) return;
+		if (shutdownRequested) return;
 		logger.warn(
 			'Invalid worker configuration update; previous configuration remains active until a valid update is loaded'
 		);
 	}
 	resources.stopWatch = await startConfigReloading({
 		...source,
-		onChange: (next, previous) => applyConfig(next, previous, requestRestart, context, engine),
+		onChange: (next, previous) => {
+			if (shutdownRequested) return false;
+			return applyConfig(next, previous, requestShutdown, context, engine);
+		},
+		warn: (message) => logger.warn(message),
 		onError: reportReloadFailure
 	});
 	watchOwned = true;
-	if (restartRequested) shutdownForRestart();
-}
-
-function canReloadConfiguration(
-	next: PreparedConfiguration,
-	previous: PreparedConfiguration,
-	onRestart: () => void
-): boolean {
-	const collectVisits = next.configuration.analytics.retention_months !== 0;
-	const previouslyCollectedVisits = previous.configuration.analytics.retention_months !== 0;
-	if (collectVisits !== previouslyCollectedVisits) {
-		logger.warn(
-			'Detailed analytics change requires coordinated restart; previous configuration remains active until a valid update is loaded'
-		);
-		return false;
-	}
-	const nextDatabase = next.configuration.database;
-	const previousDatabase = previous.configuration.database;
-	if (
-		nextDatabase.worker_path !== previousDatabase.worker_path ||
-		nextDatabase.path !== previousDatabase.path
-	) {
-		logger.warn('Worker configuration change requires restart');
-		onRestart();
-		return false;
-	}
-	return true;
+	if (shutdownRequested) shutdownAfterApplyFailure();
 }
 
 async function updateWorkerConfiguration(
@@ -95,7 +72,7 @@ async function updateWorkerConfiguration(
 	previous: PreparedConfiguration,
 	context: WorkerContext,
 	engine: OpenWorkflow,
-	onRestart: () => void
+	onApplyFailure: () => void
 ): Promise<void> {
 	const months = next.configuration.analytics.retention_months;
 	const retentionChanged =
@@ -106,7 +83,7 @@ async function updateWorkerConfiguration(
 		if (retentionChanged && months > 0) await requestVisitMaintenance(context, engine);
 	} catch (error) {
 		logger.error('Unable to apply worker configuration; stopping service');
-		onRestart();
+		onApplyFailure();
 		throw error;
 	}
 }

@@ -36,15 +36,6 @@ function reportConfigurationWarnings({ warnings }: PreparedConfiguration): void 
 	if (warnings.length > 0) reportReloadIssue(formatConfigWarnings(warnings));
 }
 
-function startupSettings({ configuration }: PreparedConfiguration) {
-	return {
-		appUrl: configuration.url.app,
-		auth: configuration.auth,
-		databasePath: configuration.database.path,
-		detailedAnalyticsEnabled: configuration.analytics.retention_months !== 0
-	};
-}
-
 export async function createApplication(options: ConfigOptions = {}): Promise<Application> {
 	const captured = {
 		env: { ...(options.env ?? process.env) },
@@ -56,11 +47,9 @@ export async function createApplication(options: ConfigOptions = {}): Promise<Ap
 		throw error;
 	});
 	reportConfigurationWarnings(initial);
-	const initialSettings = startupSettings(initial);
-	const startup = structuredClone(initialSettings);
 	let snapshot = prepareSnapshot(initial);
 	const authentication = createAuthentication(snapshot.configuration);
-	const databasePath = resolve(captured.cwd, startup.databasePath);
+	const databasePath = resolve(captured.cwd, snapshot.configuration.database.path);
 	const visitWriter = createVisitWriter(databasePath);
 	const linkVisitCounts = new Map<string, number>();
 	let closed = false;
@@ -81,19 +70,6 @@ export async function createApplication(options: ConfigOptions = {}): Promise<Ap
 		previous: PreparedConfiguration
 	): Promise<boolean> {
 		if (closed) return false;
-		const nextSettings = startupSettings(next);
-		if (nextSettings.detailedAnalyticsEnabled !== startup.detailedAnalyticsEnabled) {
-			reportReloadIssue(
-				'Detailed analytics change requires coordinated restart; previous configuration remains active until a valid update is loaded'
-			);
-			return false;
-		}
-		if (!isDeepStrictEqual(nextSettings, startup)) {
-			reportReloadIssue(
-				'Configuration change requires restart; previous configuration remains active until a valid update is loaded'
-			);
-			return false;
-		}
 		if (!isDeepStrictEqual(next, previous)) {
 			const candidate = prepareSnapshot(next);
 			try {
@@ -124,6 +100,7 @@ export async function createApplication(options: ConfigOptions = {}): Promise<Ap
 		initial,
 		load: loadConfiguration,
 		onChange: applyConfiguration,
+		warn: reportReloadIssue,
 		onError: reportConfigurationFailure
 	};
 	let stopReloading: () => Promise<void>;

@@ -1,10 +1,4 @@
-import {
-	ConfigError,
-	loadConfigFile,
-	startConfigReloading,
-	loadConfig,
-	type PreparedConfiguration
-} from '@goto/config';
+import { ConfigError, loadConfigFile, startConfigReloading, loadConfig } from '@goto/config';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { createApplication } from './application.js';
 import { createAuthentication } from './auth/index.js';
@@ -23,7 +17,7 @@ vi.mock('@goto/config', async (importOriginal) => ({
 	startConfigReloading: vi.fn()
 }));
 
-type ReloadOptions = Parameters<typeof startConfigReloading<PreparedConfiguration>>[0];
+type ReloadOptions = Parameters<typeof startConfigReloading>[0];
 const options = { cwd: '/deployment', env: {} };
 let reload: ReloadOptions;
 const stop = vi.fn();
@@ -113,43 +107,10 @@ test('publishes valid changes, ignores equivalent data, and retains last good da
 	await application.close?.();
 });
 
-test.each([
-	{ url: { app: 'https://different-admin.example.test' } },
-	{ auth: { credentials: { username: 'changed', password: 'private-changed-password' } } },
-	{ database: { path: './data/different.sqlite' } }
-])('rejects the whole candidate when startup settings change: %j', async (changes) => {
-	const application = await createApplication(options);
-	const initial = application.currentSnapshot();
-
-	expect(await reload.onChange(prepared('https://example.org/blocked', changes), prepared())).toBe(
-		false
-	);
-
-	expect(application.currentSnapshot()).toBe(initial);
-	expect(console.warn).toHaveBeenCalledExactlyOnceWith(
-		'Configuration change requires restart; previous configuration remains active until a valid update is loaded'
-	);
-	await application.close?.();
-});
-
-test('rejects live detailed analytics disable and the rest of its candidate until coordinated restart', async () => {
-	const application = await createApplication(options);
-	const initial = application.currentSnapshot();
-	const next = prepared('https://example.org/blocked', { analytics: { retention_months: 0 } });
-	expect(await reload.onChange(next, prepared())).toBe(false);
-	expect(application.currentSnapshot()).toBe(initial);
-	expect(createVisitWriter).toHaveBeenCalledOnce();
-	expect(console.warn).toHaveBeenCalledExactlyOnceWith(
-		'Detailed analytics change requires coordinated restart; previous configuration remains active until a valid update is loaded'
-	);
-	await application.close?.();
-});
-
-test('starts visit writing with zero retention and rejects live detailed analytics enabling', async () => {
+test('starts minimal visit writing with zero retention', async () => {
 	const initial = prepared('https://example.org/first', { analytics: { retention_months: 0 } });
 	vi.mocked(loadConfigFile).mockResolvedValueOnce(initial);
 	const application = await createApplication(options);
-	const snapshot = application.currentSnapshot();
 	expect(createVisitWriter).toHaveBeenCalledOnce();
 	expect(application.recordVisit).toEqual(expect.any(Function));
 	expect(readStoredLinkVisitCounts).toHaveBeenCalledOnce();
@@ -163,8 +124,6 @@ test('starts visit writing with zero retention and rejects live detailed analyti
 			accept_language: null
 		})
 	);
-	expect(await reload.onChange(prepared('https://example.org/blocked'), initial)).toBe(false);
-	expect(application.currentSnapshot()).toBe(snapshot);
 	await application.close?.();
 	expect(stopVisitWriter).toHaveBeenCalledOnce();
 });

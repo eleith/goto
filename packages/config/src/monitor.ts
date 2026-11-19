@@ -1,16 +1,24 @@
 import { watchFile, unwatchFile, type Stats } from 'node:fs';
+import { isDeepStrictEqual } from 'node:util';
+import type { GotoConfiguration } from './schema.js';
+import type { PreparedConfiguration } from './types.js';
 
-export async function startConfigReloading<T>({
+export async function startConfigReloading({
 	path,
 	initial,
 	load,
 	onChange,
+	warn,
 	onError
 }: {
 	path: string;
-	initial: T;
-	load: (path: string) => Promise<T>;
-	onChange: (next: T, previous: T) => boolean | Promise<boolean>;
+	initial: PreparedConfiguration;
+	load: (path: string) => Promise<PreparedConfiguration>;
+	onChange: (
+		next: PreparedConfiguration,
+		previous: PreparedConfiguration
+	) => boolean | Promise<boolean>;
+	warn: (message: string) => void;
 	/** Receives raw failures; the caller is responsible for safe diagnostics. */
 	onError: (error: unknown) => void;
 }): Promise<() => Promise<void>> {
@@ -26,6 +34,11 @@ export async function startConfigReloading<T>({
 				try {
 					const next = await load(path);
 					if (stopped) return;
+					const reason = coordinatedRestartReason(next.configuration, accepted.configuration);
+					if (reason) {
+						warn(`${reason} requires a coordinated restart; previous configuration remains active`);
+						continue;
+					}
 					const applied = await onChange(next, accepted);
 					if (applied && !stopped) accepted = next;
 				} catch (error) {
@@ -77,4 +90,23 @@ export async function startConfigReloading<T>({
 	// Close the gap between the caller's initial read and watcher registration.
 	await reload();
 	return stop;
+}
+
+function coordinatedRestartReason(
+	next: GotoConfiguration,
+	previous: GotoConfiguration
+): string | undefined {
+	if (
+		next.database.path !== previous.database.path ||
+		next.database.worker_path !== previous.database.worker_path
+	) {
+		return 'Database path change';
+	}
+	if (next.url.app !== previous.url.app || !isDeepStrictEqual(next.auth, previous.auth)) {
+		return 'App origin or authentication change';
+	}
+	const months = next.analytics.retention_months;
+	const previousMonths = previous.analytics.retention_months;
+	if ((months === 0) !== (previousMonths === 0)) return 'Detailed analytics change';
+	if (months < previousMonths) return 'Retention reduction';
 }

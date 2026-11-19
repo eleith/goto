@@ -32,7 +32,7 @@ export interface WorkerService {
 
 export async function startWorkerService(
 	options: ConfigOptions = {},
-	onRestartRequired?: () => Promise<void>
+	onReloadFailureShutdown?: () => Promise<void>
 ): Promise<WorkerService> {
 	const captured = {
 		env: { ...(options.env ?? process.env) },
@@ -72,9 +72,9 @@ export async function startWorkerService(
 		const host = captured.env.HOST ?? '0.0.0.0';
 		const healthPort = await startHealthServer(host, port, resources);
 		const source = { path, initial: prepared, load: loadConfiguration };
-		const requestRestart = onRestartRequired ?? stop;
+		const shutdownAfterReloadFailure = onReloadFailureShutdown ?? stop;
 		try {
-			await watchConfiguration(source, resources, requestRestart, context, engine);
+			await watchConfiguration(source, resources, shutdownAfterReloadFailure, context, engine);
 		} catch (error) {
 			throw new WorkerStartupError('config_monitor_failed', error);
 		}

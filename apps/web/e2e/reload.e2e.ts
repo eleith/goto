@@ -1,9 +1,12 @@
 import { readFile, rename, writeFile } from 'node:fs/promises';
 import { expect, test } from './support/test.ts';
 
-type Fixture = { domains: Record<string, { links: Record<string, { url: string }> }> };
+type Fixture = {
+	analytics: { retention_months: number };
+	domains: Record<string, { links: Record<string, { url: string }> }>;
+};
 
-test('atomic YAML saves update redirects while invalid saves retain the last working config', async ({
+test('atomic YAML saves update redirects while rejected saves retain the last working config', async ({
 	request,
 	appServer
 }) => {
@@ -28,8 +31,18 @@ test('atomic YAML saves update redirects while invalid saves retain the last wor
 
 	expect(await destination()).toBe(link.url);
 	link.url = 'https://example.org/reloaded';
+	configuration.analytics.retention_months = 9;
 	await save(JSON.stringify(configuration));
 	await expect.poll(destination, polling).toBe(link.url);
+
+	const rejected = structuredClone(configuration);
+	rejected.analytics.retention_months = 3;
+	rejected.domains['go.example.org']!.links['/docs']!.url = 'https://example.org/blocked';
+	await save(JSON.stringify(rejected));
+	await expect
+		.poll(appServer.logs, polling)
+		.toContain('Retention reduction requires a coordinated restart');
+	expect(await destination()).toBe(link.url);
 
 	await save('site: [\n');
 	await expect
