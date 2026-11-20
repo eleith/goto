@@ -75,7 +75,7 @@ function details(
 test('projects compact global window counts while inventory stays current and history stays retained', async () => {
 	const period = createVisitPeriod(3, Date.parse('2026-06-15T12:00:00.000Z'));
 	const overviewCounts: Record<string, number> = {
-		'2026-03-15': 13,
+		'2026-03-17': 13,
 		'2026-04-01': 11,
 		'2026-05-16': 7,
 		'2026-05-17': 5,
@@ -84,7 +84,7 @@ test('projects compact global window counts while inventory stays current and hi
 		'2026-06-15': 1
 	};
 	const domainCounts: Record<string, number> = {
-		'2026-03-15': 4,
+		'2026-03-17': 4,
 		'2026-05-16': 3,
 		'2026-05-17': 2,
 		'2026-06-08': 1,
@@ -128,7 +128,7 @@ test('projects compact global window counts while inventory stays current and hi
 		countsByTimeframe: {
 			'7d': { validVisits: 3, invalidVisits: 7 },
 			'30d': { validVisits: 11, invalidVisits: 30 },
-			all: { validVisits: 42, invalidVisits: 93 }
+			all: { validVisits: 42, invalidVisits: 91 }
 		},
 		browserVisitsByTimeframe: {
 			'7d': [{ name: 'Other', visits: 3 }],
@@ -162,7 +162,7 @@ test('projects compact global window counts while inventory stays current and hi
 				countsByTimeframe: {
 					'7d': { validVisits: 2, invalidVisits: 7 },
 					'30d': { validVisits: 5, invalidVisits: 30 },
-					all: { validVisits: 12, invalidVisits: 93 }
+					all: { validVisits: 12, invalidVisits: 91 }
 				},
 				href: '/admin/domains/go.example.test'
 			},
@@ -172,7 +172,7 @@ test('projects compact global window counts while inventory stays current and hi
 				countsByTimeframe: {
 					'7d': { validVisits: 0, invalidVisits: 7 },
 					'30d': { validVisits: 0, invalidVisits: 30 },
-					all: { validVisits: 0, invalidVisits: 93 }
+					all: { validVisits: 0, invalidVisits: 91 }
 				},
 				href: '/admin/domains/empty.example.test'
 			},
@@ -191,8 +191,8 @@ test('projects compact global window counts while inventory stays current and hi
 });
 
 test.each([
-	{ months: 9 as const, retainedDays: 273 },
-	{ months: 12 as const, retainedDays: 365 }
+	{ months: 9 as const, retainedDays: 270 },
+	{ months: 12 as const, retainedDays: 360 }
 ])(
 	'offers four windows for $months months anchored to the latest included day',
 	async ({ months, retainedDays }) => {

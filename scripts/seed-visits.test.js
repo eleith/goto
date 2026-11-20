@@ -6,10 +6,11 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { createVisitPeriod } from '../packages/analytics/src/period.ts';
 import { loadConfig } from '../packages/config/src/index.ts';
 import { openDb, insertVisit, runMigrations } from '../packages/db/src/index.ts';
 import { classifyUserAgent } from '../packages/db/src/classify-user-agent.ts';
-import { generateVisits, seedWindowStart } from './seed-visits-data.js';
+import { generateVisits } from './seed-visits-data.js';
 
 const script = fileURLToPath(new URL('./seed-visits.js', import.meta.url));
 const loader = fileURLToPath(new URL('../tools/register.mjs', import.meta.url));
@@ -37,13 +38,6 @@ async function deployment(directory) {
 	return { configPath, databasePath: join(directory, 'data/goto.sqlite') };
 }
 
-test('calendar window clamps month ends and keeps UTC time', () => {
-	const since = seedWindowStart(3, Date.parse('2026-05-31T12:34:56.789Z'));
-	assert.equal(new Date(since).toISOString(), '2026-02-28T12:34:56.789Z');
-	const leap = seedWindowStart(12, Date.parse('2024-02-29T12:00:00Z'));
-	assert.equal(new Date(leap).toISOString(), '2023-02-28T12:00:00.000Z');
-});
-
 test('fixed inputs produce repeatable retained traffic with request-time outcomes and consistent profiles', () => {
 	const source = structuredClone(fixture);
 	source.fallback = { url: 'https://example.org/missing' };
@@ -63,7 +57,8 @@ test('fixed inputs produce repeatable retained traffic with request-time outcome
 	};
 	const { domains } = loadConfig(source, { env: {} });
 	const asOf = Date.parse('2026-05-31T12:00:00Z');
-	const since = seedWindowStart(3, asOf);
+	const period = createVisitPeriod(3, asOf);
+	const since = Date.parse(period.from);
 	const options = { domains, since, asOf, visitsPerDomain: 300, seed: 42 };
 	const visits = [...generateVisits(options)];
 	assert.deepEqual([...generateVisits(options)], visits);

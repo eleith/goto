@@ -27,7 +27,7 @@ const domain = 'go.example.test';
 const overviewScope = { kind: 'overview' } as const;
 const domainScope = { kind: 'domain', domain } as const;
 const rootScope = { kind: 'link', domain, path: '/' } as const;
-const period = createVisitPeriod(3, Date.UTC(2026, 6, 1, 6));
+const period = createVisitPeriod(3, Date.UTC(2026, 5, 30, 6));
 
 beforeEach(async () => {
 	db = await openDb(':memory:');

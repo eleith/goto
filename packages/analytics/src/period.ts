@@ -1,5 +1,8 @@
 import type { ReportPeriod } from './reports.js';
 
+const daysPerRetentionMonth = 30;
+const millisecondsPerDay = 86_400_000;
+
 export function isCanonicalInstant(value: string): boolean {
 	const time = Date.parse(value);
 	return Number.isFinite(time) && new Date(time).toISOString() === value;
@@ -9,15 +12,9 @@ export function createVisitPeriod(months: 3 | 9 | 12, asOf: number): ReportPerio
 	if (![3, 9, 12].includes(months) || !Number.isFinite(asOf)) {
 		throw new Error('Invalid analytics period');
 	}
+	const retentionDays = months * daysPerRetentionMonth;
 	const end = new Date(asOf);
-	const start = new Date(asOf);
-	const day = start.getUTCDate();
-	start.setUTCDate(1);
-	start.setUTCMonth(start.getUTCMonth() - months);
-	const lastDay = new Date(start);
-	lastDay.setUTCMonth(lastDay.getUTCMonth() + 1);
-	lastDay.setUTCDate(0);
-	start.setUTCDate(Math.min(day, lastDay.getUTCDate()));
+	const start = new Date(end.getTime() - retentionDays * millisecondsPerDay);
 	if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) {
 		throw new Error('Invalid analytics period');
 	}

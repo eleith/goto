@@ -142,12 +142,12 @@ test('prepares bounded pending batches once and subtracts expired visits within 
 		const details = await readVisitDetails(ctx.db, domain, period);
 		expect(details.lastActivityAt).toBe(new Date(now - 1000).toISOString());
 		expect(details.browsers).toEqual([
-			{ day: '2026-02-28', name: 'Firefox', validVisits: 1, invalidVisits: 0 },
+			{ day: '2026-03-02', name: 'Firefox', validVisits: 1, invalidVisits: 0 },
 			{ day: '2026-05-31', name: 'Firefox', validVisits: 1, invalidVisits: 1 }
 		]);
 		expect(details.acceptedLanguages).toEqual([
-			{ day: '2026-02-28', name: 'en', validVisits: 1, invalidVisits: 0 },
-			{ day: '2026-02-28', name: 'fr', validVisits: 1, invalidVisits: 0 },
+			{ day: '2026-03-02', name: 'en', validVisits: 1, invalidVisits: 0 },
+			{ day: '2026-03-02', name: 'fr', validVisits: 1, invalidVisits: 0 },
 			{ day: '2026-05-31', name: 'de', validVisits: 1, invalidVisits: 0 },
 			{ day: '2026-05-31', name: 'Other', validVisits: 0, invalidVisits: 1 }
 		]);
@@ -270,7 +270,7 @@ test('partial daily cache loss warns with bounded examples, continues raw expiry
 				examples: [
 					...[overview, domain, docs].map((scope) => ({
 						scope,
-						day: '2026-02-22',
+						day: '2026-02-24',
 						rowId: null,
 						reason: 'missing',
 						stored: null,
@@ -278,7 +278,7 @@ test('partial daily cache loss warns with bounded examples, continues raw expiry
 					})),
 					...[overview, domain].map((scope) => ({
 						scope,
-						day: '2026-02-23',
+						day: '2026-02-25',
 						rowId: null,
 						reason: 'missing',
 						stored: null,
@@ -339,7 +339,7 @@ test('an inconsistent bucket is left unchanged while valid buckets and raw expir
 				examples: [
 					{
 						scope: overview,
-						day: '2026-02-28',
+						day: '2026-03-02',
 						rowId: bucket.id,
 						reason: 'contribution-mismatch',
 						stored: { validVisits: 2, invalidVisits: 0 },

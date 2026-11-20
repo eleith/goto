@@ -6,7 +6,7 @@ import { createVisitPeriod } from './period.js';
 test('counts only valid visits in each UTC timeframe, combining named counts and sorting ties by name', () => {
 	const period = createVisitPeriod(3, Date.parse('2026-06-15T12:00:00.000Z'));
 	const rows: DailyVisitCountByName[] = [
-		{ day: '2026-03-15', name: 'Other', validVisits: 100, invalidVisits: 0 },
+		{ day: '2026-03-17', name: 'Other', validVisits: 100, invalidVisits: 0 },
 		{ day: '2026-06-09', name: 'Firefox', validVisits: 2, invalidVisits: 40 },
 		{ day: '2026-06-09', name: 'Chrome', validVisits: 3, invalidVisits: 0 },
 		{ day: '2026-06-15', name: 'Firefox', validVisits: 2, invalidVisits: 0 },
@@ -39,7 +39,7 @@ test('counts only valid visits in each UTC timeframe, combining named counts and
 test('counts overlapping language memberships independently using valid visits in the selected window', () => {
 	const period = createVisitPeriod(3, Date.parse('2026-06-15T12:00:00.000Z'));
 	const rows: DailyVisitCountByName[] = [
-		{ day: '2026-03-15', name: 'fr', validVisits: 100, invalidVisits: 0 },
+		{ day: '2026-03-17', name: 'fr', validVisits: 100, invalidVisits: 0 },
 		{ day: '2026-06-08', name: 'Other', validVisits: 100, invalidVisits: 0 },
 		{ day: '2026-06-09', name: 'fr', validVisits: 2, invalidVisits: 40 },
 		{ day: '2026-06-09', name: 'en', validVisits: 2, invalidVisits: 40 },

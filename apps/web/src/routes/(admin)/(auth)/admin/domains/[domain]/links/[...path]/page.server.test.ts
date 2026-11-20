@@ -82,7 +82,7 @@ function request(
 
 const period = createVisitPeriod(3, Date.parse('2026-06-15T12:00:00.000Z'));
 const counts: Record<string, [number, number]> = {
-	'2026-03-15': [4, 1],
+	'2026-03-17': [4, 1],
 	'2026-05-16': [3, 2],
 	'2026-06-08': [5, 1],
 	'2026-06-09': [2, 1],

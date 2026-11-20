@@ -6,7 +6,7 @@ import { combineTagVisits } from './visits.js';
 test('combines outcomes and overlapping named counts without changing member details', () => {
 	const period = createVisitPeriod(3, Date.UTC(2026, 5, 15, 12));
 	const days = visitDays(period);
-	const firstDay = '2026-03-15';
+	const firstDay = '2026-03-17';
 	const lastDay = '2026-06-15';
 	const first: VisitDetails = {
 		version: 5,

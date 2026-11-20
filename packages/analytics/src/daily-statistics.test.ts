@@ -87,7 +87,7 @@ test('projection uses the explicit current period, fills missing dates, and expo
 });
 
 test('partial-day expiry changes counts without turning activity into maintenance time', () => {
-	const cutoffPeriod = createVisitPeriod(3, Date.UTC(2026, 6, 1, 6));
+	const cutoffPeriod = createVisitPeriod(3, Date.UTC(2026, 5, 30, 6));
 	const earlier = contribution(1, 0, 1);
 	const later = contribution(1, 1, 10);
 	const combined = addDailyStatistics(earlier, later);

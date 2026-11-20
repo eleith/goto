@@ -108,7 +108,7 @@ const secondDetails = details(
 	secondDomain,
 	'/docs',
 	{
-		'2026-03-15': [5, 3],
+		'2026-03-17': [5, 3],
 		'2026-06-09': [4, 1]
 	},
 	'Chrome'

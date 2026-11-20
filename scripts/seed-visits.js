@@ -2,9 +2,10 @@ import { stat } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { setImmediate } from 'node:timers/promises';
 import { parseArgs } from 'node:util';
+import { createVisitPeriod } from '../packages/analytics/src/period.ts';
 import { loadConfigFile } from '../packages/config/src/index.ts';
 import { openDb, insertVisit } from '../packages/db/src/index.ts';
-import { generateVisits, seedWindowStart } from './seed-visits-data.js';
+import { generateVisits } from './seed-visits-data.js';
 
 // Keep write transactions short while the development services share SQLite.
 const batchSize = 250;
@@ -81,7 +82,8 @@ function seedPlan(prepared, options) {
 		throw new Error('Visits and worker database paths must differ');
 	}
 	const asOf = Date.now();
-	const since = seedWindowStart(months, asOf);
+	const period = createVisitPeriod(months, asOf);
+	const since = Date.parse(period.from);
 	return {
 		databasePath,
 		domains,

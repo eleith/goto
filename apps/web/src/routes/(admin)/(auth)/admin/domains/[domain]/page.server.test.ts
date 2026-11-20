@@ -84,7 +84,7 @@ function details(scope: ReportScope, counts: Record<string, [number, number]>): 
 const domainDetails = details(
 	{ kind: 'domain', domain },
 	{
-		'2026-03-15': [4, 1],
+		'2026-03-17': [4, 1],
 		'2026-05-16': [5, 4],
 		'2026-06-08': [3, 2],
 		'2026-06-09': [2, 1],
@@ -94,7 +94,7 @@ const domainDetails = details(
 const rootDetails = details(
 	{ kind: 'link', domain, path: '/' },
 	{
-		'2026-03-15': [4, 0],
+		'2026-03-17': [4, 0],
 		'2026-06-08': [1, 0],
 		'2026-06-09': [1, 0],
 		'2026-06-15': [1, 0]
