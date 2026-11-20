@@ -8,6 +8,7 @@ const tagPath = '/admin/tags/Work%2F100%25%C3%A9';
 
 test('shared credentials protect admin pages and sign-out removes access', async ({
 	page,
+	request,
 	appServer
 }) => {
 	await page.setViewportSize({ width: 1280, height: 720 });
@@ -23,11 +24,21 @@ test('shared credentials protect admin pages and sign-out removes access', async
 		const text = message.text();
 		if (text.includes('push_state_deprecated')) navigationWarnings.push(text);
 	});
-	await page.goto(`${appServer.origin}/admin`);
+	const adminRedirect = await request.get('/admin', {
+		headers: { accept: 'text/html' },
+		maxRedirects: 0
+	});
+	expect(adminRedirect.status()).toBe(303);
+	expect(adminRedirect.headers()['cache-control']).toBe('private, no-store');
+
+	const signInPage = await page.goto(`${appServer.origin}/admin`);
 	await expect(page).toHaveURL(/\/signin\?/);
+	expect(signInPage?.headers()['cache-control']).toBe('private, no-store');
 	await page.getByLabel('Username', { exact: true }).fill('example');
 	await page.getByLabel('Password', { exact: true }).fill('incorrect');
+	const failedSignIn = page.waitForResponse(`${appServer.origin}/auth/sign-in/credentials`);
 	await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+	expect((await failedSignIn).headers()['cache-control']).toBe('private, no-store');
 	await expect(page.getByRole('alert')).toContainText('Invalid username or password');
 
 	await page.getByLabel('Password', { exact: true }).fill('e2e-only-password');
@@ -132,7 +143,8 @@ test('shared credentials protect admin pages and sign-out removes access', async
 	await expect(graph).toHaveAccessibleName(/^Visits by week\. Total: 4\./);
 	page.off('request', recordSelectionRequest);
 	expect(selectionRequests).toEqual([]);
-	await page.reload();
+	const overviewResponse = await page.reload();
+	expect(overviewResponse?.headers()['cache-control']).toBe('private, no-store');
 	await expect(timeframe.getByRole('button', { name: '3 months', exact: true })).toHaveAttribute(
 		'aria-pressed',
 		'true'

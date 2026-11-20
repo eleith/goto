@@ -1,6 +1,5 @@
 import type { LayoutServerLoad } from './$types';
 
-export const load: LayoutServerLoad = ({ locals, setHeaders }) => {
-	setHeaders({ 'cache-control': 'no-store' });
+export const load: LayoutServerLoad = ({ locals }) => {
 	return { title: locals.snapshot.configuration.site.title };
 };

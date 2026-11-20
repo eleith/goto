@@ -4,10 +4,12 @@ import type { Application } from './application.js';
 import { isLocalProbe, readIngress, type Ingress } from './ingress.js';
 import { resolveRedirect } from './redirect.js';
 import type { RedirectRequestHeaders } from './redirects/conditions.js';
-import { bindApplication } from './request-context.js';
+import { bindApplication, requestContext } from './request-context.js';
 import { captureVisit } from './visits/capture.js';
 import { renderPublicError } from './redirects/error.js';
 import type { ConfigurationSnapshot } from './snapshot.js';
+
+const noStoreRouteSegments = new Set(['admin', 'auth', 'signin']);
 
 type PublishedAssetPath = NonNullable<ReturnType<typeof publishedAssetPath>>;
 
@@ -21,9 +23,9 @@ export function handleIngress<AssetResponse extends Response | Promise<Response>
 	const ingress = readIngress(request, env, defaultProtocol);
 	if (!ingress) return emptyResponse(400);
 	const snapshot = application.currentSnapshot();
-	const isAppOrigin = ingress.url.origin === snapshot.configuration.url.app;
+	const isAdminOrigin = ingress.url.origin === snapshot.configuration.url.app;
 	const isRedirectHost = Object.hasOwn(snapshot.domains, ingress.host);
-	if (!isAppOrigin && !isRedirectHost) {
+	if (!isAdminOrigin && !isRedirectHost) {
 		if (isLocalProbe(request, ingress.url)) return emptyResponse(200);
 		return emptyResponse(404);
 	}
@@ -51,6 +53,21 @@ export function handleIngress<AssetResponse extends Response | Promise<Response>
 	}
 
 	bindApplication(request, application, ingress.url.origin, snapshot);
+}
+
+export function adminCacheControl(request: IncomingMessage): string | undefined {
+	const context = requestContext(request);
+	if (!context?.origin || context.origin !== context.snapshot.configuration.url.app) return;
+	if (request.url === undefined) return;
+
+	try {
+		const url = new URL(context.origin + request.url);
+		const firstSegment = url.pathname.split('/', 2)[1] ?? '';
+		const routeSegment = decodeURI(firstSegment);
+		if (noStoreRouteSegments.has(routeSegment)) return 'private, no-store';
+	} catch {
+		// Malformed targets follow normal request handling.
+	}
 }
 
 function handleRedirectHostRequest(

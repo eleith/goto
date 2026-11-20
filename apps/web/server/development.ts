@@ -14,7 +14,7 @@ import {
 import { createApplicationLifecycle } from './lifecycle.ts';
 import { watchDatabase } from './database-compiler.ts';
 
-type Runtime = typeof import('../src/lib/server/entry.js');
+type ServerEntry = typeof import('../src/lib/server/entry.js');
 type RequestOptions = Parameters<typeof getRequest>[0];
 type PlatformDetails = Parameters<NonNullable<Emulator['platform']>>[0];
 type Next = (error?: unknown) => void;
@@ -83,17 +83,18 @@ export class DevelopmentServer {
 		return { ...platform, application, snapshot: application.currentSnapshot() } as App.Platform;
 	}
 
-	private async runtime(): Promise<Runtime> {
+	private async loadServerEntry(): Promise<ServerEntry> {
 		if (!this.server || !this.listening) throw new Error('Development server is unavailable');
 		await this.listening;
 		const environment = this.server.environments.ssr!;
 		if (!isRunnableDevEnvironment(environment))
 			throw new Error('Expected runnable SSR environment');
-		return environment.runner.import<Runtime>(this.entry);
+		return environment.runner.import<ServerEntry>(this.entry);
 	}
 
 	private async createApplication() {
-		return (await this.runtime()).createApplication();
+		const serverEntry = await this.loadServerEntry();
+		return serverEntry.createApplication();
 	}
 
 	private handleRequest(request: IncomingMessage, response: ServerResponse, next: Next): void {
@@ -105,18 +106,23 @@ export class DevelopmentServer {
 	}
 
 	private async dispatch(request: IncomingMessage, response: ServerResponse, next: Next) {
-		const runtime = await this.runtime();
+		const serverEntry = await this.loadServerEntry();
 		const application = await this.lifecycle.start();
 		const publicDir = this.server!.config.publicDir;
-		const result = await runtime.handleIngress(
+		const result = await serverEntry.handleIngress(
 			application,
 			request,
 			process.env,
 			'http',
 			(path, method) => serveRedirectHostAsset(publicDir, path, method)
 		);
-		if (result) setResponse(response, result);
-		else next();
+		if (result) {
+			setResponse(response, result);
+			return;
+		}
+		const cacheControl = serverEntry.adminCacheControl(request);
+		if (cacheControl) response.setHeader('Cache-Control', cacheControl);
+		next();
 	}
 
 	private readonly applicationChanged = (file: string): void => {

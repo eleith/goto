@@ -1,6 +1,7 @@
 import { createServer } from 'node:http';
 import process from 'node:process';
 import {
+	adminCacheControl,
 	createApplication,
 	createApplicationLifecycle,
 	handleIngress,
@@ -85,6 +86,8 @@ async function bootstrap() {
 				await setResponse(response, result);
 				return;
 			}
+			const cacheControl = adminCacheControl(request);
+			if (cacheControl) response.setHeader('Cache-Control', cacheControl);
 			await handler(request, response, () => {
 				response.statusCode = 404;
 				response.end('Not Found');
