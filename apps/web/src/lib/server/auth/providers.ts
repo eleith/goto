@@ -37,6 +37,10 @@ function oidcAuth(oidc: OidcAuth, appUrl: string): AuthOptions {
 						scopes: ['openid', 'profile', 'email'],
 						pkce: true,
 						requireIdTokenVerification: true,
+						accountSubject: ({ tokens, profile }) => {
+							if (!tokens.idToken) throw new Error('OIDC sign-in requires an ID token');
+							return profile.sub ?? '';
+						},
 						disableProviderLogout: true
 					}
 				]
