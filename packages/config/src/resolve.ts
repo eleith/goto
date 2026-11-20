@@ -14,6 +14,7 @@ export function buildRedirectDomainLookup(
 	authoredLinkDefaults: object
 ): Record<string, PreparedDomain> {
 	const domains: Record<string, PreparedDomain> = Object.create(null);
+	const adminHost = normalizeHost(new URL(configuration.url.app).host);
 	for (const [key, domain] of Object.entries(configuration.domains)) {
 		const host = normalizeHost(key)!;
 		const links: Record<string, PreparedLink> = Object.create(null);
@@ -31,6 +32,7 @@ export function buildRedirectDomainLookup(
 			links,
 			caseInsensitivePaths
 		};
+		if (host === adminHost) prepared.sharesAppHost = true;
 		domains[host] = prepared;
 	}
 	return domains;

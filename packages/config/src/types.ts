@@ -40,6 +40,7 @@ export type PreparedLink = Omit<
 };
 
 export interface PreparedDomain {
+	sharesAppHost?: true;
 	root: RedirectResponse | null;
 	fallback: RedirectResponse | null;
 	provenance: { fallback: SettingSource };

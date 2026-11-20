@@ -2,7 +2,7 @@ import { loadConfig } from '@goto/config';
 import type { IncomingMessage } from 'node:http';
 import { expect, test, vi } from 'vitest';
 import type { Application } from './application.js';
-import { handleIngress } from './dispatch.js';
+import { adminCacheControl, handleIngress } from './dispatch.js';
 import { requestApplication, requestContext } from './request-context.js';
 import { prepareSnapshot } from './snapshot.js';
 
@@ -56,6 +56,61 @@ test('canonical admin requests reach the adapter with captured application conte
 		origin: 'https://admin.example.test',
 		snapshot
 	});
+});
+
+test('reserved paths on a shared host bypass redirects and visit capture', () => {
+	const shared = prepareSnapshot(
+		loadConfig(
+			{
+				url: { app: 'https://go.example.test' },
+				auth: { credentials: { username: 'example', password: 'unit-only-password' } },
+				domains: {
+					'go.example.test': {
+						links: {
+							'/src': { url: 'https://go.example.test/src/lib/docs', forward_path: true }
+						},
+						root: { url: 'https://go.example.test/admin' },
+						fallback: { url: 'https://destination.example.test/fallback' }
+					}
+				}
+			},
+			{ env: {} }
+		)
+	);
+	const recordVisit = vi.fn();
+	const tracked = { ...application, currentSnapshot: () => shared, recordVisit };
+	const normalizedAdmin = request('go.example.test', '/docs/../%61dmin/');
+	expect(handleIngress(tracked, normalizedAdmin, {})).toBeUndefined();
+	expect(requestContext(normalizedAdmin)?.snapshot).toBe(shared);
+	expect(adminCacheControl(normalizedAdmin)).toBe('private, no-store');
+	expect(handleIngress(tracked, request('go.example.test', '/admin'), {}, 'http')?.status).toBe(
+		404
+	);
+
+	const signIn = request('go.example.test', '/auth/sign-in/credentials');
+	signIn.method = 'POST';
+	expect(handleIngress(tracked, signIn, {})).toBeUndefined();
+	expect(requestContext(signIn)?.snapshot).toBe(shared);
+
+	const rawReservedModule = request('go.example.test', '/src%2Flib/../guide');
+	expect(handleIngress(tracked, rawReservedModule, {})).toBeUndefined();
+	expect(requestContext(rawReservedModule)?.snapshot).toBe(shared);
+
+	const serveAsset = vi.fn();
+	const asset = request('go.example.test', '/@static/favicon.svg');
+	expect(handleIngress(tracked, asset, {}, 'https', serveAsset)).toBeUndefined();
+	expect(requestContext(asset)?.snapshot).toBe(shared);
+	expect(serveAsset).not.toHaveBeenCalled();
+	expect(recordVisit).not.toHaveBeenCalled();
+
+	const link = handleIngress(tracked, request('go.example.test', '/src/guide'), {});
+	expect(link?.headers.get('location')).toBe('https://go.example.test/src/lib/docs/guide');
+	expect(recordVisit).toHaveBeenCalledExactlyOnceWith(
+		expect.objectContaining({ domain: 'go.example.test', path: '/src', outcome: 'valid' })
+	);
+
+	const root = handleIngress(tracked, request('go.example.test', '/'), {});
+	expect(root?.headers.get('location')).toBe('https://go.example.test/admin');
 });
 
 test('a redirect host with an explicit default port takes priority over the app origin', () => {

@@ -557,11 +557,76 @@ describe('effective domains', () => {
 		}
 	);
 
-	it('rejects the admin host, noncanonical paths and reversed or empty validity windows', () => {
-		const input = configurationInput();
-		expect(() => loadConfig({ ...input, url: { app: 'https://go.example.com' } }, options)).toThrow(
-			ConfigError
+	it('allows the app host to have ordinary short links and an explicit Root', () => {
+		const input = configurationInput({ '/administrator': { url: 'https://example.com/docs' } });
+		const { domains } = loadConfig(
+			{
+				...input,
+				url: { app: 'https://go.example.com' },
+				domains: {
+					'GO.example.com': {
+						...input.domains['go.example.com'],
+						root: { url: 'https://go.example.com/admin' }
+					},
+					'other.example.com': { links: { '/admin': { url: 'https://example.com' } } }
+				}
+			},
+			options
 		);
+		expect(domains['go.example.com']?.root?.url).toBe('https://go.example.com/admin');
+		expect(domains['go.example.com']?.links['/administrator']?.url).toBe(
+			'https://example.com/docs'
+		);
+		expect(domains['other.example.com']?.links['/admin']?.url).toBe('https://example.com');
+	});
+
+	it.each(['/signin/help', '/@vite/client'])(
+		'reserves %s on the shared host even for case-sensitive links',
+		(path) => {
+			const input = configurationInput({
+				[path]: { url: 'https://example.com', case_insensitive: false }
+			});
+			expect(() =>
+				loadConfig({ ...input, url: { app: 'https://go.example.com' } }, options)
+			).toThrowError(
+				expect.objectContaining({
+					issues: [
+						{ path: '/domains/*/links/*', message: 'Path reserved for the app on the shared host' }
+					]
+				})
+			);
+		}
+	);
+
+	it('rejects a reserved alias unless the link opts out of its domain default', () => {
+		const url = 'https://example.com';
+		const input = configurationInput({ '/Admin': { url } });
+		const domains = {
+			'go.example.com': {
+				links: input.domains['go.example.com'].links,
+				link_defaults: { case_insensitive: true }
+			}
+		};
+		const shared = {
+			...input,
+			url: { app: 'https://go.example.com' },
+			link_defaults: { case_insensitive: false },
+			domains
+		};
+		expect(() => loadConfig(shared, options)).toThrowError(
+			expect.objectContaining({
+				issues: [
+					{ path: '/domains/*/links/*', message: 'Path reserved for the app on the shared host' }
+				]
+			})
+		);
+
+		domains['go.example.com'].links['/Admin'] = { url, case_insensitive: false };
+		const loaded = loadConfig(shared, options);
+		expect(loaded.domains['go.example.com']?.links['/Admin']?.url).toBe(url);
+	});
+
+	it('rejects noncanonical paths and reversed or empty validity windows', () => {
 		expect(() =>
 			loadConfig(configurationInput({ '/docs/': { url: 'https://example.com' } }), options)
 		).toThrow(ConfigError);

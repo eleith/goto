@@ -17,6 +17,10 @@ test('shared credentials protect admin pages and sign-out removes access', async
 		const text = message.text();
 		if (text.includes('push_state_deprecated')) navigationWarnings.push(text);
 	});
+	const root = await request.get('/', { maxRedirects: 0 });
+	expect(root.status()).toBe(404);
+	expect(root.headers().location).toBeUndefined();
+
 	const adminRedirect = await request.get('/admin', {
 		headers: { accept: 'text/html' },
 		maxRedirects: 0

@@ -354,7 +354,9 @@ export const GotoConfigurationSchema = Type.Object(
 		link_defaults: ref(LinkDefaultsSchema, { default: {} }),
 		fallback: Type.Optional(ref(RedirectResponseSchema)),
 		domains: Type.Record(Type.String(), ref(DomainConfigurationSchema, { default: {} }), {
-			additionalProperties: false
+			additionalProperties: false,
+			description:
+				'List the host from url.app here to serve short links alongside the app. App routes, assets and development tooling paths are reserved on that host in all environments. The root response is configured separately.'
 		})
 	},
 	{ $id: 'GotoConfiguration', additionalProperties: false, title: 'Goto configuration' }

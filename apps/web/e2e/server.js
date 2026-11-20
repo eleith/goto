@@ -23,8 +23,9 @@ await new Promise((resolve, reject) =>
 	reservation.close((error) => (error ? reject(error) : resolve()))
 );
 process.env.PORT = String(address.port);
+const appHost = `localhost:${address.port}`;
 const configuration = {
-	url: { app: `http://localhost:${address.port}`, worker: 'http://goto-worker:9000' },
+	url: { app: `http://${appHost}`, worker: 'http://goto-worker:9000' },
 	auth: { credentials: { username: 'example', password: 'e2e-only-password' } },
 	analytics: { retention_months: Number(process.env.GOTO_E2E_RETENTION_MONTHS ?? '3') },
 	domains: {
@@ -55,6 +56,12 @@ const configuration = {
 		}
 	}
 };
+if (process.env.GOTO_E2E_SHARED_APP_HOST === '1') {
+	configuration.domains[appHost] = {
+		links: { '/docs': { url: 'https://example.org/shared-docs' } },
+		fallback: { url: 'https://example.org/shared-fallback' }
+	};
+}
 await writeFile(join(runtimeDirectory, 'config/goto.yaml'), JSON.stringify(configuration));
 if (process.env.GOTO_E2E_WORKER === '1') {
 	await seedVisits();

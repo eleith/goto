@@ -15,6 +15,7 @@
 		"fallback": { "$ref": "#/$defs/RedirectResponse" },
 		"domains": {
 			"additionalProperties": false,
+			"description": "List the host from url.app here to serve short links alongside the app. App routes, assets and development tooling paths are reserved on that host in all environments. The root response is configured separately.",
 			"type": "object",
 			"patternProperties": { "^(.*)$": { "default": {}, "$ref": "#/$defs/DomainConfiguration" } }
 		}

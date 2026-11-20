@@ -8,6 +8,7 @@ export { loadConfig, loadConfigFile, parseConfig } from './load.js';
 export { startConfigReloading } from './monitor.js';
 export { matchLink } from './matching.js';
 export { isSelfRedirect } from './redirect.js';
+export { isReservedLinkPath } from './routes.js';
 export {
 	isCanonicalPath,
 	normalizeHost,

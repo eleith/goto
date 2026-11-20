@@ -1,6 +1,10 @@
 import { expect, test } from './support/test.ts';
 
-test('serves compiled app endpoints without shadowing public redirects', async ({ request }) => {
+test.use({ sharedAppHost: true });
+
+test('serves the compiled app and short links on one host without shadowing other hosts', async ({
+	request
+}) => {
 	const health = await request.get('/healthz');
 	expect(health.status()).toBe(200);
 
@@ -11,6 +15,29 @@ test('serves compiled app endpoints without shadowing public redirects', async (
 	const asset = await request.get('/_app/version.json');
 	expect(asset.status()).toBe(200);
 	expect((await asset.json()).version).toEqual(expect.any(String));
+
+	const staticPost = await request.post('/@static/favicon.svg', { maxRedirects: 0 });
+	expect(staticPost.status()).toBe(405);
+	expect(staticPost.headers().allow).toBe('GET, HEAD');
+
+	const source = await request.get('/src/lib/auth-client.ts', { maxRedirects: 0 });
+	expect(source.status()).toBe(404);
+
+	const shortLink = await request.get('/docs', { maxRedirects: 0 });
+	expect(shortLink.status()).toBe(302);
+	expect(shortLink.headers().location).toBe('https://example.org/shared-docs');
+
+	const root = await request.get('/', { maxRedirects: 0 });
+	expect(root.status()).toBe(302);
+	expect(root.headers().location).toBe('https://example.org/shared-fallback');
+
+	const protectedPage = await request.get('/admin', {
+		headers: { accept: 'text/html' },
+		maxRedirects: 0
+	});
+	expect(protectedPage.status()).toBe(303);
+	expect(protectedPage.headers().location).toBe('/signin?callbackUrl=%2Fadmin');
+	expect(protectedPage.headers()['cache-control']).toBe('private, no-store');
 
 	for (const [path, destination] of [
 		['/schema.json', 'public-schema'],
