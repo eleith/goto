@@ -270,13 +270,14 @@ domains:
 	});
 
 	it.each([
-		[{}, 'http://localhost:3000'],
-		[{ NODE_ENV: 'development' }, 'http://localhost:5173'],
-		[{ NODE_ENV: 'production' }, 'http://localhost:3000'],
-		[{ PORT: '4321' }, 'http://localhost:4321'],
-		[{ PORT: '80' }, 'http://localhost']
-	])('derives an omitted origin from injected environment %j', (env, url) => {
-		expect(loadConfig(configurationInput(), { env }).configuration.url.app).toBe(url);
+		{ mode: 'development', expected: 'http://localhost:5173' },
+		{ mode: 'production', expected: 'http://localhost:3000' }
+	])('defaults the $mode admin origin independently of the listener port', ({ mode, expected }) => {
+		const input = configurationInput();
+		const web = loadConfig(input, { env: { NODE_ENV: mode, PORT: '4321' } });
+		const worker = loadConfig(input, { env: { NODE_ENV: mode, PORT: '0' } });
+		expect(web.configuration.url.app).toBe(expected);
+		expect(worker.configuration.url.app).toBe(expected);
 	});
 
 	it('validates interpolated values and preserves an explicit canonical origin', () => {
@@ -286,6 +287,7 @@ domains:
 			auth: { ...configurationInput().auth, secret: '${SECRET}' }
 		};
 		const env = {
+			NODE_ENV: 'development',
 			ADMIN_ORIGIN: 'https://admin.example.com',
 			WORKER_BASE: 'http://worker.example.com:9100/private/',
 			DESTINATION: 'https://example.com',
@@ -391,12 +393,6 @@ domains:
 				name: 'Single Sign-On'
 			}
 		});
-	});
-
-	it.each(['0', '65536', 'abc', '3000\n'])('rejects invalid inferred ports %j', (PORT) => {
-		expect(() => loadConfig(configurationInput(), { env: { PORT } })).toThrowError(
-			new ConfigError()
-		);
 	});
 
 	it('normalizes root and fallback responses independently of link defaults', () => {

@@ -9,7 +9,7 @@ import { resolveConfigPath, resolveDeploymentRoot } from './paths.js';
 import { buildRedirectDomainLookup } from './resolve.js';
 import { GotoConfigurationSchema, configurationReferences } from './schema.js';
 import { dropInvalidStringTags } from './tags.js';
-import type { ConfigEnvironment, ConfigOptions, PreparedConfiguration } from './types.js';
+import type { ConfigOptions, PreparedConfiguration } from './types.js';
 import { validateConfig, validateRedirectDomainLookup } from './validation.js';
 
 export async function loadConfigFile(
@@ -85,7 +85,7 @@ function resolveConfigValues(raw: unknown, options: ConfigOptions) {
 	assertSafeInput(raw);
 	const copy = structuredClone(raw);
 	const env = options.env ?? process.env;
-	defaultAppUrl(copy, env);
+	if (env.NODE_ENV === 'development') defaultDevelopmentAppUrl(copy);
 	const expanded = interpolate(copy, env);
 	const configuration = Value.Default(GotoConfigurationSchema, configurationReferences, expanded);
 	assertArrayShapesPreserved(raw, configuration);
@@ -95,24 +95,10 @@ function resolveConfigValues(raw: unknown, options: ConfigOptions) {
 	return { configuration, authoredLinkDefaults, warnings };
 }
 
-function defaultAppUrl(raw: Record<string, unknown>, env: ConfigEnvironment): void {
+function defaultDevelopmentAppUrl(raw: Record<string, unknown>): void {
 	if (!Object.hasOwn(raw, 'url')) raw.url = {};
 	const url = raw.url;
 	if (typeof url !== 'object' || url === null || Array.isArray(url)) return;
 	if (Object.hasOwn(url, 'app')) return;
-	const port = env.PORT ?? (env.NODE_ENV === 'development' ? '5173' : '3000');
-	const number = Number(port);
-	if (
-		port.length === 0 ||
-		/[^0-9]/.test(port) ||
-		!Number.isInteger(number) ||
-		number < 1 ||
-		number > 65535 ||
-		env.SOCKET_PATH ||
-		Number(env.LISTEN_FDS) > 0
-	) {
-		throw new ConfigError();
-	}
-	(url as Record<string, unknown>).app =
-		number === 80 ? 'http://localhost' : `http://localhost:${number}`;
+	(url as Record<string, unknown>).app = 'http://localhost:5173';
 }

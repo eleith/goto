@@ -97,7 +97,7 @@ const AppUrlSchema = Type.String({
 	format: 'goto-app-url',
 	pattern: appOriginPattern,
 	description:
-		'The canonical admin HTTP(S) origin, without credentials, path, trailing slash, query or fragment.'
+		'The canonical admin HTTP(S) origin, without credentials, path, trailing slash, query or fragment. Defaults to http://localhost:5173 in development and http://localhost:3000 otherwise, regardless of PORT. Set url.app explicitly for a different origin.'
 });
 
 const InstantSchema = Type.String({
