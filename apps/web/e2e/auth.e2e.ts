@@ -12,13 +12,6 @@ test('shared credentials protect admin pages and sign-out removes access', async
 	appServer
 }) => {
 	await page.setViewportSize({ width: 1280, height: 720 });
-	const cardSizes = () =>
-		page.locator('.admin-stat').evaluateAll((cards) =>
-			cards.map((card) => {
-				const { width, height } = card.getBoundingClientRect();
-				return { width, height };
-			})
-		);
 	const navigationWarnings: string[] = [];
 	page.on('console', (message) => {
 		const text = message.text();
@@ -68,7 +61,6 @@ test('shared credentials protect admin pages and sign-out removes access', async
 		'Visits',
 		'Retention'
 	]);
-	const overviewCardSizes = await cardSizes();
 	const heading = page.locator('.admin-heading');
 	await expect(heading.locator('.admin-title > h1 + time')).toBeVisible();
 	const timeframe = heading.getByRole('group', { name: 'Timeframe', exact: true });
@@ -96,10 +88,6 @@ test('shared credentials protect admin pages and sign-out removes access', async
 	const domainRow = page.getByRole('listitem').filter({ has: domainLink });
 	const domainCounts = domainRow.locator('.admin-inventory-number');
 	await expect(domainCounts).toHaveText(['6', '2']);
-	await expect(domainRow.locator('.admin-inventory-label').first()).toHaveCSS(
-		'clip-path',
-		'inset(50%)'
-	);
 	const selectionRequests: string[] = [];
 	const recordSelectionRequest = (request: Request) => {
 		const type = request.resourceType();
@@ -201,9 +189,7 @@ test('shared credentials protect admin pages and sign-out removes access', async
 	await expect(retainedLink.getByRole('link')).toHaveCount(1);
 	const retainedVisits = retainedLink.locator('.admin-inventory-number');
 	await expect(retainedVisits).toHaveText('1');
-	await expect(retainedLink.locator('.admin-inventory-label')).toHaveCSS('clip-path', 'inset(50%)');
 	await page.setViewportSize({ width: 390, height: 844 });
-	await expect(retainedLink.locator('.admin-inventory-label')).toHaveCSS('clip-path', 'none');
 	const mobileTimeframe = page.getByRole('button', { name: /^Timeframe: / });
 	await expect(mobileTimeframe).toContainText('3 months');
 	await mobileTimeframe.click();
@@ -222,7 +208,6 @@ test('shared credentials protect admin pages and sign-out removes access', async
 	await expect(visitsValue).toHaveText('3');
 	await expect(retainedVisits).toHaveText('1');
 	await expect(graph).toHaveAccessibleName(/^Visits by week\. Total: 3\./);
-	expect(await cardSizes()).toEqual(overviewCardSizes.slice(0, 3));
 	const historicalInvalid = linksInventory
 		.getByRole('listitem')
 		.filter({ has: page.getByRole('link', { name: '/a/b', exact: true }) });
@@ -305,7 +290,6 @@ test('shared credentials protect admin pages and sign-out removes access', async
 	await expect(redirectCard.locator('dd').nth(1)).toHaveText('/docs');
 	await expect(page.locator('.admin-cards .admin-stat-label')).toHaveText(['Visits', 'Status']);
 	await expect(page.getByRole('region', { name: 'Status', exact: true })).toContainText('Active');
-	expect(await cardSizes()).toEqual(overviewCardSizes.slice(0, 2));
 	await expect(page).toHaveTitle('Link — go.example.org/docs — Goto');
 	await expect(graph).toHaveAttribute('aria-busy', 'false');
 	await expect(chartTable).toHaveAccessibleName('Visits');

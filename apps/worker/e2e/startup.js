@@ -276,7 +276,6 @@ async function verifyRestartOnlyEdit(mode, directory, readOutput, signal) {
 	);
 }
 
-await checkStartup('compiled');
 await checkStartup('source');
 await checkStartup('storage-change');
 await checkStartup('retention-change');

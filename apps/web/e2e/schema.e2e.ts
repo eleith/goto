@@ -1,6 +1,9 @@
 import { expect, test } from './support/test.ts';
 
-test('public paths bypass the compiled admin schema and real static asset', async ({ request }) => {
+test('serves compiled app endpoints without shadowing public redirects', async ({ request }) => {
+	const health = await request.get('/healthz');
+	expect(health.status()).toBe(200);
+
 	const admin = await request.get('/schema.json');
 	expect(admin.status()).toBe(200);
 	expect((await admin.json()).$schema).toBe('https://json-schema.org/draft/2020-12/schema');

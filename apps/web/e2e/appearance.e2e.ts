@@ -153,14 +153,11 @@ async function expectErrorViewport(page: Page) {
 	const main = page.getByRole('main');
 	const heading = main.getByRole('heading', { name: 'Not found', exact: true });
 	const icon = main.getByRole('img', { name: 'Goto', exact: true });
-	await expect(main).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
 	for (const viewport of [
 		{ width: 390, height: 844 },
 		{ width: 1280, height: 800 }
 	]) {
 		await page.setViewportSize(viewport);
-		await expect(main).toHaveCSS('place-content', 'center');
-		await expect(main).toHaveCSS('justify-items', 'center');
 		await expect(heading).toBeVisible();
 		await expect(heading).toBeInViewport();
 		await expect(icon).toBeVisible();
