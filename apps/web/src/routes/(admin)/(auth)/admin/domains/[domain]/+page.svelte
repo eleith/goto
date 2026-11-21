@@ -29,6 +29,7 @@
 
 <AdminPage
 	title="Domain"
+	analyticsEnabled={data.collectionEnabled}
 	documentTitle={`Domain — ${data.domain}`}
 	lastActivityAt={data.lastActivityAt}
 	overviewHref={`/admin?period=${timeframe}`}

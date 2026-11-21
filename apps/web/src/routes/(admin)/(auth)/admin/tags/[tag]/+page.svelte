@@ -28,6 +28,7 @@
 </script>
 
 <AdminPage
+	analyticsEnabled={data.collectionEnabled}
 	title={`Tag: ${data.tag}`}
 	lastActivityAt={data.lastActivityAt}
 	overviewHref={`/admin?period=${timeframe}`}

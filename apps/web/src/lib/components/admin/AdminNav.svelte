@@ -5,7 +5,8 @@
 	import { authClient } from '#lib/auth-client.js';
 	import ThemeToggle from '../ThemeToggle.svelte';
 
-	let { overviewHref }: { overviewHref: string } = $props();
+	let { overviewHref, analyticsEnabled }: { overviewHref: string; analyticsEnabled: boolean } =
+		$props();
 
 	let currentPath = $derived(page.url.pathname + page.url.search);
 	let onOverview = $derived(page.url.pathname === '/admin');
@@ -55,11 +56,20 @@
 
 <header class="admin-nav">
 	<nav class="nav-container" aria-label="Administration">
-		{#if onOverview}
-			<span class="nav-title" aria-current="page">{@render titleWithIcon()}</span>
-		{:else}
-			<a class="nav-title" href={overviewHref}>{@render titleWithIcon()}</a>
-		{/if}
+		<div class="nav-links">
+			{#if onOverview}
+				<span class="nav-title" aria-current="page">{@render titleWithIcon()}</span>
+			{:else}
+				<a class="nav-title" href={overviewHref}>{@render titleWithIcon()}</a>
+			{/if}
+			{#if analyticsEnabled}
+				<a
+					class="ui-button"
+					href="/admin/analytics"
+					aria-current={page.url.pathname === '/admin/analytics' ? 'page' : undefined}>Analytics</a
+				>
+			{/if}
+		</div>
 		<div class="nav-actions">
 			<a
 				class="ui-button health-link"
@@ -127,6 +137,7 @@
 		font-size: 1.25rem;
 	}
 
+	.nav-links,
 	.nav-actions {
 		display: flex;
 		flex-wrap: wrap;

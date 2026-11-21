@@ -20,7 +20,7 @@
 		'7d': '7 days',
 		'30d': '30 days',
 		'90d': '90 days',
-		all: `${retentionMonths} months`
+		all: retentionMonths === 3 ? '90 days' : 'Full retention'
 	});
 	let options = $derived(
 		timeframes.map((timeframe) => ({ value: timeframe, label: labels[timeframe] }))

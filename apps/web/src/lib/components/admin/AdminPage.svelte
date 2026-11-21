@@ -6,6 +6,7 @@
 
 	let {
 		title: heading,
+		analyticsEnabled,
 		documentTitle,
 		context,
 		overviewHref = '/admin',
@@ -14,6 +15,7 @@
 		children
 	}: {
 		title: string;
+		analyticsEnabled: boolean;
 		documentTitle?: string;
 		context?: Snippet;
 		overviewHref?: string;
@@ -27,7 +29,7 @@
 </script>
 
 <svelte:head><title>{documentTitle ?? heading} — GoTo</title></svelte:head>
-<AdminNav {overviewHref} />
+<AdminNav {overviewHref} {analyticsEnabled} />
 <main class="admin-page">
 	<header class="admin-heading">
 		<div class="admin-title-row">

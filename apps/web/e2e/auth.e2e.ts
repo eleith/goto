@@ -22,11 +22,12 @@ test('shared credentials protect admin pages and sign-out removes access', async
 	expect(root.status()).toBe(404);
 	expect(root.headers().location).toBeUndefined();
 
-	const adminRedirect = await request.get('/admin', {
+	const adminRedirect = await request.get('/admin/analytics', {
 		headers: { accept: 'text/html' },
 		maxRedirects: 0
 	});
 	expect(adminRedirect.status()).toBe(303);
+	expect(adminRedirect.headers().location).toBe('/signin?callbackUrl=%2Fadmin%2Fanalytics');
 	expect(adminRedirect.headers()['cache-control']).toBe('private, no-store');
 
 	const signInPage = await page.goto(`${appServer.origin}/admin`);
@@ -71,7 +72,7 @@ test('shared credentials protect admin pages and sign-out removes access', async
 	const heading = page.locator('.admin-heading');
 	await expect(heading.locator('.admin-title > h1 + time')).toBeVisible();
 	const timeframe = heading.getByRole('group', { name: 'Timeframe', exact: true });
-	await expect(timeframe.getByRole('button')).toHaveText(['7 days', '30 days', '3 months']);
+	await expect(timeframe.getByRole('button')).toHaveText(['7 days', '30 days', '90 days']);
 	await expect(timeframe.getByRole('button', { name: '30 days', exact: true })).toHaveAttribute(
 		'aria-pressed',
 		'true'
@@ -112,8 +113,8 @@ test('shared credentials protect admin pages and sign-out removes access', async
 	await expect(visitsValue).toHaveText('2');
 	await expect(domainCounts).toHaveText(['6', '1']);
 	await expect(graph).toHaveAccessibleName(/^Visits by day\. Total: 2\./);
-	await timeframe.getByRole('button', { name: '3 months', exact: true }).click();
-	await expect(timeframe.getByRole('button', { name: '3 months', exact: true })).toHaveAttribute(
+	await timeframe.getByRole('button', { name: '90 days', exact: true }).click();
+	await expect(timeframe.getByRole('button', { name: '90 days', exact: true })).toHaveAttribute(
 		'aria-pressed',
 		'true'
 	);
@@ -129,7 +130,7 @@ test('shared credentials protect admin pages and sign-out removes access', async
 	await expect(domainCounts).toHaveText(['6', '1']);
 	await expect(graph).toHaveAccessibleName(/^Visits by day\. Total: 2\./);
 	await page.goForward();
-	await expect(timeframe.getByRole('button', { name: '3 months', exact: true })).toHaveAttribute(
+	await expect(timeframe.getByRole('button', { name: '90 days', exact: true })).toHaveAttribute(
 		'aria-pressed',
 		'true'
 	);
@@ -140,7 +141,7 @@ test('shared credentials protect admin pages and sign-out removes access', async
 	expect(selectionRequests).toEqual([]);
 	const overviewResponse = await page.reload();
 	expect(overviewResponse?.headers()['cache-control']).toBe('private, no-store');
-	await expect(timeframe.getByRole('button', { name: '3 months', exact: true })).toHaveAttribute(
+	await expect(timeframe.getByRole('button', { name: '90 days', exact: true })).toHaveAttribute(
 		'aria-pressed',
 		'true'
 	);
@@ -173,7 +174,7 @@ test('shared credentials protect admin pages and sign-out removes access', async
 	await expect(page.getByRole('link', { name: 'Overview', exact: true })).toHaveCount(0);
 	await expect(graph).toHaveAttribute('aria-busy', 'false');
 	await expect(graph).toHaveAccessibleName(/^Visits by week\. Total: 3\./);
-	await expect(timeframe.getByRole('button', { name: '3 months', exact: true })).toHaveAttribute(
+	await expect(timeframe.getByRole('button', { name: '90 days', exact: true })).toHaveAttribute(
 		'aria-pressed',
 		'true'
 	);
@@ -204,7 +205,7 @@ test('shared credentials protect admin pages and sign-out removes access', async
 	await expect(retainedVisits).toHaveText('1');
 	await page.setViewportSize({ width: 390, height: 844 });
 	const mobileTimeframe = page.getByRole('button', { name: /^Timeframe: / });
-	await expect(mobileTimeframe).toContainText('3 months');
+	await expect(mobileTimeframe).toContainText('90 days');
 	await mobileTimeframe.click();
 	await page
 		.getByRole('listbox', { name: 'Timeframe', exact: true })
@@ -217,7 +218,7 @@ test('shared credentials protect admin pages and sign-out removes access', async
 		await linksInventory.evaluate((element) => element.scrollWidth <= element.clientWidth)
 	).toBe(true);
 	await page.setViewportSize({ width: 1280, height: 720 });
-	await timeframe.getByRole('button', { name: '3 months', exact: true }).click();
+	await timeframe.getByRole('button', { name: '90 days', exact: true }).click();
 	await expect(visitsValue).toHaveText('3');
 	await expect(retainedVisits).toHaveText('1');
 	await expect(graph).toHaveAccessibleName(/^Visits by week\. Total: 3\./);
@@ -339,7 +340,7 @@ test('shared credentials protect admin pages and sign-out removes access', async
 	await expect(operatingSystems).toContainText('No visits in this period.');
 	await expect(acceptedLanguages).toContainText('No visits in this period.');
 	await expect(chartTable.getByRole('row', { name: 'Total 0', exact: true })).toBeVisible();
-	await timeframe.getByRole('button', { name: '3 months', exact: true }).click();
+	await timeframe.getByRole('button', { name: '90 days', exact: true }).click();
 	await expect(visitsValue).toHaveText('1');
 	await expect(overviewLink).toHaveAttribute('href', '/admin?period=all');
 	await expect(
@@ -375,7 +376,7 @@ test('shared credentials protect admin pages and sign-out removes access', async
 	await expect(visitsValue).toHaveText('1');
 	await taggedDocs.click();
 	await expect(page).toHaveURL(`${appServer.origin}${docsPath}?period=7d`);
-	await timeframe.getByRole('button', { name: '3 months', exact: true }).click();
+	await timeframe.getByRole('button', { name: '90 days', exact: true }).click();
 
 	await overviewLink.click();
 	await domainLink.click();
@@ -415,7 +416,7 @@ test('shared credentials protect admin pages and sign-out removes access', async
 		'404 Not found'
 	);
 	await rootDetails.getByRole('link', { name: 'go.example.org', exact: true }).click();
-	await expect(timeframe.getByRole('button', { name: '3 months', exact: true })).toHaveAttribute(
+	await expect(timeframe.getByRole('button', { name: '90 days', exact: true })).toHaveAttribute(
 		'aria-pressed',
 		'true'
 	);
@@ -444,6 +445,21 @@ test('shared credentials protect admin pages and sign-out removes access', async
 	await expect(workerHealth.getByRole('alert')).toContainText('Worker is reachable.');
 	await expect(workerHealth.locator('time')).toBeVisible();
 
+	await page
+		.getByRole('navigation', { name: 'Administration', exact: true })
+		.getByRole('link', { name: 'Analytics', exact: true })
+		.click();
+	await expect(page.getByRole('heading', { name: 'Analytics', exact: true })).toBeVisible();
+	const allDomains = page.getByRole('region', { name: 'All domains', exact: true });
+	const analyticsVisits = allDomains.getByRole('region', { name: 'Visits', exact: true });
+	const analyticsChart = allDomains.getByRole('region', { name: 'Visits over time', exact: true });
+	await expect(analyticsVisits).toContainText('3');
+	await expect(analyticsChart.getByRole('row', { name: 'Total 3', exact: true })).toBeVisible();
+	await timeframe.getByRole('button', { name: '7 days', exact: true }).click();
+	await expect(page).toHaveURL(`${appServer.origin}/admin/analytics?period=7d`);
+	await expect(analyticsVisits).toContainText('2');
+	await expect(analyticsChart.getByRole('row', { name: 'Total 2', exact: true })).toBeVisible();
+
 	const html = await page.content();
 	await expect(html).not.toContain('e2e-only-password');
 	await page.getByRole('button', { name: 'Sign out', exact: true }).click();
@@ -465,6 +481,8 @@ test.describe('analytics disabled', () => {
 		await page.getByLabel('Password', { exact: true }).fill('e2e-only-password');
 		await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 		await expect(page.getByRole('heading', { name: 'Overview', exact: true })).toBeVisible();
+		const adminNav = page.getByRole('navigation', { name: 'Administration', exact: true });
+		await expect(adminNav.getByRole('link', { name: 'Analytics', exact: true })).toHaveCount(0);
 		await expect(page.locator('.admin-cards .admin-stat-label')).toHaveText(['Domains', 'Links']);
 		await expect(page.getByRole('group', { name: 'Timeframe', exact: true })).toHaveCount(0);
 		await expect(page.getByRole('region', { name: 'Browsers', exact: true })).toHaveCount(0);
@@ -520,10 +538,8 @@ test.describe('analytics disabled', () => {
 		await expect(page.getByRole('region', { name: 'Visits over time', exact: true })).toHaveCount(
 			0
 		);
-		await page
-			.getByRole('navigation', { name: 'Administration', exact: true })
-			.getByRole('link', { name: 'Health', exact: true })
-			.click();
+		await page.goto('/admin/analytics?period=7d');
+		await expect(page).toHaveURL(`${appServer.origin}/admin/health`);
 		await expect(
 			page.getByRole('region', { name: 'Analytics', exact: true }).locator('dd')
 		).toHaveText(['Disabled', 'Disabled', 'Disabled']);

@@ -26,7 +26,11 @@
 	let acceptedLanguageVisits = $derived(data.acceptedLanguageVisitsByTimeframe[timeframe] ?? null);
 </script>
 
-<AdminPage title="Overview" lastActivityAt={data.lastActivityAt}>
+<AdminPage
+	title="Overview"
+	analyticsEnabled={data.collectionEnabled}
+	lastActivityAt={data.lastActivityAt}
+>
 	{#snippet actions()}
 		{#if data.available && data.timeframes.length > 0}
 			<VisitTimeframes

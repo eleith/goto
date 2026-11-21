@@ -22,7 +22,7 @@
 	};
 </script>
 
-<AdminPage title="Health">
+<AdminPage title="Health" analyticsEnabled={data.retentionMonths !== 0}>
 	<section class="admin-info" aria-labelledby="application-heading">
 		<h2 id="application-heading">Application</h2>
 		<dl>
