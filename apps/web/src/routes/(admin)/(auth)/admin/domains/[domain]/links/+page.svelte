@@ -68,7 +68,6 @@
 				<dd>{data.response.forward_query ? 'Yes' : 'No'}</dd>
 			{/if}
 		</dl>
-		<p>Worker totals update hourly; pending visits are not yet included.</p>
 	</section>
 	<section id="fallback" class="admin-info" aria-labelledby="fallback-heading">
 		<h2 id="fallback-heading">Fallback</h2>
