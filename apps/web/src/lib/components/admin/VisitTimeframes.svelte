@@ -56,7 +56,7 @@
 		<Select.Root type="single" {value} items={options} onValueChange={changeTimeframe}>
 			<Select.Trigger aria-label={`Timeframe: ${labels[value]}`}>
 				{#snippet child({ props })}
-					<button {...props} type="button" class="ui-input timeframe-trigger">
+					<button {...props} type="button" class="ui-input ui-input--compact timeframe-trigger">
 						<span>{labels[value]}</span>
 						<IconCaretDown aria-hidden="true" focusable="false" />
 					</button>
@@ -109,9 +109,6 @@
 		gap: var(--space-4);
 		width: 8rem;
 		min-width: 8rem;
-		min-height: 2.5rem;
-		padding: var(--space-1) var(--space-4);
-		font-size: var(--font-size-sm);
 	}
 
 	.timeframe-menu {

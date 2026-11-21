@@ -1,11 +1,11 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 
-	let { heading = 'Analytics', children }: { heading?: string; children: Snippet } = $props();
+	let { children }: { children: Snippet } = $props();
 </script>
 
 <section aria-labelledby="analytics-heading">
-	<h2 id="analytics-heading">{heading}</h2>
+	<h2 id="analytics-heading">Analytics</h2>
 	<div class="analytics-content">
 		{@render children()}
 	</div>

@@ -450,14 +450,55 @@ test('shared credentials protect admin pages and sign-out removes access', async
 		.getByRole('link', { name: 'Analytics', exact: true })
 		.click();
 	await expect(page.getByRole('heading', { name: 'Analytics', exact: true })).toBeVisible();
-	const allDomains = page.getByRole('region', { name: 'All domains', exact: true });
-	const analyticsVisits = allDomains.getByRole('region', { name: 'Visits', exact: true });
-	const analyticsChart = allDomains.getByRole('region', { name: 'Visits over time', exact: true });
+	const analyticsVisits = page.getByRole('region', { name: 'Visits', exact: true });
+	const analyticsChart = page.getByRole('region', { name: 'Visits over time', exact: true });
 	await expect(analyticsVisits).toContainText('3');
 	await expect(analyticsChart.getByRole('row', { name: 'Total 3', exact: true })).toBeVisible();
-	await timeframe.getByRole('button', { name: '7 days', exact: true }).click();
-	await expect(page).toHaveURL(`${appServer.origin}/admin/analytics?period=7d`);
+	const domainSelect = page.getByRole('combobox', { name: 'Domain', exact: true });
+	const analyticsUrl = `${appServer.origin}/admin/analytics`;
+	const isDomainReportRequest = (url: URL) =>
+		url.pathname === '/admin/analytics/__data.json' &&
+		url.searchParams.get('domain') === 'go.example.org';
+	const releaseDomainReport = Promise.withResolvers<void>();
+	await page.route(
+		isDomainReportRequest,
+		async (route) => {
+			await releaseDomainReport.promise;
+			await route.continue();
+		},
+		{ times: 1 }
+	);
+	try {
+		await Promise.all([
+			page.waitForRequest((request) => isDomainReportRequest(new URL(request.url()))),
+			domainSelect.selectOption('go.example.org')
+		]);
+		await timeframe.getByRole('button', { name: '7 days', exact: true }).click();
+		await expect(page).toHaveURL(`${analyticsUrl}?period=7d`);
+		await expect(domainSelect).toHaveValue('');
+		await expect(analyticsVisits).toContainText('2');
+		await expect(analyticsChart.getByRole('row', { name: 'Total 2', exact: true })).toBeVisible();
+	} finally {
+		releaseDomainReport.resolve();
+	}
+
+	await domainSelect.selectOption('go.example.org');
+	await expect(page).toHaveURL(`${analyticsUrl}?period=7d&domain=go.example.org`);
+	await expect(analyticsChart.getByRole('row', { name: 'Total 1', exact: true })).toBeVisible();
+	await timeframe.getByRole('button', { name: '30 days', exact: true }).click();
+	await expect(page).toHaveURL(`${analyticsUrl}?domain=go.example.org`);
 	await expect(analyticsVisits).toContainText('2');
+	await expect(analyticsChart.getByRole('row', { name: 'Total 2', exact: true })).toBeVisible();
+	await page.goBack();
+	await page.goBack();
+	await expect(page).toHaveURL(`${analyticsUrl}?period=7d`);
+	await expect(domainSelect).toHaveValue('');
+	await expect(analyticsChart.getByRole('row', { name: 'Total 2', exact: true })).toBeVisible();
+
+	await page.goto(`${analyticsUrl}?domain=removed.example.org&period=7d`);
+	await expect(page.getByRole('status')).toContainText('This domain is not configured.');
+	await domainSelect.selectOption('');
+	await expect(page).toHaveURL(`${analyticsUrl}?period=7d`);
 	await expect(analyticsChart.getByRole('row', { name: 'Total 2', exact: true })).toBeVisible();
 
 	const html = await page.content();

@@ -8,16 +8,21 @@ import { load } from './+page.server.js';
 vi.mock('#lib/server/visits/reports.js', () => ({ readVisitDetails: vi.fn() }));
 beforeEach(() => vi.resetAllMocks());
 
-function request(retentionMonths: 0 | 3) {
+const configuredDomain = 'go.example.test';
+
+function request(retentionMonths: 0 | 3, query = '') {
 	const prepared = loadConfig(
 		{
 			auth: { credentials: { username: 'test', password: 'analytics-test-password' } },
 			analytics: { retention_months: retentionMonths },
-			domains: {}
+			domains: { [configuredDomain]: { links: {} } }
 		},
 		{ env: {} }
 	);
-	return { locals: { snapshot: prepareSnapshot(prepared) } } as Parameters<typeof load>[0];
+	return {
+		locals: { snapshot: prepareSnapshot(prepared) },
+		url: new URL(`https://admin.example.test/admin/analytics${query}`)
+	} as Parameters<typeof load>[0];
 }
 
 test('redirects to Health without reading a report when analytics is disabled', async () => {
@@ -32,6 +37,35 @@ test('does not redirect when the global report is unavailable', async () => {
 		kind: 'overview'
 	});
 	expect(unavailable).toMatchObject({ retentionMonths: 3, report: null });
+});
+
+test('reads one report for the selected configured domain', async () => {
+	vi.mocked(readVisitDetails).mockResolvedValueOnce(null);
+	const data = await load(request(3, `?domain=${configuredDomain}`));
+	expect(readVisitDetails).toHaveBeenCalledExactlyOnceWith(expect.any(Object), {
+		kind: 'domain',
+		domain: configuredDomain
+	});
+	expect(data).toMatchObject({ domain: configuredDomain, domainUnavailable: false });
+});
+
+test.each([`?domain=${configuredDomain}&domain=tiny.example.test`, '?domain=GO.EXAMPLE.TEST'])(
+	'rejects an invalid domain query without reading a report: %s',
+	async (query) => {
+		await expect(load(request(3, query))).rejects.toMatchObject({ status: 400 });
+		expect(readVisitDetails).not.toHaveBeenCalled();
+	}
+);
+
+test('keeps a removed domain selection without falling back to the global report', async () => {
+	const data = await load(request(3, '?domain=removed.example.test'));
+	expect(data).toMatchObject({
+		domain: 'removed.example.test',
+		domains: [configuredDomain],
+		domainUnavailable: true,
+		report: null
+	});
+	expect(readVisitDetails).not.toHaveBeenCalled();
 });
 
 test('projects global totals and keeps each breakdown tied to the selected window', async () => {
