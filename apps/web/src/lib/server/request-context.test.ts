@@ -111,8 +111,7 @@ test('an existing request retains its snapshot when the application publishes an
 	current = prepareSnapshot(
 		loadConfig(
 			{
-				url: { app: 'https://admin.example.org' },
-				site: { title: 'Updated' },
+				url: { app: 'https://updated-admin.example.org' },
 				auth: { credentials: { username: 'example', password: 'test-password' } },
 				domains: {}
 			},
@@ -124,7 +123,7 @@ test('an existing request retains its snapshot when the application publishes an
 
 	expect(requestSnapshot(first)).toBe(initial);
 	expect(requestSnapshot(second)).toBe(current);
-	expect(requestSnapshot(first)?.configuration.site.title).toBe('Goto');
+	expect(requestSnapshot(first)?.configuration.url.app).toBe('https://admin.example.org');
 });
 
 test('binding neither consumes the request body nor serializes private configuration', async () => {

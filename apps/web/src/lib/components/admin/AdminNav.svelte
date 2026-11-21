@@ -5,9 +5,10 @@
 	import { authClient } from '#lib/auth-client.js';
 	import ThemeToggle from '../ThemeToggle.svelte';
 
-	let { title, overviewHref }: { title: string; overviewHref: string } = $props();
+	let { overviewHref }: { overviewHref: string } = $props();
 
 	let currentPath = $derived(page.url.pathname + page.url.search);
+	let onOverview = $derived(page.url.pathname === '/admin');
 	let pending = $state(false);
 	let signoutError = $state<'rate' | 'network' | 'auth' | null>(null);
 
@@ -47,12 +48,19 @@
 	}}
 />
 
+{#snippet titleWithIcon()}
+	<img src="/@static/favicon.svg" alt="" width="24" height="24" />
+	GoTo
+{/snippet}
+
 <header class="admin-nav">
-	<div class="nav-container">
-		<nav aria-label="Administration">
-			<a href={overviewHref} aria-current={page.url.pathname === '/admin' ? 'page' : undefined}
-				>{title}</a
-			>
+	<nav class="nav-container" aria-label="Administration">
+		{#if onOverview}
+			<span class="nav-title" aria-current="page">{@render titleWithIcon()}</span>
+		{:else}
+			<a class="nav-title" href={overviewHref}>{@render titleWithIcon()}</a>
+		{/if}
+		<div class="nav-actions">
 			<a
 				class="ui-button health-link"
 				href="/admin/health"
@@ -62,8 +70,6 @@
 			>
 				<IconHeartbeat aria-hidden="true" focusable="false" />
 			</a>
-		</nav>
-		<div class="nav-actions">
 			<ThemeToggle />
 			<form method="POST" aria-label="Sign out" aria-busy={pending} onsubmit={signOut}>
 				<button
@@ -76,7 +82,7 @@
 				</button>
 			</form>
 		</div>
-	</div>
+	</nav>
 	{#if signoutError}
 		<p id="signout-error" class="signout-error" role="alert">
 			{#if signoutError === 'rate'}
@@ -106,14 +112,10 @@
 		gap: var(--space-5);
 	}
 
-	nav {
-		display: flex;
-		flex-wrap: wrap;
+	.nav-title {
+		display: inline-flex;
 		align-items: center;
-		gap: var(--space-5);
-	}
-
-	a {
+		gap: var(--space-4);
 		color: var(--color-text);
 		font-weight: 600;
 		text-decoration: none;

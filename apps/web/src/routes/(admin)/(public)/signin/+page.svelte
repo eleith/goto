@@ -67,7 +67,7 @@
 </script>
 
 <svelte:head>
-	<title>Sign in — {data.title}</title>
+	<title>Sign in — GoTo</title>
 </svelte:head>
 
 <svelte:window
@@ -79,7 +79,7 @@
 <div class="signin-container">
 	<main class="signin-card">
 		<header>
-			<h1>Sign in to {data.title}</h1>
+			<h1>Sign in to GoTo</h1>
 		</header>
 
 		{#if errorCode}

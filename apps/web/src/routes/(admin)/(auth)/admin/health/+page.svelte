@@ -22,7 +22,7 @@
 	};
 </script>
 
-<AdminPage siteTitle={data.title} title="Health">
+<AdminPage title="Health">
 	<section class="admin-info" aria-labelledby="application-heading">
 		<h2 id="application-heading">Application</h2>
 		<dl>

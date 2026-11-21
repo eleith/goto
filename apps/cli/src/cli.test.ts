@@ -176,11 +176,12 @@ describe('goto-cli config validate', () => {
 			environment: env
 		},
 		{
-			name: 'actual error alongside dropped tags',
-			source: `${validYaml}        tags: [., ""]\nsite: {title: null}\n`,
-			environment: env
+			name: 'invalid appearance alongside dropped tags',
+			source: `${validYaml}        tags: [., ""]\nappearance: false\n`,
+			environment: env,
+			issue: '\n  /appearance: Expected object\n'
 		}
-	])('reports $name without disclosing configuration', async ({ source, environment }) => {
+	])('reports $name without disclosing configuration', async ({ source, environment, issue }) => {
 		await writeConfiguration('config/goto.yaml', source);
 		const output = createOutput();
 
@@ -190,6 +191,7 @@ describe('goto-cli config validate', () => {
 			expect.stringMatching(/^Configuration validation failed\.\n/)
 		);
 		const diagnostic = output.stderr.mock.calls[0]?.[0];
+		if (issue !== undefined) expect(diagnostic).toContain(issue);
 		for (const sensitive of [...Object.values(env), ...Object.values(environment)]) {
 			if (sensitive !== undefined) expect(diagnostic).not.toContain(sensitive);
 		}
@@ -198,17 +200,19 @@ describe('goto-cli config validate', () => {
 		expect(diagnostic).not.toContain('config/goto.yaml');
 	});
 
-	it('reports the site section for an unsupported site.url without printing its value', async () => {
-		const oldSiteUrl = 'https://old.example.test/private-do-not-print';
-		await writeConfiguration('config/goto.yaml', `${validYaml}site:\n  url: ${oldSiteUrl}\n`);
+	it('rejects the removed site section without printing its custom title', async () => {
+		const oldTitle = 'Private title not for diagnostics';
+		await writeConfiguration('config/goto.yaml', `${validYaml}site:\n  title: ${oldTitle}\n`);
 		const output = createOutput();
 
 		expect(await runCli(['config', 'validate'], output, { cwd, env })).toBe(1);
 		expect(output.stdout).not.toHaveBeenCalled();
 		expect(output.stderr).toHaveBeenCalledExactlyOnceWith(
-			expect.stringMatching(/^Configuration validation failed\.\n {2}\/site: \S[^\n]*\n$/)
+			expect.stringMatching(
+				/^Configuration validation failed\.\n {2}\/: Unexpected property\.[^\n]*\n$/
+			)
 		);
-		expect(output.stderr.mock.calls[0]?.[0]).not.toContain(oldSiteUrl);
+		expect(output.stderr.mock.calls[0]?.[0]).not.toContain(oldTitle);
 	});
 
 	it('reports a missing file without disclosing the path', async () => {

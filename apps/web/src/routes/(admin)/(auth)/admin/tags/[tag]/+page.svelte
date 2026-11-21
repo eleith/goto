@@ -28,7 +28,6 @@
 </script>
 
 <AdminPage
-	siteTitle={data.title}
 	title={`Tag: ${data.tag}`}
 	lastActivityAt={data.lastActivityAt}
 	overviewHref={`/admin?period=${timeframe}`}

@@ -27,7 +27,6 @@
 </script>
 
 <AdminPage
-	siteTitle={data.title}
 	title="Root"
 	documentTitle={`Root — ${data.domain}`}
 	lastActivityAt={data.lastActivityAt}

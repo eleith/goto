@@ -32,6 +32,8 @@ test('shared credentials protect admin pages and sign-out removes access', async
 	const signInPage = await page.goto(`${appServer.origin}/admin`);
 	await expect(page).toHaveURL(/\/signin\?/);
 	expect(signInPage?.headers()['cache-control']).toBe('private, no-store');
+	await expect(page).toHaveTitle('Sign in — GoTo');
+	await expect(page.getByRole('heading', { name: 'Sign in to GoTo', exact: true })).toBeVisible();
 	await page.getByLabel('Username', { exact: true }).fill('example');
 	await page.getByLabel('Password', { exact: true }).fill('incorrect');
 	const failedSignIn = page.waitForResponse(`${appServer.origin}/auth/sign-in/credentials`);
@@ -145,11 +147,15 @@ test('shared credentials protect admin pages and sign-out removes access', async
 	await expect(visitsValue).toHaveText('4');
 	await expect(graph).toHaveAccessibleName(/^Visits by week\. Total: 4\./);
 	expect(navigationWarnings).toEqual([]);
+	const adminNav = page.getByRole('navigation', { name: 'Administration', exact: true });
+	const overviewLink = adminNav.getByRole('link', { name: 'GoTo', exact: true });
+	await expect(adminNav.getByText('GoTo', { exact: true })).toBeVisible();
+	await expect(overviewLink).toHaveCount(0);
 	await domainLink.click();
 	await expect(page.getByRole('heading', { name: 'Domain', exact: true })).toBeVisible();
 	const context = page.locator('.admin-context');
 	await expect(context).toHaveCount(0);
-	await expect(page).toHaveTitle('Domain — go.example.org — Goto');
+	await expect(page).toHaveTitle('Domain — go.example.org — GoTo');
 	await expect(acceptedLanguages).toBeVisible();
 	await expect(browsers.getByRole('columnheader')).toHaveText(['Browser', 'Visits', 'Share']);
 	await expect(operatingSystems.getByRole('columnheader')).toHaveText([
@@ -158,10 +164,12 @@ test('shared credentials protect admin pages and sign-out removes access', async
 		'Share'
 	]);
 	await expect(browsers.getByRole('rowheader', { name: 'Other', exact: true })).toBeVisible();
-	const overviewLink = page
-		.getByRole('navigation', { name: 'Administration', exact: true })
-		.getByRole('link', { name: 'Goto', exact: true });
 	await expect(overviewLink).toHaveAttribute('href', '/admin?period=all');
+	const appIcon = overviewLink.locator('img[src="/@static/favicon.svg"]');
+	await expect(appIcon).toBeVisible();
+	await expect
+		.poll(() => appIcon.evaluate((image: HTMLImageElement) => image.naturalWidth))
+		.toBeGreaterThan(0);
 	await expect(page.getByRole('link', { name: 'Overview', exact: true })).toHaveCount(0);
 	await expect(graph).toHaveAttribute('aria-busy', 'false');
 	await expect(graph).toHaveAccessibleName(/^Visits by week\. Total: 3\./);
@@ -297,7 +305,7 @@ test('shared credentials protect admin pages and sign-out removes access', async
 	await expect(redirectCard.locator('dd').nth(1)).toHaveText('/docs');
 	await expect(page.locator('.admin-cards .admin-stat-label')).toHaveText(['Visits', 'Status']);
 	await expect(page.getByRole('region', { name: 'Status', exact: true })).toContainText('Active');
-	await expect(page).toHaveTitle('Link — go.example.org/docs — Goto');
+	await expect(page).toHaveTitle('Link — go.example.org/docs — GoTo');
 	await expect(graph).toHaveAttribute('aria-busy', 'false');
 	await expect(chartTable).toHaveAccessibleName('Visits');
 	await expect(graph).toHaveAccessibleName(/^Visits by week\. Total: 1\./);
@@ -343,7 +351,7 @@ test('shared credentials protect admin pages and sign-out removes access', async
 	const tagHeading = page.getByRole('heading', { name: `Tag: ${sharedTag}`, exact: true });
 	await expect(tagHeading).toBeVisible();
 	await expect(tagHeading).toHaveAttribute('title', `Tag: ${sharedTag}`);
-	await expect(page).toHaveTitle(`Tag: ${sharedTag} — Goto`);
+	await expect(page).toHaveTitle(`Tag: ${sharedTag} — GoTo`);
 	await expect(page.getByRole('region', { name: 'Tag details', exact: true })).toHaveCount(0);
 	const taggedLinks = page.getByRole('region', { name: `Links tagged ${sharedTag}`, exact: true });
 	await expect(taggedLinks.getByRole('link')).toHaveCount(2);
@@ -373,7 +381,7 @@ test('shared credentials protect admin pages and sign-out removes access', async
 	await domainLink.click();
 	await page.getByRole('link', { name: '/a%2Fb', exact: true }).click();
 	await expect(page.getByRole('heading', { name: 'Link', exact: true })).toBeVisible();
-	await expect(page).toHaveTitle('Link — go.example.org/a%2Fb — Goto');
+	await expect(page).toHaveTitle('Link — go.example.org/a%2Fb — GoTo');
 	await expect(redirectCard.getByText('Title', { exact: true })).toHaveCount(0);
 	await expect(page).toHaveURL(
 		`${appServer.origin}/admin/domains/go.example.org/links/a%252Fb?period=all`
@@ -385,14 +393,14 @@ test('shared credentials protect admin pages and sign-out removes access', async
 		`${appServer.origin}/admin/domains/go.example.org/links/a/b?period=all`
 	);
 	await expect(page.getByRole('heading', { name: 'Link', exact: true })).toBeVisible();
-	await expect(page).toHaveTitle('Link — go.example.org/a/b — Goto');
+	await expect(page).toHaveTitle('Link — go.example.org/a/b — GoTo');
 	await expect(visitsValue).toHaveText('0');
 
 	await page.goBack();
 	await rootLink.click();
 	await expect(page).toHaveURL(`${appServer.origin}/admin/domains/go.example.org/links?period=all`);
 	await expect(page.getByRole('heading', { name: 'Root', exact: true })).toBeVisible();
-	await expect(page).toHaveTitle('Root — go.example.org — Goto');
+	await expect(page).toHaveTitle('Root — go.example.org — GoTo');
 	await expect(acceptedLanguages).toBeVisible();
 	await expect(visitsValue).toHaveText('1');
 	await expect(page.getByRole('region', { name: 'Status', exact: true })).toHaveCount(0);

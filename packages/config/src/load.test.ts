@@ -12,10 +12,7 @@ const yaml = 'auth: {credentials: {username: admin, password: test-password}}\nd
 const authoredKeyMarker = 'dummy-authored-key-marker';
 
 describe('configuration loading', () => {
-	it('parses YAML and applies configuration defaults without mutating the input', () => {
-		expect(parseConfig(`${yaml}\nsite: {title: yes}`, options).configuration.site.title).toBe(
-			'yes'
-		);
+	it('applies configuration defaults without mutating the input', () => {
 		const input = configurationInput();
 		const original = structuredClone(input);
 		const { configuration, warnings } = loadConfig(input, options);
@@ -23,7 +20,6 @@ describe('configuration loading', () => {
 		expect(configuration).toMatchObject({
 			version: 1,
 			url: { app: 'http://localhost:3000', worker: 'http://goto-worker:9000' },
-			site: { title: 'Goto' },
 			database: { path: './data/goto.sqlite', worker_path: './data/worker.sqlite' },
 			analytics: { retention_months: 3 },
 			link_defaults: {
@@ -225,7 +221,9 @@ domains:
 			}
 		]);
 		expect(() => loadConfig(input, options)).toThrow(ConfigError);
-		expect(() => loadConfig({ ...input, site: null }, { env: { TAG: '.' } })).toThrow(ConfigError);
+		expect(() => loadConfig({ ...input, appearance: false }, { env: { TAG: '.' } })).toThrow(
+			expect.objectContaining({ issues: [{ path: '/appearance', message: 'Expected object' }] })
+		);
 	});
 
 	it.each([null, {}, 'work', ['work', 42], [false], [null], [{}]])(
@@ -348,19 +346,8 @@ domains:
 		);
 	});
 
-	it('rejects the old site URL key without accepting it as an app URL', () => {
-		for (const url of [undefined, { app: 'https://admin.example.com' }]) {
-			expect(() =>
-				loadConfig(
-					{
-						...configurationInput(),
-						...(url === undefined ? {} : { url }),
-						site: { url: 'https://old.example.com', title: 'Custom title' }
-					},
-					options
-				)
-			).toThrow(ConfigError);
-		}
+	it('rejects the removed site section even when empty', () => {
+		expect(() => parseConfig(`${yaml}\nsite: {}`, options)).toThrow(ConfigError);
 	});
 
 	it('defaults the OIDC name after resolving authentication placeholders', () => {
@@ -470,8 +457,6 @@ domains:
 
 	it.each([
 		{ unknown: 'private-value' },
-		{ site: null },
-		{ site: [] },
 		{ url: null },
 		{ url: [] },
 		{ version: Infinity },
@@ -541,8 +526,7 @@ domains:
 	it.each([
 		`${yaml}\nversion: 1\nversion: 1`,
 		`${yaml}\n<<: {version: 1}`,
-		`${yaml}\n---\n${yaml}`,
-		`${yaml}\nsite: &cycle {title: *cycle}`
+		`${yaml}\n---\n${yaml}`
 	])('rejects non-strict YAML', (source) => {
 		expect(() => parseConfig(source, options)).toThrow(ConfigError);
 	});
@@ -585,7 +569,7 @@ domains:
 		let calls = 0;
 		const getter = {
 			...configurationInput(),
-			get site() {
+			get appearance() {
 				calls++;
 				return {};
 			}
@@ -593,7 +577,7 @@ domains:
 		expect(() => loadConfig(getter, options)).toThrow(ConfigError);
 		expect(calls).toBe(0);
 		const cycle = configurationInput();
-		Object.assign(cycle, { site: cycle });
+		Object.assign(cycle, { appearance: cycle });
 		for (const input of [
 			cycle,
 			Object.create(configurationInput()),

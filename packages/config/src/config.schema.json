@@ -6,7 +6,6 @@
 	"properties": {
 		"version": { "default": 1, "const": 1, "type": "number" },
 		"url": { "default": {}, "$ref": "#/$defs/Url" },
-		"site": { "default": {}, "$ref": "#/$defs/Site" },
 		"appearance": { "default": {}, "$ref": "#/$defs/Appearance" },
 		"auth": { "$ref": "#/$defs/Auth" },
 		"database": { "default": {}, "$ref": "#/$defs/Database" },
@@ -107,20 +106,6 @@
 				}
 			]
 		},
-		"LocalImagePath": {
-			"description": "A decoded /public/ SVG, PNG, JPEG, GIF or WebP image path without dot segments, percent escapes, backslashes, queries or fragments.",
-			"type": "string",
-			"anyOf": [
-				{
-					"type": "string",
-					"pattern": "^/public/(?:(?!\\.{1,2}(?:/|$))[^/%\\\\?#\\x00-\\x1f\\x7f]+/)*(?!\\.{1,2}(?:/|$))[^/%\\\\?#\\x00-\\x1f\\x7f]+\\.(?:[sS][vV][gG]|[pP][nN][gG]|[jJ][pP][eE]?[gG]|[gG][iI][fF]|[wW][eE][bB][pP])(?![\\s\\S])"
-				},
-				{
-					"type": "string",
-					"pattern": "(?:^|[^$])(?:\\$\\$)*\\$\\{[A-Z_][A-Z0-9_]*(?::-[^}]*)?\\}"
-				}
-			]
-		},
 		"HexColor": {
 			"type": "string",
 			"anyOf": [
@@ -173,25 +158,6 @@
 			"properties": {
 				"app": { "default": "http://localhost:3000", "$ref": "#/$defs/AppUrl" },
 				"worker": { "default": "http://goto-worker:9000", "$ref": "#/$defs/BaseUrl" }
-			}
-		},
-		"Site": {
-			"additionalProperties": false,
-			"type": "object",
-			"properties": {
-				"title": {
-					"default": "Goto",
-					"type": "string",
-					"anyOf": [
-						{ "type": "string", "pattern": "\\S", "minLength": 1 },
-						{
-							"type": "string",
-							"pattern": "(?:^|[^$])(?:\\$\\$)*\\$\\{[A-Z_][A-Z0-9_]*(?::-[^}]*)?\\}"
-						}
-					]
-				},
-				"logo_path": { "$ref": "#/$defs/LocalImagePath" },
-				"favicon_path": { "$ref": "#/$defs/LocalImagePath" }
 			}
 		},
 		"Appearance": {

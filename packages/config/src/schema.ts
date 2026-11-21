@@ -68,7 +68,6 @@ FormatRegistry.Set('goto-instant', (value) => {
 });
 
 const nonBlankText = { minLength: 1, pattern: '\\S' };
-const imageSegment = '(?!\\.{1,2}(?:/|$))[^/%\\\\?#\\x00-\\x1f\\x7f]+';
 
 const HttpUrlSchema = Type.String({
 	$id: 'HttpUrl',
@@ -114,13 +113,6 @@ const AuthSecretSchema = Type.String({
 	minLength: 32
 });
 
-const LocalImagePathSchema = Type.String({
-	$id: 'LocalImagePath',
-	pattern: `^/public/(?:${imageSegment}/)*${imageSegment}\\.(?:[sS][vV][gG]|[pP][nN][gG]|[jJ][pP][eE]?[gG]|[gG][iI][fF]|[wW][eE][bB][pP])${end}`,
-	description:
-		'A decoded /public/ SVG, PNG, JPEG, GIF or WebP image path without dot segments, percent escapes, backslashes, queries or fragments.'
-});
-
 const HexColorSchema = Type.String({
 	$id: 'HexColor',
 	pattern: `^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})${end}`
@@ -161,15 +153,6 @@ const UrlSchema = Type.Object(
 		worker: ref(BaseUrlSchema, { default: 'http://goto-worker:9000' })
 	},
 	{ $id: 'Url', additionalProperties: false }
-);
-
-const SiteSchema = Type.Object(
-	{
-		title: Type.String({ ...nonBlankText, default: 'Goto' }),
-		logo_path: Type.Optional(ref(LocalImagePathSchema)),
-		favicon_path: Type.Optional(ref(LocalImagePathSchema))
-	},
-	{ $id: 'Site', additionalProperties: false }
 );
 
 const AppearanceSchema = Type.Object(
@@ -346,7 +329,6 @@ export const GotoConfigurationSchema = Type.Object(
 	{
 		version: Type.Literal(1, { default: 1 }),
 		url: ref(UrlSchema, { default: {} }),
-		site: ref(SiteSchema, { default: {} }),
 		appearance: ref(AppearanceSchema, { default: {} }),
 		auth: ref(AuthSchema),
 		database: ref(DatabaseSchema, { default: {} }),
@@ -369,13 +351,11 @@ export const configurationReferences: TSchema[] = [
 	AppUrlSchema,
 	InstantSchema,
 	AuthSecretSchema,
-	LocalImagePathSchema,
 	HexColorSchema,
 	TagsSchema,
 	RedirectStatusSchema,
 	RedirectResponseSchema,
 	UrlSchema,
-	SiteSchema,
 	AppearanceSchema,
 	OidcAuthSchema,
 	CredentialsAuthSchema,

@@ -24,15 +24,15 @@ function captureConfigError(action: () => unknown): ConfigError {
 
 describe('configuration diagnostics', () => {
 	it('keeps the error message generic and formats issues only when requested', () => {
-		const issues = [{ path: '/site', message: 'Expected object' }];
+		const issues = [{ path: '/url', message: 'Expected object' }];
 		const error = new ConfigError(issues);
 		expect(error.message).toBe('Invalid configuration');
 		expect(String(error)).toBe('ConfigError: Invalid configuration');
 		expect(error.issues).toEqual(issues);
 		expect(error).not.toHaveProperty('cause');
-		expect(formatConfigError(error)).toBe('Invalid configuration\n  /site: Expected object');
+		expect(formatConfigError(error)).toBe('Invalid configuration\n  /url: Expected object');
 		expect(formatConfigError(error, 'Configuration validation failed.')).toBe(
-			'Configuration validation failed.\n  /site: Expected object'
+			'Configuration validation failed.\n  /url: Expected object'
 		);
 		expect(new ConfigError().issues).toEqual([]);
 		expect(formatConfigError(new ConfigError())).toBe('Invalid configuration');
@@ -76,12 +76,12 @@ describe('configuration diagnostics', () => {
 		}
 	});
 
-	it('identifies the site section and its allowed fields without echoing the old URL', () => {
+	it('identifies the URL section and its allowed fields without echoing the value', () => {
 		const error = captureConfigError(() =>
 			loadConfig(
 				{
 					...configurationInput(),
-					site: { url: `https://${privateValue}.example.com` }
+					url: { origin: `https://${privateValue}.example.com` }
 				},
 				options
 			)
@@ -89,8 +89,8 @@ describe('configuration diagnostics', () => {
 		expect(error.message).toBe('Invalid configuration');
 		expect(error.issues).toEqual([
 			{
-				path: '/site',
-				message: 'Unexpected property. Allowed fields: title, logo_path, favicon_path'
+				path: '/url',
+				message: 'Unexpected property. Allowed fields: app, worker'
 			}
 		]);
 		expect(JSON.stringify(error)).not.toContain(privateValue);
@@ -99,7 +99,7 @@ describe('configuration diagnostics', () => {
 
 	it.each([
 		{ override: { [privateKey]: privateValue }, path: '/' },
-		{ override: { site: { [privateKey]: privateValue } }, path: '/site' }
+		{ override: { url: { [privateKey]: privateValue } }, path: '/url' }
 	])('omits unknown property names and values at $path', ({ override, path }) => {
 		const error = captureConfigError(() =>
 			loadConfig({ ...configurationInput(), ...override }, options)

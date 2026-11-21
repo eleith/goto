@@ -5,7 +5,6 @@
 	import '#lib/styles/admin.css';
 
 	let {
-		siteTitle,
 		title: heading,
 		documentTitle,
 		context,
@@ -14,7 +13,6 @@
 		actions,
 		children
 	}: {
-		siteTitle: string;
 		title: string;
 		documentTitle?: string;
 		context?: Snippet;
@@ -28,8 +26,8 @@
 	let compactActivityText = $derived(formatLastVisitCompact(lastActivityAt));
 </script>
 
-<svelte:head><title>{documentTitle ?? heading} — {siteTitle}</title></svelte:head>
-<AdminNav title={siteTitle} {overviewHref} />
+<svelte:head><title>{documentTitle ?? heading} — GoTo</title></svelte:head>
+<AdminNav {overviewHref} />
 <main class="admin-page">
 	<header class="admin-heading">
 		<div class="admin-title-row">

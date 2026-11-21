@@ -23,11 +23,10 @@ describe('Goto editor schema', () => {
 	it('relaxes defaulted fields while keeping authentication, domain links and destinations required', () => {
 		const editor = createEditorSchema();
 		expect(editor.required).toEqual(['auth', 'domains']);
-		for (const name of ['Url', 'Site', 'Appearance', 'Database', 'Analytics', 'LinkDefaults']) {
+		for (const name of ['Url', 'Appearance', 'Database', 'Analytics', 'LinkDefaults']) {
 			expect(definition(editor, name).required).toBeUndefined();
 		}
-		expect(property(editor, 'site')).toEqual({ $ref: '#/$defs/Site', default: {} });
-		expect(object(definition(editor, 'Site').properties)).not.toHaveProperty('url');
+		expect(object(editor.properties)).not.toHaveProperty('site');
 		expect(property(editor, 'url')).toEqual({ $ref: '#/$defs/Url', default: {} });
 		expect(property(definition(editor, 'Url'), 'app')).toEqual({
 			$ref: '#/$defs/AppUrl',
