@@ -43,15 +43,6 @@
 			/>
 		{/if}
 	{/snippet}
-	<section>
-		<h2>Links</h2>
-		<LinkInventory
-			label={`Links on ${data.domain}`}
-			links={data.links}
-			{timeframe}
-			collectionEnabled={data.collectionEnabled}
-		/>
-	</section>
 	<section class="admin-info" aria-labelledby="domain-details-heading">
 		<h2 id="domain-details-heading">Details</h2>
 		<dl>
@@ -70,6 +61,15 @@
 				{:else}404 Not found{/if}
 			</dd>
 		</dl>
+	</section>
+	<section>
+		<h2>Links</h2>
+		<LinkInventory
+			label={`Links on ${data.domain}`}
+			links={data.links}
+			{timeframe}
+			collectionEnabled={data.collectionEnabled}
+		/>
 	</section>
 	<AnalyticsSection>
 		<ReportNotice collectionEnabled={data.collectionEnabled} available={data.available} />
