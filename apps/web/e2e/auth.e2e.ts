@@ -5,6 +5,7 @@ test.use({ withWorker: true });
 
 const sharedTag = 'Work/100%é';
 const tagPath = '/admin/tags/Work%2F100%25%C3%A9';
+const docsTitle = 'New hire handbook';
 
 test('shared credentials protect admin pages and sign-out removes access', async ({
 	page,
@@ -245,10 +246,12 @@ test('shared credentials protect admin pages and sign-out removes access', async
 	await expect(redirectCard.locator('dt')).toHaveText([
 		'Domain',
 		'Path',
+		'Title',
 		'Destination',
 		'Rules',
 		'Visits'
 	]);
+	await expect(redirectCard.getByText(docsTitle, { exact: true })).toBeVisible();
 	await expect(settingsCard.locator('dt')).toHaveText([
 		'HTTP status',
 		'Case insensitive',
@@ -371,6 +374,7 @@ test('shared credentials protect admin pages and sign-out removes access', async
 	await page.getByRole('link', { name: '/a%2Fb', exact: true }).click();
 	await expect(page.getByRole('heading', { name: 'Link', exact: true })).toBeVisible();
 	await expect(page).toHaveTitle('Link — go.example.org/a%2Fb — Goto');
+	await expect(redirectCard.getByText('Title', { exact: true })).toHaveCount(0);
 	await expect(page).toHaveURL(
 		`${appServer.origin}/admin/domains/go.example.org/links/a%252Fb?period=all`
 	);

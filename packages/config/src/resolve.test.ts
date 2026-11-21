@@ -260,7 +260,6 @@ describe('effective domains', () => {
 			links: {
 				'/docs': {
 					url: 'https://example.com/docs',
-					title: '/docs',
 					tags: [],
 					enabled: true,
 					status_code: 302,

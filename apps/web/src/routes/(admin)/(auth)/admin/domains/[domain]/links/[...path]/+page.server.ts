@@ -56,6 +56,7 @@ export const load = (async ({ locals, params }) => {
 	return {
 		domain,
 		path,
+		linkTitle: link.title,
 		lifetimeVisits,
 		response,
 		redirectRules,

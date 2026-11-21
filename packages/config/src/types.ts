@@ -17,14 +17,8 @@ export type SettingSource = 'builtin' | 'global' | 'domain' | 'link';
 
 export type PreparedLink = Omit<
 	LinkConfiguration,
-	| 'title'
-	| 'status_code'
-	| 'forward_query'
-	| 'case_insensitive'
-	| 'ignore_trailing_slash'
-	| 'forward_path'
+	'status_code' | 'forward_query' | 'case_insensitive' | 'ignore_trailing_slash' | 'forward_path'
 > & {
-	title: string;
 	status_code: RedirectStatus;
 	forward_query: boolean;
 	case_insensitive: boolean;

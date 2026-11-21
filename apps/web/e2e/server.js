@@ -36,6 +36,7 @@ const configuration = {
 				'/a/b': { url: 'https://example.org/decoded' },
 				'/a%2Fb': { url: 'https://example.org/literal-percent' },
 				'/docs': {
+					title: 'New hire handbook',
 					url: 'https://example.org/first-domain',
 					redirect: [
 						{ if: { language: 'fr', os: 'linux' }, to: 'https://example.org/french-linux' },

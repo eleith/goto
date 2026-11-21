@@ -54,6 +54,10 @@
 			</dd>
 			<dt>Path</dt>
 			<dd>{data.path}</dd>
+			{#if data.linkTitle}
+				<dt>Title</dt>
+				<dd>{data.linkTitle}</dd>
+			{/if}
 			<dt>Destination</dt>
 			<dd class:numbered-setting={data.redirectRules.length > 0}>
 				{#if data.redirectRules.length > 0}

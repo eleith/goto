@@ -19,7 +19,7 @@ export function buildRedirectDomainLookup(
 		const host = normalizeHost(key)!;
 		const links: Record<string, PreparedLink> = Object.create(null);
 		for (const [path, link] of Object.entries(domain.links)) {
-			links[path] = buildRedirectLink(path, link, domain, configuration, authoredLinkDefaults);
+			links[path] = buildRedirectLink(link, domain, configuration, authoredLinkDefaults);
 		}
 		const caseInsensitivePaths = buildCaseInsensitivePathLookup(links);
 		let fallbackSource: SettingSource = 'builtin';
@@ -39,7 +39,6 @@ export function buildRedirectDomainLookup(
 }
 
 function buildRedirectLink(
-	path: string,
 	link: LinkConfiguration,
 	domain: DomainConfiguration,
 	configuration: GotoConfiguration,
@@ -47,7 +46,6 @@ function buildRedirectLink(
 ): PreparedLink {
 	const prepared: PreparedLink = {
 		...link,
-		title: link.title ?? path,
 		status_code:
 			link.status_code ??
 			domain.link_defaults.status_code ??
