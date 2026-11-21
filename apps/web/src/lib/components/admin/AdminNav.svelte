@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
+	import IconHeartbeat from 'virtual:icons/ph/heartbeat';
 	import { authClient } from '#lib/auth-client.js';
 	import ThemeToggle from '../ThemeToggle.svelte';
 
@@ -53,9 +54,14 @@
 				>{title}</a
 			>
 			<a
+				class="ui-button health-link"
 				href="/admin/health"
-				aria-current={page.url.pathname === '/admin/health' ? 'page' : undefined}>Health</a
+				aria-label="Health"
+				title="Health"
+				aria-current={page.url.pathname === '/admin/health' ? 'page' : undefined}
 			>
+				<IconHeartbeat aria-hidden="true" focusable="false" />
+			</a>
 		</nav>
 		<div class="nav-actions">
 			<ThemeToggle />
@@ -111,6 +117,12 @@
 		color: var(--color-text);
 		font-weight: 600;
 		text-decoration: none;
+	}
+
+	.health-link {
+		width: var(--control-min-height);
+		padding: 0;
+		font-size: 1.25rem;
 	}
 
 	.nav-actions {
