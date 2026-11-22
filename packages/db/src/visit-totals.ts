@@ -1,4 +1,9 @@
-import { checkReportScope, type ReportScope, type VisitTotals } from '@goto/analytics';
+import {
+	checkReportScope,
+	zeroVisitTotals,
+	type ReportScope,
+	type VisitTotals
+} from '@goto/analytics';
 import { sql, type Kysely } from 'kysely';
 import type { Database } from './types.js';
 
@@ -40,6 +45,34 @@ export async function readVisitTotals(
 		.executeTakeFirst();
 	if (!row) return { validVisits: 0, invalidVisits: 0 };
 	return checkTotals({ validVisits: row.valid_visits, invalidVisits: row.invalid_visits });
+}
+
+export async function readOverviewVisitTotals(
+	db: Kysely<Database>,
+	domains: readonly string[]
+): Promise<{ overview: VisitTotals; byDomain: Map<string, VisitTotals> }> {
+	for (const domain of domains) checkReportScope({ kind: 'domain', domain });
+	const rows = await db
+		.selectFrom('visit_totals')
+		.select(['scope_kind', 'domain', 'valid_visits', 'invalid_visits'])
+		.where(
+			sql<boolean>`scope_kind = 'overview' OR (
+			scope_kind = 'domain' AND domain IN (SELECT value FROM json_each(${JSON.stringify(domains)}))
+		)`
+		)
+		.execute();
+
+	let overview = zeroVisitTotals();
+	const byDomain = new Map(domains.map((domain) => [domain, zeroVisitTotals()]));
+	for (const row of rows) {
+		const totals = checkTotals({
+			validVisits: row.valid_visits,
+			invalidVisits: row.invalid_visits
+		});
+		if (row.scope_kind === 'overview') overview = totals;
+		else if (row.domain !== null) byDomain.set(row.domain, totals);
+	}
+	return { overview, byDomain };
 }
 
 export async function readLinkVisitCounts(

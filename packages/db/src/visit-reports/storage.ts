@@ -84,28 +84,6 @@ export async function clearDailyVisitStatistics(db: Kysely<Database>): Promise<v
 	await db.deleteFrom('visit_daily_statistics').execute();
 }
 
-export interface OverviewVisitDetails {
-	overview: VisitDetails;
-	domains: Array<{ domain: string; details: VisitDetails }>;
-}
-
-export async function readOverviewVisitDetails(
-	db: Kysely<Database>,
-	currentDomains: string[],
-	period: ReportPeriod
-): Promise<OverviewVisitDetails> {
-	const domains = [...new Set(currentDomains)];
-	const [overview, ...details] = await readCurrentDetails(
-		db,
-		[{ kind: 'overview' }, ...domains.map((domain) => ({ kind: 'domain' as const, domain }))],
-		period
-	);
-	return {
-		overview: overview!,
-		domains: domains.map((domain, index) => ({ domain, details: details[index]! }))
-	};
-}
-
 export interface DomainVisitDetails {
 	domain: VisitDetails;
 	links: Array<{ path: string; details: VisitDetails }>;

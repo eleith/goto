@@ -1,269 +1,87 @@
 import { loadConfig } from '@goto/config';
-import {
-	createVisitPeriod,
-	visitDays,
-	type ReportPeriod,
-	type ReportScope,
-	type VisitDetails
-} from '@goto/analytics';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { prepareSnapshot } from '#lib/server/snapshot.js';
-import { readOverviewDetails } from '#lib/server/visits/reports.js';
+import { readLastActivity } from '#lib/server/visits/reports.js';
+import { readOverviewLifetimeVisitTotals } from '#lib/server/visits/totals.js';
 import { load } from './+page.server.js';
 
-vi.mock('#lib/server/visits/reports.js', () => ({ readOverviewDetails: vi.fn() }));
+vi.mock('#lib/server/visits/reports.js', () => ({ readLastActivity: vi.fn() }));
+vi.mock('#lib/server/visits/totals.js', () => ({ readOverviewLifetimeVisitTotals: vi.fn() }));
 beforeEach(() => vi.resetAllMocks());
 
 const domain = 'go.example.test';
 const emptyDomain = 'empty.example.test';
-const newDomain = 'new.example.test';
 
-function request(retention_months = 3) {
-	const prepared = loadConfig(
-		{
-			auth: { credentials: { username: 'test', password: 'overview-test-password' } },
-			analytics: { retention_months },
-			domains: {
-				[domain]: {
-					links: {
-						'/docs': { url: 'https://example.test/docs' },
-						'/disabled': { url: 'https://example.test/disabled', enabled: false }
-					}
-				},
-				[emptyDomain]: { root: { url: 'https://example.test/' }, links: {} },
-				[newDomain]: { links: { '/new': { url: 'https://example.test/new' } } }
-			}
-		},
-		{ env: {} }
-	);
-	return { locals: { snapshot: prepareSnapshot(prepared) } } as Parameters<typeof load>[0];
-}
-
-function details(
-	scope: ReportScope,
-	period: ReportPeriod,
-	validVisits: (day: string) => number
-): VisitDetails {
-	const daily = visitDays(period).map((day) => ({
-		...day,
-		validVisits: validVisits(day.start.slice(0, 10)),
-		invalidVisits: 1
-	}));
-	const browserOsCounts = daily
-		.filter(({ validVisits, invalidVisits }) => validVisits > 0 || invalidVisits > 0)
-		.map(({ start, validVisits, invalidVisits }) => ({
-			day: start.slice(0, 10),
-			name: 'Other',
-			validVisits,
-			invalidVisits
-		}));
-	return {
-		version: 5,
-		lastActivityAt: new Date(Date.parse(period.asOf) - 60_000).toISOString(),
-		scope,
-		period,
-		daily,
-		browsers: browserOsCounts,
-		operatingSystems: browserOsCounts,
-		acceptedLanguages: browserOsCounts.flatMap((row) => [
-			{ ...row, name: 'en' },
-			{ ...row, name: 'fr' }
-		])
-	};
-}
-
-test('projects compact global window counts while inventory stays current and history stays retained', async () => {
-	const period = createVisitPeriod(3, Date.parse('2026-06-15T12:00:00.000Z'));
-	const overviewCounts: Record<string, number> = {
-		'2026-03-17': 13,
-		'2026-04-01': 11,
-		'2026-05-16': 7,
-		'2026-05-17': 5,
-		'2026-06-08': 3,
-		'2026-06-09': 2,
-		'2026-06-15': 1
-	};
-	const domainCounts: Record<string, number> = {
-		'2026-03-17': 4,
-		'2026-05-16': 3,
-		'2026-05-17': 2,
-		'2026-06-08': 1,
-		'2026-06-09': 1,
-		'2026-06-15': 1
-	};
-	const overview = details({ kind: 'overview' }, period, (day) => overviewCounts[day] ?? 0);
-	const current = details({ kind: 'domain', domain }, period, (day) => domainCounts[day] ?? 0);
-	const empty = details({ kind: 'domain', domain: emptyDomain }, period, () => 0);
-	const newDomainDetails: VisitDetails = {
-		...empty,
-		scope: { kind: 'domain', domain: newDomain },
-		lastActivityAt: null,
-		daily: empty.daily.map((day) => ({ ...day, validVisits: 0, invalidVisits: 0 })),
-		browsers: [],
-		operatingSystems: [],
-		acceptedLanguages: []
-	};
-	vi.mocked(readOverviewDetails).mockResolvedValue({
-		overview,
-		domains: [
-			{ domain, details: current },
-			{ domain: emptyDomain, details: empty },
-			{ domain: newDomain, details: newDomainDetails }
-		]
-	});
-	const data = await load(request());
-	expect(readOverviewDetails).toHaveBeenCalledExactlyOnceWith(expect.any(Object), [
-		domain,
-		emptyDomain,
-		newDomain
-	]);
-	expect(data).toEqual({
-		collectionEnabled: true,
-		available: true,
-		retentionMonths: 3,
-		lastActivityAt: Date.parse(overview.lastActivityAt!),
-		domainCount: 3,
-		linkCount: 3,
-		timeframes: ['7d', '30d', 'all'],
-		countsByTimeframe: {
-			'7d': { validVisits: 3, invalidVisits: 7 },
-			'30d': { validVisits: 11, invalidVisits: 30 },
-			all: { validVisits: 42, invalidVisits: 91 }
-		},
-		browserVisitsByTimeframe: {
-			'7d': [{ name: 'Other', visits: 3 }],
-			'30d': [{ name: 'Other', visits: 11 }],
-			all: [{ name: 'Other', visits: 42 }]
-		},
-		operatingSystemVisitsByTimeframe: {
-			'7d': [{ name: 'Other', visits: 3 }],
-			'30d': [{ name: 'Other', visits: 11 }],
-			all: [{ name: 'Other', visits: 42 }]
-		},
-		acceptedLanguageVisitsByTimeframe: {
-			'7d': [
-				{ name: 'en', visits: 3 },
-				{ name: 'fr', visits: 3 }
-			],
-			'30d': [
-				{ name: 'en', visits: 11 },
-				{ name: 'fr', visits: 11 }
-			],
-			all: [
-				{ name: 'en', visits: 42 },
-				{ name: 'fr', visits: 42 }
-			]
-		},
-		chart: { daily: overview.daily, period },
-		domains: [
+function request(retentionMonths: 0 | 3) {
+	const snapshot = prepareSnapshot(
+		loadConfig(
 			{
-				domain,
-				linkCount: 2,
-				countsByTimeframe: {
-					'7d': { validVisits: 2, invalidVisits: 7 },
-					'30d': { validVisits: 5, invalidVisits: 30 },
-					all: { validVisits: 12, invalidVisits: 91 }
-				},
-				href: '/admin/domains/go.example.test'
+				auth: { credentials: { username: 'test', password: 'overview-test-password' } },
+				analytics: { retention_months: retentionMonths },
+				domains: {
+					[domain]: {
+						links: {
+							'/docs': { url: 'https://example.test/docs' },
+							'/disabled': { url: 'https://example.test/disabled', enabled: false }
+						}
+					},
+					[emptyDomain]: { root: { url: 'https://example.test/' }, links: {} }
+				}
 			},
+			{ env: {} }
+		)
+	);
+	return { locals: { snapshot } } as Parameters<typeof load>[0];
+}
+
+test('shows all-time totals and current inventory even when detailed analytics is disabled', async () => {
+	vi.mocked(readOverviewLifetimeVisitTotals).mockResolvedValueOnce({
+		overview: { validVisits: 40, invalidVisits: 7 },
+		byDomain: new Map([
+			[domain, { validVisits: 12, invalidVisits: 2 }],
+			[emptyDomain, { validVisits: 0, invalidVisits: 0 }]
+		])
+	});
+
+	const data = await load(request(0));
+
+	expect(readOverviewLifetimeVisitTotals).toHaveBeenCalledExactlyOnceWith(expect.any(Object), [
+		domain,
+		emptyDomain
+	]);
+	expect(readLastActivity).not.toHaveBeenCalled();
+	expect(data).toEqual({
+		analyticsEnabled: false,
+		lastActivityAt: null,
+		domainCount: 2,
+		linkCount: 2,
+		totalVisits: 40,
+		domains: [
+			{ domain, linkCount: 2, totalVisits: 12, href: '/admin/domains/go.example.test' },
 			{
 				domain: emptyDomain,
 				linkCount: 0,
-				countsByTimeframe: {
-					'7d': { validVisits: 0, invalidVisits: 7 },
-					'30d': { validVisits: 0, invalidVisits: 30 },
-					all: { validVisits: 0, invalidVisits: 91 }
-				},
+				totalVisits: 0,
 				href: '/admin/domains/empty.example.test'
-			},
-			{
-				domain: newDomain,
-				linkCount: 1,
-				countsByTimeframe: {
-					'7d': { validVisits: 0, invalidVisits: 0 },
-					'30d': { validVisits: 0, invalidVisits: 0 },
-					all: { validVisits: 0, invalidVisits: 0 }
-				},
-				href: '/admin/domains/new.example.test'
 			}
 		]
 	});
 });
 
-test.each([
-	{ months: 9 as const, retainedDays: 270 },
-	{ months: 12 as const, retainedDays: 360 }
-])(
-	'offers four windows for $months months anchored to the latest included day',
-	async ({ months, retainedDays }) => {
-		const period = createVisitPeriod(months, Date.parse('2026-03-01T00:00:00.000Z'));
-		const overview = details({ kind: 'overview' }, period, () => 1);
-		vi.mocked(readOverviewDetails).mockResolvedValue({
-			overview,
-			domains: [domain, emptyDomain, newDomain].map((domain) => ({
-				domain,
-				details: {
-					...overview,
-					scope: { kind: 'domain' as const, domain },
-					lastActivityAt: null,
-					daily: overview.daily.map((day) => ({ ...day, validVisits: 0, invalidVisits: 0 })),
-					browsers: [],
-					operatingSystems: [],
-					acceptedLanguages: []
-				}
-			}))
-		});
-		const data = await load(request(months));
-		if (!data) throw new Error('Missing overview page');
-		expect(data.timeframes).toEqual(['7d', '30d', '90d', 'all']);
-		expect(data.countsByTimeframe).toEqual({
-			'7d': { validVisits: 7, invalidVisits: 7 },
-			'30d': { validVisits: 30, invalidVisits: 30 },
-			'90d': { validVisits: 90, invalidVisits: 90 },
-			all: { validVisits: retainedDays, invalidVisits: retainedDays }
-		});
-		expect(data.domains.map((row) => row.countsByTimeframe)).toEqual(
-			Array.from({ length: 3 }, () => ({
-				'7d': { validVisits: 0, invalidVisits: 0 },
-				'30d': { validVisits: 0, invalidVisits: 0 },
-				'90d': { validVisits: 0, invalidVisits: 0 },
-				all: { validVisits: 0, invalidVisits: 0 }
-			}))
-		);
-	}
-);
+test('keeps the inventory and last activity when stored totals are unavailable', async () => {
+	const lastActivityAt = '2026-06-15T12:00:00.000Z';
+	vi.mocked(readOverviewLifetimeVisitTotals).mockResolvedValueOnce(null);
+	vi.mocked(readLastActivity).mockResolvedValueOnce({ available: true, lastActivityAt });
 
-test('unavailable storage keeps inventory usable without substituting zero counts', async () => {
-	vi.mocked(readOverviewDetails).mockResolvedValue(null);
-	const data = await load(request());
-	if (!data) throw new Error('Missing unavailable page');
-	expect(data.available).toBe(false);
-	expect(data.collectionEnabled).toBe(true);
-	expect(data.retentionMonths).toBe(3);
-	expect(data.domainCount).toBe(3);
-	expect(data.linkCount).toBe(3);
-	expect(data.lastActivityAt).toBeNull();
-	expect(data.browserVisitsByTimeframe).toEqual({});
-	expect(data.operatingSystemVisitsByTimeframe).toEqual({});
-	expect(data.chart).toBeNull();
-	expect(data.countsByTimeframe).toEqual({});
-	expect(data.acceptedLanguageVisitsByTimeframe).toEqual({});
-	expect(data.domains.map((row) => row.countsByTimeframe)).toEqual([{}, {}, {}]);
-});
+	const data = await load(request(3));
 
-test('disabled analytics keeps inventory while skipping reports', async () => {
-	const data = await load(request(0));
-	if (!data) throw new Error('Missing disabled page');
-	expect(data.collectionEnabled).toBe(false);
-	expect(data.available).toBe(false);
-	expect(data.domainCount).toBe(3);
-	expect(data.linkCount).toBe(3);
-	expect(data.browserVisitsByTimeframe).toEqual({});
-	expect(data.operatingSystemVisitsByTimeframe).toEqual({});
-	expect(data.timeframes).toEqual([]);
-	expect(data.countsByTimeframe).toEqual({});
-	expect(data.acceptedLanguageVisitsByTimeframe).toEqual({});
-	expect(data.chart).toBeNull();
-	expect(data.domains.map((row) => row.countsByTimeframe)).toEqual([{}, {}, {}]);
-	expect(readOverviewDetails).not.toHaveBeenCalled();
+	expect(data).toMatchObject({
+		analyticsEnabled: true,
+		totalVisits: null,
+		lastActivityAt: Date.parse(lastActivityAt)
+	});
+	expect(data.domains).toMatchObject([
+		{ domain, linkCount: 2, totalVisits: null },
+		{ domain: emptyDomain, linkCount: 0, totalVisits: null }
+	]);
 });

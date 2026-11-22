@@ -2,37 +2,16 @@ import { createVisitPeriod, type ReportScope, type VisitDetails } from '@goto/an
 import type { GotoConfiguration } from '@goto/config';
 import { openDb } from '@goto/db';
 import {
-	readOverviewVisitDetails,
 	readDomainVisitDetails,
 	readLinkVisitDetails,
 	readVisitDetails as readStoredDetails,
 	readLastVisitActivity,
-	type OverviewVisitDetails,
 	type DomainVisitDetails,
 	type LinkVisitDetails
 } from '@goto/db/visit-reports';
 import type { Immutable } from '../snapshot.js';
 
 type ReportConfiguration = Immutable<Pick<GotoConfiguration, 'database' | 'analytics'>>;
-
-export async function readOverviewDetails(
-	configuration: ReportConfiguration,
-	currentDomains: string[]
-): Promise<OverviewVisitDetails | null> {
-	const months = configuration.analytics.retention_months;
-	if (months === 0) return null;
-	let db: Awaited<ReturnType<typeof openDb>> | undefined;
-	try {
-		db = await openDb(configuration.database.path, { readOnly: true });
-		const period = createVisitPeriod(months, Date.now());
-		return await readOverviewVisitDetails(db, currentDomains, period);
-	} catch {
-		warnUnavailable();
-		return null;
-	} finally {
-		await db?.destroy().catch(warnUnavailable);
-	}
-}
 
 export async function readDomainDetails(
 	configuration: ReportConfiguration,

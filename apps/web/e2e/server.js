@@ -101,7 +101,13 @@ async function seedVisits() {
 				outcome: 'valid',
 				visited_at: Date.now() - 45 * 86_400_000
 			},
-			{ domain: 'tiny.example.org', path: '/docs', outcome: 'valid', accept_language: 'en' }
+			{ domain: 'tiny.example.org', path: '/docs', outcome: 'valid', accept_language: 'en' },
+			{
+				domain: 'retired.example.org',
+				path: '/docs',
+				outcome: 'valid',
+				visited_at: Date.now() - 120 * 86_400_000
+			}
 		];
 		for (const visit of visits) await insertVisit(db, { ...common, ...visit });
 	} finally {

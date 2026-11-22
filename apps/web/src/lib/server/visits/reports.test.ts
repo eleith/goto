@@ -13,7 +13,6 @@ import { openDb, runMigrations } from '@goto/db';
 import { addDailyVisitStatistics } from '@goto/db/visit-reports';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import {
-	readOverviewDetails,
 	readDomainDetails,
 	readLinkDetails,
 	readVisitDetails,
@@ -100,16 +99,7 @@ test('reads daily output and derives zero scopes in a window from current time a
 		}
 		const close = vi.spyOn(DatabaseSync.prototype, 'close');
 		try {
-			expect(await readOverviewDetails(configuration, [domain, 'new.example.test'])).toEqual({
-				overview: details,
-				domains: [
-					{ domain, details: domainDetails },
-					{
-						domain: 'new.example.test',
-						details: { ...emptyDetails, scope: { kind: 'domain', domain: 'new.example.test' } }
-					}
-				]
-			});
+			expect(await readVisitDetails(configuration, details.scope)).toEqual(details);
 			expect(close).toHaveBeenCalledTimes(1);
 			expect(await readDomainDetails(configuration, domain, ['/docs', '/new'])).toEqual({
 				domain: domainDetails,
@@ -140,9 +130,7 @@ test('reads daily output and derives zero scopes in a window from current time a
 			expect(close).toHaveBeenCalledTimes(5);
 			configuration.analytics.retention_months = 9;
 			const longerPeriod = createVisitPeriod(9, Date.now());
-			expect((await readOverviewDetails(configuration, [domain]))?.overview.period).toEqual(
-				longerPeriod
-			);
+			expect((await readVisitDetails(configuration, details.scope))?.period).toEqual(longerPeriod);
 			expect((await readDomainDetails(configuration, domain, ['/docs']))?.domain.period).toEqual(
 				longerPeriod
 			);
@@ -205,7 +193,7 @@ test('corrupt daily histograms are unavailable, sanitized and closed; activity u
 		}
 		const close = vi.spyOn(DatabaseSync.prototype, 'close');
 		try {
-			expect(await readOverviewDetails(configuration, ['go.example.test'])).toBeNull();
+			expect(await readVisitDetails(configuration, { kind: 'overview' })).toBeNull();
 			expect(close).toHaveBeenCalledTimes(1);
 			expect(await readDomainDetails(configuration, 'go.example.test', ['/docs'])).toBeNull();
 			expect(close).toHaveBeenCalledTimes(2);
@@ -251,7 +239,7 @@ test('a missing daily table remains unavailable without readonly schema repair',
 	try {
 		const db = await openDb(configuration.database.path);
 		await db.destroy();
-		expect(await readOverviewDetails(configuration, ['go.example.test'])).toBeNull();
+		expect(await readVisitDetails(configuration, { kind: 'overview' })).toBeNull();
 		expect(await readLastActivity(configuration)).toEqual({
 			available: false,
 			lastActivityAt: null
@@ -286,14 +274,7 @@ test('enabled collection fails safely without creating missing storage', async (
 			},
 			analytics: { retention_months: 3 as const }
 		};
-		expect(
-			await readVisitDetails(configuration, {
-				kind: 'link',
-				domain: 'go.example.test',
-				path: '/docs'
-			})
-		).toBeNull();
-		expect(await readOverviewDetails(configuration, ['go.example.test'])).toBeNull();
+		expect(await readVisitDetails(configuration, { kind: 'overview' })).toBeNull();
 		expect(await readDomainDetails(configuration, 'go.example.test', ['/docs'])).toBeNull();
 		expect(
 			await readLinkDetails(configuration, [{ domain: 'go.example.test', path: '/docs' }])
@@ -303,7 +284,7 @@ test('enabled collection fails safely without creating missing storage', async (
 			lastActivityAt: null
 		});
 		expect(warning.mock.calls).toEqual(
-			Array.from({ length: 5 }, () => ['Prepared visit reports unavailable'])
+			Array.from({ length: 4 }, () => ['Prepared visit reports unavailable'])
 		);
 		await expect(access(missing)).rejects.toMatchObject({ code: 'ENOENT' });
 	} finally {
@@ -319,14 +300,7 @@ test('disabled collection does not attempt to open missing storage', async () =>
 			database: { path: '/missing/not-used.sqlite', worker_path: '/missing/worker.sqlite' },
 			analytics: { retention_months: 0 as const }
 		};
-		expect(
-			await readVisitDetails(configuration, {
-				kind: 'link',
-				domain: 'go.example.test',
-				path: '/docs'
-			})
-		).toBeNull();
-		expect(await readOverviewDetails(configuration, ['go.example.test'])).toBeNull();
+		expect(await readVisitDetails(configuration, { kind: 'overview' })).toBeNull();
 		expect(await readDomainDetails(configuration, 'go.example.test', ['/docs'])).toBeNull();
 		expect(
 			await readLinkDetails(configuration, [{ domain: 'go.example.test', path: '/docs' }])

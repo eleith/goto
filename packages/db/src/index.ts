@@ -7,7 +7,12 @@ import type { Database } from './types.js';
 
 export { runMigrations } from './migrate.js';
 export { insertVisit, purgeVisits } from './visits.js';
-export { addVisitTotals, readVisitTotals, readLinkVisitCounts } from './visit-totals.js';
+export {
+	addVisitTotals,
+	readVisitTotals,
+	readOverviewVisitTotals,
+	readLinkVisitCounts
+} from './visit-totals.js';
 export {
 	captureVisitBoundary,
 	processVisitBatch,

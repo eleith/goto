@@ -16,7 +16,6 @@ import {
 	clearDailyVisitStatistics,
 	deleteExpiredDailyStatistics,
 	readVisitDetails,
-	readOverviewVisitDetails,
 	readDomainVisitDetails,
 	readLinkVisitDetails,
 	readLastVisitActivity
@@ -242,47 +241,6 @@ test('daily writes and raw processing share caller rollback, with no independent
 	expect(await db.selectFrom('visits').select('processed').execute()).toEqual([{ processed: 0 }]);
 });
 
-test('overview selects only current domains in one SQL read and derives zeros for new scopes', async () => {
-	const overview = daily(overviewScope, 8, 2);
-	const current = daily(domainScope, 3, 1);
-	await add(
-		overview,
-		current,
-		daily(rootScope),
-		daily({ kind: 'domain', domain: 'removed.example.test' })
-	);
-	await db
-		.updateTable('visit_daily_statistics')
-		.set({ browsers_json: '["private malformed cache"]' })
-		.where(({ or, eb }) =>
-			or([eb('scope_kind', '=', 'link'), eb('domain', '=', 'removed.example.test')])
-		)
-		.execute();
-	const before = await db.selectFrom('visit_daily_statistics').selectAll().execute();
-	const statements = vi.spyOn(DatabaseSync.prototype, 'prepare');
-	try {
-		expect(
-			await readOverviewVisitDetails(db, [domain, domain, 'new.example.test'], period)
-		).toEqual({
-			overview: projectVisitDetails(overviewScope, period, [overview]),
-			domains: [
-				{ domain, details: projectVisitDetails(domainScope, period, [current]) },
-				{
-					domain: 'new.example.test',
-					details: projectVisitDetails({ kind: 'domain', domain: 'new.example.test' }, period, [])
-				}
-			]
-		});
-		expect(statements).toHaveBeenCalledTimes(1);
-		const query = statements.mock.calls[0]![0];
-		expect(query).toContain('domain IN');
-		expect(query).not.toMatch(/\bvisits\b|\bjoin\b|\bsum\s*\(/i);
-	} finally {
-		statements.mockRestore();
-	}
-	expect(await db.selectFrom('visit_daily_statistics').selectAll().execute()).toEqual(before);
-});
-
 test('domain and selected-link readers bind exact path/domain pairs, include Root, and ignore distractors', async () => {
 	const path = "/' OR 1=1 --";
 	const link = { kind: 'link', domain, path } as const;
@@ -321,9 +279,12 @@ test('domain and selected-link readers bind exact path/domain pairs, include Roo
 });
 
 test('successful empty reads give zeros/activity null; view time advances without writes and zero clears derived rows', async () => {
-	const empty = await readOverviewVisitDetails(db, [domain], period);
-	expect(empty.overview).toEqual(projectVisitDetails(overviewScope, period, []));
-	expect(empty.domains[0]!.details).toEqual(projectVisitDetails(domainScope, period, []));
+	expect(await readVisitDetails(db, overviewScope, period)).toEqual(
+		projectVisitDetails(overviewScope, period, [])
+	);
+	expect(await readVisitDetails(db, domainScope, period)).toEqual(
+		projectVisitDetails(domainScope, period, [])
+	);
 	expect(await readLastVisitActivity(db, period)).toBeNull();
 	await add(daily(overviewScope), daily(domainScope, 1, 0, 11));
 	const before = await db.selectFrom('visit_daily_statistics').selectAll().execute();

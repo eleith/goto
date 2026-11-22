@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, test } from 'vitest';
 import {
 	addVisitTotals,
 	openDb,
+	readOverviewVisitTotals,
 	readVisitTotals,
 	readLinkVisitCounts,
 	runMigrations,
@@ -39,6 +40,26 @@ test('adds numeric totals per scope inside a caller transaction and reads missin
 	expect(await readVisitTotals(db, { ...link, path: '/' })).toEqual({
 		validVisits: 0,
 		invalidVisits: 0
+	});
+});
+
+test('reads the lifetime overview and only requested domain rows, filling absent domains with zero', async () => {
+	const formerDomain = { kind: 'domain' as const, domain: 'old.example.test' };
+	await db.transaction().execute((transaction) =>
+		addVisitTotals(transaction, [
+			{ scope: overview, totals: { validVisits: 6, invalidVisits: 2 } },
+			{ scope: domain, totals: { validVisits: 4, invalidVisits: 1 } },
+			{ scope: formerDomain, totals: { validVisits: 2, invalidVisits: 1 } },
+			{ scope: link, totals: { validVisits: 1, invalidVisits: 0 } }
+		])
+	);
+
+	expect(await readOverviewVisitTotals(db, [domain.domain, 'empty.example.test'])).toEqual({
+		overview: { validVisits: 6, invalidVisits: 2 },
+		byDomain: new Map([
+			[domain.domain, { validVisits: 4, invalidVisits: 1 }],
+			['empty.example.test', { validVisits: 0, invalidVisits: 0 }]
+		])
 	});
 });
 

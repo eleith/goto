@@ -1,4 +1,3 @@
-import type { Request } from '@playwright/test';
 import { expect, test } from './support/test.ts';
 
 test.use({ withWorker: true });
@@ -13,11 +12,6 @@ test('shared credentials protect admin pages and sign-out removes access', async
 	appServer
 }) => {
 	await page.setViewportSize({ width: 1280, height: 720 });
-	const navigationWarnings: string[] = [];
-	page.on('console', (message) => {
-		const text = message.text();
-		if (text.includes('push_state_deprecated')) navigationWarnings.push(text);
-	});
 	const root = await request.get('/', { maxRedirects: 0 });
 	expect(root.status()).toBe(404);
 	expect(root.headers().location).toBeUndefined();
@@ -45,109 +39,29 @@ test('shared credentials protect admin pages and sign-out removes access', async
 	await page.getByLabel('Password', { exact: true }).fill('e2e-only-password');
 	await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 	await expect(page.getByRole('heading', { name: 'Overview', exact: true })).toBeVisible();
-	const visitsValue = page
-		.getByRole('region', { name: 'Visits', exact: true })
-		.locator('.admin-stat-value');
 	await expect(page.getByRole('region', { name: 'Domains', exact: true })).toContainText('2');
-	await expect(visitsValue).toHaveText('3');
-	const acceptedLanguages = page.getByRole('region', { name: 'Accepted languages', exact: true });
-	await expect(acceptedLanguages.getByRole('columnheader')).toHaveText([
-		'Language',
-		'Visits',
-		'Share'
-	]);
-	await expect(
-		acceptedLanguages.getByRole('rowheader', { name: 'Other', exact: true })
-	).toBeVisible();
-	const browsers = page.getByRole('region', { name: 'Browsers', exact: true });
-	const operatingSystems = page.getByRole('region', { name: 'Operating systems', exact: true });
-	await expect(browsers).toBeVisible();
-	await expect(operatingSystems).toBeVisible();
-	await expect(page.locator('.admin-cards .admin-stat-label')).toHaveText([
+	const summary = page.getByRole('region', { name: 'Summary', exact: true });
+	await expect(summary.locator('.admin-stat-label')).toHaveText([
 		'Domains',
 		'Links',
-		'Visits',
-		'Retention'
+		'Total Visits'
 	]);
+	const totalVisits = summary.getByRole('region', { name: 'Total Visits', exact: true });
+	await expect(totalVisits.getByText('5', { exact: true })).toBeVisible();
+	await expect(page.getByRole('region', { name: 'Visits over time', exact: true })).toHaveCount(0);
+	await expect(page.getByRole('region', { name: 'Accepted languages', exact: true })).toHaveCount(
+		0
+	);
 	const heading = page.locator('.admin-heading');
 	await expect(heading.locator('.admin-title > h1 + time')).toBeVisible();
 	const timeframe = heading.getByRole('group', { name: 'Timeframe', exact: true });
-	await expect(timeframe.getByRole('button')).toHaveText(['7 days', '30 days', '90 days']);
-	await expect(timeframe.getByRole('button', { name: '30 days', exact: true })).toHaveAttribute(
-		'aria-pressed',
-		'true'
-	);
-	const trend = page.getByRole('region', { name: 'Visits over time', exact: true });
-	const graph = trend.getByRole('img');
-	await expect(graph).toHaveAttribute('aria-busy', 'false');
-	const chartTable = trend.getByRole('table');
-	await expect(chartTable).toBeVisible();
-	await expect(chartTable).toHaveAccessibleName('Visits');
-	await expect(chartTable.getByRole('columnheader')).toHaveText(['Period (UTC)', 'Visits']);
-	await expect(chartTable.getByRole('row', { name: 'Total 3', exact: true })).toBeVisible();
-	await expect(chartTable).not.toContainText('(partial)');
-	await expect(trend.getByRole('region', { name: 'Visit data', exact: true })).toHaveAttribute(
-		'tabindex',
-		'0'
-	);
-	await expect(graph).toBeVisible();
-	await expect(graph).toHaveAccessibleName(/^Visits by day\. Total: 3\./);
+	await expect(timeframe).toHaveCount(0);
 	const domainLink = page.getByRole('link', { name: 'go.example.org', exact: true });
 	const domainRow = page.getByRole('listitem').filter({ has: domainLink });
-	const domainCounts = domainRow.locator('.admin-inventory-number');
-	await expect(domainCounts).toHaveText(['6', '2']);
-	const selectionRequests: string[] = [];
-	const recordSelectionRequest = (request: Request) => {
-		const type = request.resourceType();
-		if (type === 'document' || type === 'fetch' || type === 'xhr') {
-			selectionRequests.push(request.url());
-		}
-	};
-	page.on('request', recordSelectionRequest);
-	await timeframe.getByRole('button', { name: '7 days', exact: true }).click();
-	await expect(page).toHaveURL(`${appServer.origin}/admin?period=7d`);
-	await expect(timeframe.getByRole('button', { name: '7 days', exact: true })).toHaveAttribute(
-		'aria-pressed',
-		'true'
-	);
-	await expect(visitsValue).toHaveText('2');
-	await expect(domainCounts).toHaveText(['6', '1']);
-	await expect(graph).toHaveAccessibleName(/^Visits by day\. Total: 2\./);
-	await timeframe.getByRole('button', { name: '90 days', exact: true }).click();
-	await expect(timeframe.getByRole('button', { name: '90 days', exact: true })).toHaveAttribute(
-		'aria-pressed',
-		'true'
-	);
-	await expect(visitsValue).toHaveText('4');
-	await expect(domainCounts).toHaveText(['6', '3']);
-	await expect(graph).toHaveAccessibleName(/^Visits by week\. Total: 4\./);
-	await page.goBack();
-	await expect(timeframe.getByRole('button', { name: '7 days', exact: true })).toHaveAttribute(
-		'aria-pressed',
-		'true'
-	);
-	await expect(visitsValue).toHaveText('2');
-	await expect(domainCounts).toHaveText(['6', '1']);
-	await expect(graph).toHaveAccessibleName(/^Visits by day\. Total: 2\./);
-	await page.goForward();
-	await expect(timeframe.getByRole('button', { name: '90 days', exact: true })).toHaveAttribute(
-		'aria-pressed',
-		'true'
-	);
-	await expect(visitsValue).toHaveText('4');
-	await expect(domainCounts).toHaveText(['6', '3']);
-	await expect(graph).toHaveAccessibleName(/^Visits by week\. Total: 4\./);
-	page.off('request', recordSelectionRequest);
-	expect(selectionRequests).toEqual([]);
-	const overviewResponse = await page.reload();
+	await expect(domainRow.locator('.admin-inventory-number')).toHaveText(['6', '3']);
+	const overviewResponse = await page.goto(`${appServer.origin}/admin?period=7d`);
 	expect(overviewResponse?.headers()['cache-control']).toBe('private, no-store');
-	await expect(timeframe.getByRole('button', { name: '90 days', exact: true })).toHaveAttribute(
-		'aria-pressed',
-		'true'
-	);
-	await expect(visitsValue).toHaveText('4');
-	await expect(graph).toHaveAccessibleName(/^Visits by week\. Total: 4\./);
-	expect(navigationWarnings).toEqual([]);
+	await expect(totalVisits.getByText('5', { exact: true })).toBeVisible();
 	const adminNav = page.getByRole('navigation', { name: 'Administration', exact: true });
 	const overviewLink = adminNav.getByRole('link', { name: 'GoTo', exact: true });
 	await expect(adminNav.getByText('GoTo', { exact: true })).toBeVisible();
@@ -157,7 +71,21 @@ test('shared credentials protect admin pages and sign-out removes access', async
 	const context = page.locator('.admin-context');
 	await expect(context).toHaveCount(0);
 	await expect(page).toHaveTitle('Domain — go.example.org — GoTo');
-	await expect(acceptedLanguages).toBeVisible();
+	await timeframe.getByRole('button', { name: '90 days', exact: true }).click();
+	const visitsValue = page
+		.getByRole('region', { name: 'Visits', exact: true })
+		.locator('.admin-stat-value');
+	const trend = page.getByRole('region', { name: 'Visits over time', exact: true });
+	const graph = trend.getByRole('img');
+	const chartTable = trend.getByRole('table');
+	const acceptedLanguages = page.getByRole('region', { name: 'Accepted languages', exact: true });
+	const browsers = page.getByRole('region', { name: 'Browsers', exact: true });
+	const operatingSystems = page.getByRole('region', { name: 'Operating systems', exact: true });
+	await expect(acceptedLanguages.getByRole('columnheader')).toHaveText([
+		'Language',
+		'Visits',
+		'Share'
+	]);
 	await expect(browsers.getByRole('columnheader')).toHaveText(['Browser', 'Visits', 'Share']);
 	await expect(operatingSystems.getByRole('columnheader')).toHaveText([
 		'Operating system',
@@ -380,6 +308,7 @@ test('shared credentials protect admin pages and sign-out removes access', async
 
 	await overviewLink.click();
 	await domainLink.click();
+	await timeframe.getByRole('button', { name: '90 days', exact: true }).click();
 	await page.getByRole('link', { name: '/a%2Fb', exact: true }).click();
 	await expect(page.getByRole('heading', { name: 'Link', exact: true })).toBeVisible();
 	await expect(page).toHaveTitle('Link — go.example.org/a%2Fb — GoTo');
@@ -528,7 +457,16 @@ test.describe('analytics disabled', () => {
 		await expect(page.getByRole('heading', { name: 'Overview', exact: true })).toBeVisible();
 		const adminNav = page.getByRole('navigation', { name: 'Administration', exact: true });
 		await expect(adminNav.getByRole('link', { name: 'Analytics', exact: true })).toHaveCount(0);
-		await expect(page.locator('.admin-cards .admin-stat-label')).toHaveText(['Domains', 'Links']);
+		await expect(page.locator('.admin-cards .admin-stat-label')).toHaveText([
+			'Domains',
+			'Links',
+			'Total Visits'
+		]);
+		await expect(
+			page
+				.getByRole('region', { name: 'Total Visits', exact: true })
+				.getByText('0', { exact: true })
+		).toBeVisible();
 		await expect(page.getByRole('group', { name: 'Timeframe', exact: true })).toHaveCount(0);
 		await expect(page.getByRole('region', { name: 'Browsers', exact: true })).toHaveCount(0);
 		await expect(page.getByRole('region', { name: 'Operating systems', exact: true })).toHaveCount(
@@ -544,8 +482,7 @@ test.describe('analytics disabled', () => {
 			page
 				.getByRole('region', { name: 'Domain inventory', exact: true })
 				.locator('.admin-inventory-heading > span')
-		).toHaveText(['Host', 'Links']);
-		await expect(page.getByRole('status')).toHaveText('Analytics disabled.');
+		).toHaveText(['Host', 'Links', 'Total Visits']);
 		await page.getByRole('link', { name: 'go.example.org', exact: true }).click();
 		await expect(page.locator('.admin-cards .admin-stat-label')).toHaveText(['Links']);
 		await expect(page.getByRole('group', { name: 'Timeframe', exact: true })).toHaveCount(0);
