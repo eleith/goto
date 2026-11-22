@@ -75,6 +75,40 @@ export async function readOverviewVisitTotals(
 	return { overview, byDomain };
 }
 
+export async function readDomainVisitTotals(
+	db: Kysely<Database>,
+	domain: string,
+	currentPaths: readonly string[]
+): Promise<{ domain: VisitTotals; byPath: Map<string, VisitTotals> }> {
+	checkReportScope({ kind: 'domain', domain });
+	const paths = ['/', ...currentPaths];
+	for (const path of paths) checkReportScope({ kind: 'link', domain, path });
+	const rows = await db
+		.selectFrom('visit_totals')
+		.select(['scope_kind', 'path', 'valid_visits', 'invalid_visits'])
+		.where('domain', '=', domain)
+		.where(
+			sql<boolean>`(
+				scope_kind = 'domain' OR (
+					scope_kind = 'link' AND path IN (SELECT value FROM json_each(${JSON.stringify(paths)}))
+				)
+			)`
+		)
+		.execute();
+
+	let domainTotals = zeroVisitTotals();
+	const byPath = new Map(paths.map((path) => [path, zeroVisitTotals()]));
+	for (const row of rows) {
+		const totals = checkTotals({
+			validVisits: row.valid_visits,
+			invalidVisits: row.invalid_visits
+		});
+		if (row.scope_kind === 'domain') domainTotals = totals;
+		else if (row.path !== null) byPath.set(row.path, totals);
+	}
+	return { domain: domainTotals, byPath };
+}
+
 export async function readLinkVisitCounts(
 	db: Kysely<Database>,
 	links: readonly { domain: string; path: string }[]

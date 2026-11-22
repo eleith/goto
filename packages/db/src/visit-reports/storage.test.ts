@@ -16,7 +16,6 @@ import {
 	clearDailyVisitStatistics,
 	deleteExpiredDailyStatistics,
 	readVisitDetails,
-	readDomainVisitDetails,
 	readLinkVisitDetails,
 	readLastVisitActivity
 } from './storage.js';
@@ -241,7 +240,7 @@ test('daily writes and raw processing share caller rollback, with no independent
 	expect(await db.selectFrom('visits').select('processed').execute()).toEqual([{ processed: 0 }]);
 });
 
-test('domain and selected-link readers bind exact path/domain pairs, include Root, and ignore distractors', async () => {
+test('selected-link readers bind exact path/domain pairs and ignore distractors', async () => {
 	const path = "/' OR 1=1 --";
 	const link = { kind: 'link', domain, path } as const;
 	const other = { kind: 'link', domain: 'other.example.test', path: '/faq' } as const;
@@ -260,10 +259,6 @@ test('domain and selected-link readers bind exact path/domain pairs, include Roo
 		.where('domain', '=', domain)
 		.where('path', '=', '/faq')
 		.execute();
-	const domainDetails = await readDomainVisitDetails(db, domain, [path, path, '/new'], period);
-	expect(domainDetails.links.map(({ path }) => path)).toEqual(['/', path, '/new']);
-	expect(domainDetails.links[0]!.details.daily[0]!.validVisits).toBe(1);
-	expect(domainDetails.links[2]!.details.lastActivityAt).toBeNull();
 	const selected = await readLinkVisitDetails(db, [link, other, link], period);
 	expect(
 		selected.links.map(({ domain, path, details }) => ({
@@ -293,6 +288,7 @@ test('successful empty reads give zeros/activity null; view time advances withou
 	expect(await readLastVisitActivity(db, nextPeriod)).toBeNull();
 	expect(await db.selectFrom('visit_daily_statistics').selectAll().execute()).toEqual(before);
 	expect(await readLastVisitActivity(db, period)).toBe('2026-04-01T10:00:00.000Z');
+	expect(await readLastVisitActivity(db, period, domainScope)).toBe('2026-04-01T11:00:00.000Z');
 	await clearDailyVisitStatistics(db);
 	expect((await readVisitDetails(db, overviewScope, period)).lastActivityAt).toBeNull();
 });

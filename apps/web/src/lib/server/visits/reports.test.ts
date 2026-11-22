@@ -12,12 +12,7 @@ import type { GotoConfiguration } from '@goto/config';
 import { openDb, runMigrations } from '@goto/db';
 import { addDailyVisitStatistics } from '@goto/db/visit-reports';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import {
-	readDomainDetails,
-	readLinkDetails,
-	readVisitDetails,
-	readLastActivity
-} from './reports.js';
+import { readLinkDetails, readVisitDetails, readLastActivity } from './reports.js';
 
 beforeEach(() => {
 	vi.useFakeTimers({ toFake: ['Date'] });
@@ -101,14 +96,7 @@ test('reads daily output and derives zero scopes in a window from current time a
 		try {
 			expect(await readVisitDetails(configuration, details.scope)).toEqual(details);
 			expect(close).toHaveBeenCalledTimes(1);
-			expect(await readDomainDetails(configuration, domain, ['/docs', '/new'])).toEqual({
-				domain: domainDetails,
-				links: [
-					{ path: '/', details: { ...emptyDetails, scope: { ...linkScope, path: '/' } } },
-					{ path: '/docs', details: linkDetails },
-					{ path: '/new', details: { ...emptyDetails, scope: { ...linkScope, path: '/new' } } }
-				]
-			});
+			expect(await readVisitDetails(configuration, domainScope)).toEqual(domainDetails);
 			expect(close).toHaveBeenCalledTimes(2);
 			expect(await readVisitDetails(configuration, linkScope)).toEqual(linkDetails);
 			expect(close).toHaveBeenCalledTimes(3);
@@ -131,9 +119,7 @@ test('reads daily output and derives zero scopes in a window from current time a
 			configuration.analytics.retention_months = 9;
 			const longerPeriod = createVisitPeriod(9, Date.now());
 			expect((await readVisitDetails(configuration, details.scope))?.period).toEqual(longerPeriod);
-			expect((await readDomainDetails(configuration, domain, ['/docs']))?.domain.period).toEqual(
-				longerPeriod
-			);
+			expect((await readVisitDetails(configuration, domainScope))?.period).toEqual(longerPeriod);
 			expect((await readVisitDetails(configuration, linkScope))?.period).toEqual(longerPeriod);
 			expect((await readLinkDetails(configuration, [linkScope]))?.period).toEqual(longerPeriod);
 			vi.setSystemTime(new Date('2027-06-15T12:00:00.000Z'));
@@ -195,7 +181,9 @@ test('corrupt daily histograms are unavailable, sanitized and closed; activity u
 		try {
 			expect(await readVisitDetails(configuration, { kind: 'overview' })).toBeNull();
 			expect(close).toHaveBeenCalledTimes(1);
-			expect(await readDomainDetails(configuration, 'go.example.test', ['/docs'])).toBeNull();
+			expect(
+				await readVisitDetails(configuration, { kind: 'domain', domain: 'go.example.test' })
+			).toBeNull();
 			expect(close).toHaveBeenCalledTimes(2);
 			expect(
 				await readVisitDetails(configuration, {
@@ -275,7 +263,6 @@ test('enabled collection fails safely without creating missing storage', async (
 			analytics: { retention_months: 3 as const }
 		};
 		expect(await readVisitDetails(configuration, { kind: 'overview' })).toBeNull();
-		expect(await readDomainDetails(configuration, 'go.example.test', ['/docs'])).toBeNull();
 		expect(
 			await readLinkDetails(configuration, [{ domain: 'go.example.test', path: '/docs' }])
 		).toBeNull();
@@ -284,7 +271,7 @@ test('enabled collection fails safely without creating missing storage', async (
 			lastActivityAt: null
 		});
 		expect(warning.mock.calls).toEqual(
-			Array.from({ length: 4 }, () => ['Prepared visit reports unavailable'])
+			Array.from({ length: 3 }, () => ['Prepared visit reports unavailable'])
 		);
 		await expect(access(missing)).rejects.toMatchObject({ code: 'ENOENT' });
 	} finally {
@@ -301,7 +288,6 @@ test('disabled collection does not attempt to open missing storage', async () =>
 			analytics: { retention_months: 0 as const }
 		};
 		expect(await readVisitDetails(configuration, { kind: 'overview' })).toBeNull();
-		expect(await readDomainDetails(configuration, 'go.example.test', ['/docs'])).toBeNull();
 		expect(
 			await readLinkDetails(configuration, [{ domain: 'go.example.test', path: '/docs' }])
 		).toBeNull();

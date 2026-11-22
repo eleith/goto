@@ -2,36 +2,14 @@ import { createVisitPeriod, type ReportScope, type VisitDetails } from '@goto/an
 import type { GotoConfiguration } from '@goto/config';
 import { openDb } from '@goto/db';
 import {
-	readDomainVisitDetails,
 	readLinkVisitDetails,
 	readVisitDetails as readStoredDetails,
 	readLastVisitActivity,
-	type DomainVisitDetails,
 	type LinkVisitDetails
 } from '@goto/db/visit-reports';
 import type { Immutable } from '../snapshot.js';
 
 type ReportConfiguration = Immutable<Pick<GotoConfiguration, 'database' | 'analytics'>>;
-
-export async function readDomainDetails(
-	configuration: ReportConfiguration,
-	domain: string,
-	currentPaths: string[]
-): Promise<DomainVisitDetails | null> {
-	const months = configuration.analytics.retention_months;
-	if (months === 0) return null;
-	let db: Awaited<ReturnType<typeof openDb>> | undefined;
-	try {
-		db = await openDb(configuration.database.path, { readOnly: true });
-		const period = createVisitPeriod(months, Date.now());
-		return await readDomainVisitDetails(db, domain, currentPaths, period);
-	} catch {
-		warnUnavailable();
-		return null;
-	} finally {
-		await db?.destroy().catch(warnUnavailable);
-	}
-}
 
 export async function readLinkDetails(
 	configuration: ReportConfiguration,
@@ -72,7 +50,8 @@ export async function readVisitDetails(
 }
 
 export async function readLastActivity(
-	configuration: ReportConfiguration
+	configuration: ReportConfiguration,
+	scope: ReportScope = { kind: 'overview' }
 ): Promise<{ available: boolean; lastActivityAt: string | null }> {
 	const months = configuration.analytics.retention_months;
 	if (months === 0) return { available: true, lastActivityAt: null };
@@ -80,7 +59,7 @@ export async function readLastActivity(
 	try {
 		db = await openDb(configuration.database.path, { readOnly: true });
 		const period = createVisitPeriod(months, Date.now());
-		const lastActivityAt = await readLastVisitActivity(db, period);
+		const lastActivityAt = await readLastVisitActivity(db, period, scope);
 		return { available: true, lastActivityAt };
 	} catch {
 		warnUnavailable();

@@ -20,6 +20,13 @@
 	let granularity = $derived(
 		data.chart ? visitGranularity(timeframe, data.chart.period.retentionMonths) : 'day'
 	);
+	let inventoryLinks = $derived(
+		data.links.map(({ countsByTimeframe, ...link }) => ({
+			...link,
+			href: `${link.href}?period=${timeframe}`,
+			visits: countsByTimeframe[timeframe]?.validVisits ?? null
+		}))
+	);
 	let visits = $derived(data.countsByTimeframe[timeframe]?.validVisits ?? null);
 	let invalidClicks = $derived(data.countsByTimeframe[timeframe]?.invalidVisits ?? null);
 	let browserVisits = $derived(data.browserVisitsByTimeframe[timeframe] ?? null);
@@ -46,9 +53,8 @@
 		<h2>Links</h2>
 		<LinkInventory
 			label={`Links tagged ${data.tag}`}
-			links={data.links}
-			{timeframe}
-			collectionEnabled={data.collectionEnabled}
+			links={inventoryLinks}
+			visitLabel={data.collectionEnabled ? 'Visits' : null}
 			showDomain
 		/>
 	</section>

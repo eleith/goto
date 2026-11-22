@@ -11,6 +11,7 @@ export {
 	addVisitTotals,
 	readVisitTotals,
 	readOverviewVisitTotals,
+	readDomainVisitTotals,
 	readLinkVisitCounts
 } from './visit-totals.js';
 export {

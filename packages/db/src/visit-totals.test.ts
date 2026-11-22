@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, test } from 'vitest';
 import {
 	addVisitTotals,
 	openDb,
+	readDomainVisitTotals,
 	readOverviewVisitTotals,
 	readVisitTotals,
 	readLinkVisitCounts,
@@ -59,6 +60,30 @@ test('reads the lifetime overview and only requested domain rows, filling absent
 		byDomain: new Map([
 			[domain.domain, { validVisits: 4, invalidVisits: 1 }],
 			['empty.example.test', { validVisits: 0, invalidVisits: 0 }]
+		])
+	});
+});
+
+test('reads stored domain, Root, and current path totals without including other domains or paths', async () => {
+	await db.transaction().execute((transaction) =>
+		addVisitTotals(transaction, [
+			{ scope: domain, totals: { validVisits: 9, invalidVisits: 2 } },
+			{ scope: { ...link, path: '/' }, totals: { validVisits: 2, invalidVisits: 0 } },
+			{ scope: link, totals: { validVisits: 3, invalidVisits: 0 } },
+			{ scope: { ...link, path: '/retired' }, totals: { validVisits: 4, invalidVisits: 0 } },
+			{
+				scope: { ...link, domain: 'other.example.test' },
+				totals: { validVisits: 5, invalidVisits: 0 }
+			}
+		])
+	);
+
+	expect(await readDomainVisitTotals(db, domain.domain, ['/docs', '/new'])).toEqual({
+		domain: { validVisits: 9, invalidVisits: 2 },
+		byPath: new Map([
+			['/', { validVisits: 2, invalidVisits: 0 }],
+			['/docs', { validVisits: 3, invalidVisits: 0 }],
+			['/new', { validVisits: 0, invalidVisits: 0 }]
 		])
 	});
 });

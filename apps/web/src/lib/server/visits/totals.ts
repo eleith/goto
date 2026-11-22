@@ -1,6 +1,6 @@
 import type { ReportScope, VisitTotals } from '@goto/analytics';
 import type { GotoConfiguration } from '@goto/config';
-import { openDb, readOverviewVisitTotals, readVisitTotals } from '@goto/db';
+import { openDb, readDomainVisitTotals, readOverviewVisitTotals, readVisitTotals } from '@goto/db';
 import type { Immutable } from '../snapshot.js';
 
 type VisitTotalsConfiguration = Immutable<Pick<GotoConfiguration, 'database'>>;
@@ -17,6 +17,14 @@ export function readOverviewLifetimeVisitTotals(
 	domains: readonly string[]
 ) {
 	return readPreparedTotals(configuration, (db) => readOverviewVisitTotals(db, domains));
+}
+
+export function readDomainLifetimeVisitTotals(
+	configuration: VisitTotalsConfiguration,
+	domain: string,
+	paths: readonly string[]
+) {
+	return readPreparedTotals(configuration, (db) => readDomainVisitTotals(db, domain, paths));
 }
 
 async function readPreparedTotals<T>(

@@ -84,29 +84,6 @@ export async function clearDailyVisitStatistics(db: Kysely<Database>): Promise<v
 	await db.deleteFrom('visit_daily_statistics').execute();
 }
 
-export interface DomainVisitDetails {
-	domain: VisitDetails;
-	links: Array<{ path: string; details: VisitDetails }>;
-}
-
-export async function readDomainVisitDetails(
-	db: Kysely<Database>,
-	domain: string,
-	currentPaths: string[],
-	period: ReportPeriod
-): Promise<DomainVisitDetails> {
-	const paths = [...new Set(['/', ...currentPaths])];
-	const [details, ...links] = await readCurrentDetails(
-		db,
-		[{ kind: 'domain', domain }, ...paths.map((path) => ({ kind: 'link' as const, domain, path }))],
-		period
-	);
-	return {
-		domain: details!,
-		links: paths.map((path, index) => ({ path, details: links[index]! }))
-	};
-}
-
 export interface LinkVisitDetails {
 	period: ReportPeriod;
 	links: Array<{ domain: string; path: string; details: VisitDetails }>;
@@ -140,13 +117,13 @@ export async function readVisitDetails(
 
 export async function readLastVisitActivity(
 	db: Kysely<Database>,
-	period: ReportPeriod
+	period: ReportPeriod,
+	scope: ReportScope = { kind: 'overview' }
 ): Promise<string | null> {
+	checkReportScope(scope);
 	const days = reportDays(period);
-	const row = await db
-		.selectFrom('visit_daily_statistics')
+	const row = await selectedDays(db, [scope])
 		.select(({ fn }) => fn.max<number>('last_visit_at').as('lastVisitAt'))
-		.where('scope_kind', '=', 'overview')
 		.where('day', '>=', days.first)
 		.where('day', '<=', days.last)
 		.executeTakeFirstOrThrow();
