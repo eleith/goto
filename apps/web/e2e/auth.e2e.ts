@@ -1,3 +1,4 @@
+import type { Request } from '@playwright/test';
 import { expect, test } from './support/test.ts';
 
 test.use({ withWorker: true });
@@ -327,26 +328,18 @@ test('shared credentials protect admin pages and sign-out removes access', async
 	await expect(analyticsVisits).toContainText('3');
 	await expect(analyticsChart.getByRole('row', { name: 'Total 3', exact: true })).toBeVisible();
 	const reportFilters = page.getByRole('group', { name: 'Report filters', exact: true });
-	const domainSelect = reportFilters.getByRole('button', { name: /^Domain: / });
-	const redirectSelect = reportFilters.getByRole('button', { name: /^Redirect: / });
-	const redirectOptions = page.getByRole('listbox', { name: 'Redirect', exact: true });
-	async function chooseReportOption(label: 'Domain' | 'Redirect', option: string) {
-		const trigger = label === 'Domain' ? domainSelect : redirectSelect;
-		await trigger.click();
-		await page
-			.getByRole('listbox', { name: label, exact: true })
-			.getByRole('option', { name: option, exact: true })
-			.click();
+	const scopeInput = reportFilters.getByRole('combobox', { name: 'Report scope', exact: true });
+	const scopeOptions = page.getByRole('listbox', { name: 'Report scopes', exact: true });
+	async function chooseReportScope(option: string) {
+		await scopeInput.click();
+		await scopeOptions.getByRole('option', { name: option, exact: true }).click();
 	}
-	await expect(redirectSelect).toHaveAccessibleName('Redirect: All redirects');
-	await redirectSelect.click();
-	await expect(redirectOptions.getByRole('option')).toHaveText(['All redirects']);
-	await redirectSelect.press('Escape');
+	await expect(scopeInput).toHaveAttribute('placeholder', 'All traffic');
 	const analyticsUrl = `${appServer.origin}/admin/analytics`;
 	const goReportUrl = `${analyticsUrl}?period=7d&domain=go.example.org`;
 	await timeframe.getByRole('button', { name: '7 days', exact: true }).click();
 	await expect(page).toHaveURL(`${analyticsUrl}?period=7d`);
-	await chooseReportOption('Domain', 'go.example.org');
+	await chooseReportScope('go.example.org');
 	await expect(page).toHaveURL(goReportUrl);
 	await expect(analyticsChart.getByRole('row', { name: 'Total 1', exact: true })).toBeVisible();
 
@@ -366,10 +359,10 @@ test('shared credentials protect admin pages and sign-out removes access', async
 	try {
 		const [heldRequest] = await Promise.all([
 			page.waitForRequest((request) => isHeldRedirectRequest(new URL(request.url()))),
-			chooseReportOption('Redirect', '/a/b')
+			chooseReportScope('go.example.org/a/b')
 		]);
 		await expect(reportFilters).toHaveAttribute('aria-busy', 'true');
-		await expect(redirectSelect).toHaveAccessibleName('Redirect: All redirects');
+		await expect(scopeInput).toHaveAttribute('placeholder', 'Domain: go.example.org');
 		await timeframe.getByRole('button', { name: '30 days', exact: true }).click();
 		await expect(page).toHaveURL(`${analyticsUrl}?domain=go.example.org`);
 
@@ -378,7 +371,7 @@ test('shared credentials protect admin pages and sign-out removes access', async
 		expect(lateResponse?.ok()).toBe(true);
 		await expect(reportFilters).toHaveAttribute('aria-busy', 'false');
 		await expect(page).toHaveURL(`${analyticsUrl}?domain=go.example.org`);
-		await expect(redirectSelect).toHaveAccessibleName('Redirect: All redirects');
+		await expect(scopeInput).toHaveAttribute('placeholder', 'Domain: go.example.org');
 		await expect(analyticsVisits).toContainText('2');
 		await expect(analyticsChart.getByRole('row', { name: 'Total 2', exact: true })).toBeVisible();
 	} finally {
@@ -387,52 +380,94 @@ test('shared credentials protect admin pages and sign-out removes access', async
 	await page.goBack();
 	await page.goBack();
 	await expect(page).toHaveURL(`${analyticsUrl}?period=7d`);
-	await expect(domainSelect).toHaveAccessibleName('Domain: All domains');
+	await expect(scopeInput).toHaveAttribute('placeholder', 'All traffic');
 	await expect(analyticsChart.getByRole('row', { name: 'Total 2', exact: true })).toBeVisible();
 
-	await page.goto(`${analyticsUrl}?domain=removed.example.org&period=7d`);
-	await expect(page.getByRole('status')).toContainText('This domain is not configured.');
-	await chooseReportOption('Domain', 'All domains');
-	await expect(page).toHaveURL(`${analyticsUrl}?period=7d`);
-	await expect(analyticsChart.getByRole('row', { name: 'Total 2', exact: true })).toBeVisible();
-
-	await chooseReportOption('Domain', 'go.example.org');
-	await expect(redirectSelect).toHaveAccessibleName('Redirect: All redirects');
-	await chooseReportOption('Redirect', '/docs');
+	const searchRequests: string[] = [];
+	function recordSearchRequest(request: Request) {
+		const url = new URL(request.url());
+		if (url.origin === appServer.origin && url.pathname.startsWith('/admin/analytics')) {
+			searchRequests.push(url.href);
+		}
+	}
+	page.on('request', recordSearchRequest);
+	try {
+		await scopeInput.fill('/DOCS');
+		await expect(scopeOptions.getByRole('option')).toHaveText([
+			'go.example.org/docs',
+			'tiny.example.org/docs'
+		]);
+		await expect(page).toHaveURL(`${analyticsUrl}?period=7d`);
+		await expect(analyticsChart.getByRole('row', { name: 'Total 2', exact: true })).toBeVisible();
+		expect(searchRequests).toEqual([]);
+	} finally {
+		page.off('request', recordSearchRequest);
+	}
+	await scopeOptions.getByRole('option', { name: 'go.example.org/docs', exact: true }).click();
 	await expect(page).toHaveURL(`${goReportUrl}&path=%2Fdocs`);
 	await expect(analyticsChart.getByRole('row', { name: 'Total 0', exact: true })).toBeVisible();
-	await chooseReportOption('Redirect', 'Root (/)');
+	await chooseReportScope('go.example.org/ (Root)');
 	await expect(page).toHaveURL(`${goReportUrl}&path=%2F`);
 	await expect(analyticsChart.getByRole('row', { name: 'Total 1', exact: true })).toBeVisible();
 	await page.goBack();
-	await expect(redirectSelect).toHaveAccessibleName('Redirect: /docs');
+	await expect(scopeInput).toHaveAttribute('placeholder', 'go.example.org/docs');
 	await expect(analyticsChart.getByRole('row', { name: 'Total 0', exact: true })).toBeVisible();
 
-	await chooseReportOption('Domain', 'tiny.example.org');
+	await chooseReportScope('tiny.example.org/docs');
 	const tinyReportUrl = `${analyticsUrl}?period=7d&domain=tiny.example.org`;
-	await expect(page).toHaveURL(tinyReportUrl);
-	await expect(redirectSelect).toHaveAccessibleName('Redirect: All redirects');
-	await redirectSelect.press('Enter');
-	await expect(redirectOptions.getByRole('option')).toHaveText([
-		'All redirects',
-		'Root (/)',
-		'/docs'
-	]);
-	await redirectOptions.getByRole('option', { name: '/docs', exact: true }).click();
 	await expect(page).toHaveURL(`${tinyReportUrl}&path=%2Fdocs`);
 	await expect(analyticsChart.getByRole('row', { name: 'Total 1', exact: true })).toBeVisible();
-	await chooseReportOption('Domain', 'All domains');
-	await expect(page).toHaveURL(`${analyticsUrl}?period=7d`);
-	await expect(redirectSelect).toHaveAccessibleName('Redirect: All redirects');
 
-	await page.goto(`${goReportUrl}&path=%2Fremoved`);
-	await expect(page.getByRole('status')).toContainText('This redirect is not configured.');
-	await expect(analyticsChart).toHaveCount(0);
-	await chooseReportOption('Redirect', 'All redirects');
-	await expect(page).toHaveURL(goReportUrl);
+	await scopeInput.click();
+	await expect(scopeOptions).toBeVisible();
+	const popupId = await scopeOptions.getAttribute('id');
+	expect(popupId).toBeTruthy();
+	await expect(scopeInput).toHaveAttribute('aria-controls', popupId ?? '');
+	await scopeInput.press('Home');
+	const allTraffic = scopeOptions.getByRole('option', { name: 'All traffic', exact: true });
+	await expect(scopeInput).toHaveAttribute(
+		'aria-activedescendant',
+		(await allTraffic.getAttribute('id')) ?? ''
+	);
+	await scopeInput.fill('work/100%');
+	await expect(scopeOptions.getByRole('option')).toHaveText([sharedTag]);
+	await scopeInput.press('ArrowDown');
+	await scopeInput.press('Enter');
+	const tagReportUrl = `${analyticsUrl}?period=7d&${new URLSearchParams({ tag: sharedTag })}`;
+	await expect(page).toHaveURL(tagReportUrl);
+	await expect(scopeInput).toHaveAttribute('placeholder', `Tag: ${sharedTag}`);
+	await expect(analyticsChart.getByRole('row', { name: 'Total 1', exact: true })).toBeVisible();
+	await timeframe.getByRole('button', { name: '30 days', exact: true }).click();
+	await expect(page).toHaveURL(`${analyticsUrl}?${new URLSearchParams({ tag: sharedTag })}`);
+	await expect(analyticsChart.getByRole('row', { name: 'Total 2', exact: true })).toBeVisible();
+	await page.goBack();
+	await expect(page).toHaveURL(tagReportUrl);
+	await page.reload();
+	await expect(scopeInput).toHaveAttribute('placeholder', `Tag: ${sharedTag}`);
 	await expect(analyticsChart.getByRole('row', { name: 'Total 1', exact: true })).toBeVisible();
 
-	await chooseReportOption('Redirect', '/docs');
+	await scopeInput.click();
+	await expect(scopeOptions).toBeVisible();
+	await scopeInput.fill('long-picker-tag-');
+	const longTag = `long-picker-tag-${'w'.repeat(1400)}`;
+	await expect(scopeOptions.getByRole('option')).toHaveText([longTag]);
+	await scopeInput.press('ArrowDown');
+	await scopeInput.press('Enter');
+	await expect(page).toHaveURL(
+		`${analyticsUrl}?period=7d&${new URLSearchParams({ tag: longTag })}`
+	);
+	await expect(analyticsChart.getByRole('row', { name: 'Total 0', exact: true })).toBeVisible();
+
+	await page.goto(`${analyticsUrl}?period=7d&tag=Removed`);
+	await expect(page.getByRole('status')).toContainText(
+		'This report scope is no longer configured.'
+	);
+	await expect(analyticsChart).toHaveCount(0);
+	await chooseReportScope('All traffic');
+	await expect(page).toHaveURL(`${analyticsUrl}?period=7d`);
+	await expect(analyticsChart.getByRole('row', { name: 'Total 2', exact: true })).toBeVisible();
+
+	await chooseReportScope('go.example.org/docs');
 	await expect(page).toHaveURL(`${goReportUrl}&path=%2Fdocs`);
 	await page.setViewportSize({ width: 390, height: 844 });
 	const graph = analyticsChart.getByRole('img');
@@ -460,16 +495,16 @@ test('shared credentials protect admin pages and sign-out removes access', async
 		acceptedLanguages.getByRole('row', { name: 'fr 1 100%', exact: true })
 	).toBeVisible();
 	await page.setViewportSize({ width: 1280, height: 720 });
-	await chooseReportOption('Redirect', '/a%2Fb');
+	await chooseReportScope('go.example.org/a%2Fb');
 	const literalPathUrl = `${fullDomainUrl}&path=%2Fa%252Fb`;
 	await expect(page).toHaveURL(literalPathUrl);
 	await expect(analyticsChart.getByRole('row', { name: 'Total 1', exact: true })).toBeVisible();
-	await chooseReportOption('Redirect', '/a/b');
+	await chooseReportScope('go.example.org/a/b');
 	await expect(page).toHaveURL(`${fullDomainUrl}&path=%2Fa%2Fb`);
 	await expect(analyticsChart.getByRole('row', { name: 'Total 0', exact: true })).toBeVisible();
 	await page.goBack();
 	await expect(page).toHaveURL(literalPathUrl);
-	await expect(redirectSelect).toHaveAccessibleName('Redirect: /a%2Fb');
+	await expect(scopeInput).toHaveAttribute('placeholder', 'go.example.org/a%2Fb');
 	await expect(analyticsChart.getByRole('row', { name: 'Total 1', exact: true })).toBeVisible();
 
 	const html = await page.content();

@@ -8,6 +8,10 @@
 	--color-text: light-dark(#171717, #f5f5f5);
 	--color-text-muted: light-dark(#525252, #b5babb);
 	--color-border-strong: light-dark(#525252, #b5babb);
+	--color-menu-option-highlight: light-dark(
+		var(--color-surface-muted),
+		color-mix(in srgb, var(--color-text) 30%, var(--color-surface-card))
+	);
 
 	--space-1: 2px;
 	--space-4: 0.75rem;
@@ -26,6 +30,7 @@
 	--content-form-width: 25rem;
 	--content-admin-width: 72rem;
 	--control-min-height: 3rem;
+	--menu-option-min-height: 2.25rem;
 	--size-icon: 2rem;
 	--radius-sm: 0.25rem;
 	--radius-control: 0.5rem;

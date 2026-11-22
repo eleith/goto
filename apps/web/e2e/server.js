@@ -49,7 +49,10 @@ const configuration = {
 					valid_until: '2100-01-01T00:00:00Z',
 					tags: ['work', 'docs', 'Work/100%é']
 				},
-				'/healthz': { url: 'https://example.org/public-health' }
+				'/healthz': {
+					url: 'https://example.org/public-health',
+					tags: [`long-picker-tag-${'w'.repeat(1400)}`]
+				}
 			}
 		},
 		'tiny.example.org': {

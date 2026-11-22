@@ -103,7 +103,7 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: var(--space-4);
-		min-height: 2.25rem;
+		min-height: var(--menu-option-min-height);
 		padding: var(--space-1) var(--space-4);
 		color: var(--color-text);
 		border-radius: var(--radius-sm);
@@ -116,10 +116,7 @@
 	}
 
 	.select-option[data-highlighted]:not([data-selected]) {
-		background: light-dark(
-			var(--color-surface-muted),
-			color-mix(in srgb, var(--color-text) 30%, var(--color-surface-card))
-		);
+		background: var(--color-menu-option-highlight);
 	}
 
 	.select-option[data-selected] {

@@ -1,52 +1,27 @@
-import { countBreakdownVisitsByTimeframe, type ReportScope } from '@goto/analytics';
+import { countBreakdownVisitsByTimeframe } from '@goto/analytics';
 import { availableVisitTimeframes, countVisitWindows, visitWindow } from '@goto/analytics/daily';
 import { isCanonicalPath, normalizeHost } from '@goto/config';
 import { error, redirect } from '@sveltejs/kit';
-import { readVisitDetails } from '#lib/server/visits/reports.js';
+import type { ConfigurationSnapshot } from '#lib/server/snapshot.js';
+import { currentTags, tagMembers } from '#lib/server/tags/inventory.js';
+import { combineTagVisits } from '#lib/server/tags/visits.js';
+import { readLinkDetails, readVisitDetails } from '#lib/server/visits/reports.js';
+import { scopeValue, type AnalyticsScope, type ScopeGroup } from './report-scopes.js';
 import type { PageServerLoad } from './$types';
 
 export const load = (async ({ locals, url }) => {
 	const snapshot = locals.snapshot;
-	const configuration = snapshot.configuration;
-	const retentionMonths = configuration.analytics.retention_months;
+	const retentionMonths = snapshot.configuration.analytics.retention_months;
 	if (retentionMonths === 0) redirect(307, '/admin/health');
 
-	const requestedDomains = url.searchParams.getAll('domain');
-	if (requestedDomains.length > 1) error(400, 'Select only one domain');
-	const domain = requestedDomains[0] ?? null;
-	if (domain !== null && !isCanonicalHost(domain)) error(400, 'Invalid domain selection');
-
-	const requestedPaths = url.searchParams.getAll('path');
-	if (requestedPaths.length > 1) error(400, 'Select only one redirect');
-	const path = requestedPaths[0] ?? null;
-	if (path !== null && (domain === null || !isCanonicalPath(path))) {
-		error(400, 'Invalid redirect selection');
-	}
-
-	const domains = Object.keys(snapshot.domains).sort();
+	const scope = selectedScope(url.searchParams);
+	const groups = scopeGroups(snapshot.domains);
+	const scopeUnavailable = !isConfiguredScope(scope, groups);
 	const timeframes = availableVisitTimeframes(retentionMonths);
-	const configuredDomain =
-		domain !== null && Object.hasOwn(snapshot.domains, domain) ? snapshot.domains[domain]! : null;
-	const domainUnavailable = domain !== null && configuredDomain === null;
-	const redirectPaths = configuredDomain
-		? ['/', ...Object.keys(configuredDomain.links).sort()]
-		: [];
-	const redirectUnavailable =
-		configuredDomain !== null && path !== null && !redirectPaths.includes(path);
-	const selection = {
-		domain,
-		domains,
-		domainUnavailable,
-		path,
-		redirectPaths,
-		redirectUnavailable,
-		retentionMonths,
-		timeframes
-	};
-	if (domainUnavailable || redirectUnavailable) return { ...selection, report: null };
+	const selection = { scope, groups, scopeUnavailable, retentionMonths, timeframes };
+	if (scopeUnavailable) return { ...selection, report: null };
 
-	const scope = reportScope(domain, path);
-	const details = await readVisitDetails(configuration, scope);
+	const details = await readScopeDetails(snapshot, scope);
 	if (!details) return { ...selection, report: null };
 
 	const windows = timeframes.map((timeframe) => ({
@@ -73,12 +48,62 @@ export const load = (async ({ locals, url }) => {
 	};
 }) satisfies PageServerLoad;
 
-function reportScope(domain: string | null, path: string | null): ReportScope {
-	if (domain === null) return { kind: 'overview' };
-	if (path === null) return { kind: 'domain', domain };
-	return { kind: 'link', domain, path };
+function selectedScope(query: URLSearchParams): AnalyticsScope {
+	const domains = query.getAll('domain');
+	const paths = query.getAll('path');
+	const tags = query.getAll('tag');
+	if (domains.length > 1 || paths.length > 1 || tags.length > 1) {
+		error(400, 'Select only one report scope');
+	}
+
+	const [domain] = domains;
+	const [path] = paths;
+	const [tag] = tags;
+	if (tag !== undefined) {
+		const conflictsWithTag = domain !== undefined || path !== undefined;
+		const tagIsBlank = tag.trim() === '';
+		if (conflictsWithTag || tagIsBlank) error(400, 'Invalid tag selection');
+		return { kind: 'tag', tag };
+	}
+	if (domain !== undefined && normalizeHost(domain) !== domain) {
+		error(400, 'Invalid domain selection');
+	}
+	if (path !== undefined) {
+		if (domain === undefined || !isCanonicalPath(path)) error(400, 'Invalid redirect selection');
+		return { kind: 'link', domain, path };
+	}
+	return domain === undefined ? { kind: 'overview' } : { kind: 'domain', domain };
 }
 
-function isCanonicalHost(host: string): boolean {
-	return normalizeHost(host) === host;
+function scopeGroups(domains: ConfigurationSnapshot['domains']): ScopeGroup[] {
+	const hosts = Object.keys(domains).sort();
+	return [
+		{ label: 'Overview', scopes: [{ kind: 'overview' }] },
+		{ label: 'Domains', scopes: hosts.map((domain) => ({ kind: 'domain', domain })) },
+		{
+			label: 'Redirects',
+			scopes: hosts.flatMap((domain) =>
+				['/', ...Object.keys(domains[domain]!.links).sort()].map((path) => ({
+					kind: 'link',
+					domain,
+					path
+				}))
+			)
+		},
+		{ label: 'Tags', scopes: currentTags(domains).map((tag) => ({ kind: 'tag', tag })) }
+	];
+}
+
+function isConfiguredScope(scope: AnalyticsScope, groups: ScopeGroup[]): boolean {
+	const selectedValue = scopeValue(scope);
+	return groups.some(({ scopes }) => scopes.some((option) => scopeValue(option) === selectedValue));
+}
+
+async function readScopeDetails(snapshot: ConfigurationSnapshot, scope: AnalyticsScope) {
+	if (scope.kind !== 'tag') return readVisitDetails(snapshot.configuration, scope);
+
+	const members = tagMembers(snapshot.domains, scope.tag);
+	const identities = members.map(({ domain, path }) => ({ domain, path }));
+	const report = await readLinkDetails(snapshot.configuration, identities);
+	return report ? combineTagVisits(report) : null;
 }

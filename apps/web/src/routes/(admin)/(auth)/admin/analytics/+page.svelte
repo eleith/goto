@@ -3,12 +3,13 @@
 	import { page } from '$app/state';
 	import { resolveVisitTimeframe, visitGranularity, visitWindow } from '@goto/analytics/daily';
 	import AdminPage from '#lib/components/admin/AdminPage.svelte';
-	import AdminSelect from '#lib/components/admin/AdminSelect.svelte';
 	import ReportNotice from '#lib/components/admin/ReportNotice.svelte';
 	import StatCard from '#lib/components/admin/StatCard.svelte';
 	import VisitBreakdowns from '#lib/components/admin/VisitBreakdowns.svelte';
 	import VisitsChart from '#lib/components/admin/VisitsChart.svelte';
 	import VisitTimeframes from '#lib/components/admin/VisitTimeframes.svelte';
+	import ReportScopePicker from './ReportScopePicker.svelte';
+	import { setScope, type AnalyticsScope } from './report-scopes.js';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -19,46 +20,15 @@
 		resolveVisitTimeframe(data.timeframes, currentUrl.searchParams.get('period'))
 	);
 	let counts = $derived(report?.countsByTimeframe[timeframe]);
-	let domainOptions = $derived([
-		{ value: '', label: 'All domains' },
-		...(data.domainUnavailable && data.domain !== null
-			? [{ value: data.domain, label: 'Domain not configured', disabled: true }]
-			: []),
-		...data.domains.map((domain) => ({ value: domain, label: domain }))
-	]);
-	let domainIsConfigured = $derived(data.domain !== null && !data.domainUnavailable);
-	let redirectOptions = $derived([
-		{ value: '', label: 'All redirects' },
-		...data.redirectPaths.map((path) => ({ value: path, label: path === '/' ? 'Root (/)' : path })),
-		...(data.redirectUnavailable && data.path !== null
-			? [{ value: data.path, label: 'Redirect not configured', disabled: true }]
-			: [])
-	]);
+
 	let selectionNavigationFailed = $state(false);
 	let pendingReportNavigations = $state(0);
 
-	async function selectDomain(domain: string): Promise<void> {
-		const domainIsSelectable = domain === '' || data.domains.includes(domain);
-		if (!domainIsSelectable || domain === (data.domain ?? '')) return;
-		const next = new URL(currentUrl.href);
-		if (domain) next.searchParams.set('domain', domain);
-		else next.searchParams.delete('domain');
-		next.searchParams.delete('path');
-		await navigateToReport(next);
-	}
-
-	async function selectRedirect(path: string): Promise<void> {
-		const redirectIsSelectable = path === '' || data.redirectPaths.includes(path);
-		if (!domainIsConfigured || !redirectIsSelectable || path === (data.path ?? '')) return;
-		const next = new URL(currentUrl.href);
-		if (path) next.searchParams.set('path', path);
-		else next.searchParams.delete('path');
-		await navigateToReport(next);
-	}
-
-	async function navigateToReport(next: URL): Promise<void> {
+	async function selectScope(scope: AnalyticsScope): Promise<void> {
 		selectionNavigationFailed = false;
 		const committedUrl = currentUrl.href;
+		const next = new URL(committedUrl);
+		setScope(next.searchParams, scope);
 		pendingReportNavigations += 1;
 		try {
 			await goto(next, { reset: false });
@@ -87,22 +57,11 @@
 			aria-label="Report filters"
 			aria-busy={pendingReportNavigations > 0}
 		>
-			{#key data.domainUnavailable}
-				<AdminSelect
-					label="Domain"
-					committedValue={data.domain ?? ''}
-					options={domainOptions}
-					onSelectionRequest={selectDomain}
-				/>
-			{/key}
-			{#key data.domain}
-				<AdminSelect
-					label="Redirect"
-					committedValue={domainIsConfigured ? (data.path ?? '') : ''}
-					options={redirectOptions}
-					onSelectionRequest={selectRedirect}
-				/>
-			{/key}
+			<ReportScopePicker
+				groups={data.groups}
+				committedScope={data.scope}
+				onSelectionRequest={selectScope}
+			/>
 		</div>
 		{#if counts}
 			<div class="admin-cards report-totals">
@@ -114,13 +73,9 @@
 	{#if selectionNavigationFailed}
 		<p class="admin-notice" role="alert">Could not change the report selection. Try again.</p>
 	{/if}
-	{#if data.domainUnavailable}
+	{#if data.scopeUnavailable}
 		<p class="admin-notice" role="status">
-			This domain is not configured. Choose a domain or select All domains.
-		</p>
-	{:else if data.redirectUnavailable}
-		<p class="admin-notice" role="status">
-			This redirect is not configured. Choose a redirect or select All redirects.
+			This report scope is no longer configured. Choose another scope or select All traffic.
 		</p>
 	{:else}
 		<ReportNotice collectionEnabled available={report !== null} />
@@ -151,9 +106,6 @@
 	}
 
 	.report-filters {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-5);
 		min-width: 0;
 	}
 

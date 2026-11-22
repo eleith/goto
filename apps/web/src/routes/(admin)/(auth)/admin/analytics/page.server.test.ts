@@ -2,13 +2,17 @@ import { createVisitPeriod } from '@goto/analytics';
 import { loadConfig } from '@goto/config';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { prepareSnapshot } from '#lib/server/snapshot.js';
-import { readVisitDetails } from '#lib/server/visits/reports.js';
+import { readLinkDetails, readVisitDetails } from '#lib/server/visits/reports.js';
 import { load } from './+page.server.js';
 
-vi.mock('#lib/server/visits/reports.js', () => ({ readVisitDetails: vi.fn() }));
+vi.mock('#lib/server/visits/reports.js', () => ({
+	readVisitDetails: vi.fn(),
+	readLinkDetails: vi.fn()
+}));
 beforeEach(() => vi.resetAllMocks());
 
 const configuredDomain = 'go.example.test';
+const tag = 'Work/100%é';
 
 function request(retentionMonths: 0 | 3, query = '') {
 	const prepared = loadConfig(
@@ -19,10 +23,15 @@ function request(retentionMonths: 0 | 3, query = '') {
 				[configuredDomain]: {
 					links: {
 						'/a%2Fb': { url: 'https://example.test/literal' },
-						'/a/b': { title: 'Nested docs', url: 'https://example.test/nested' }
+						'/a/b': { title: 'Nested docs', url: 'https://example.test/nested', tags: [tag] }
 					}
 				},
-				'other.example.test': { links: { '/other': { url: 'https://example.test/other' } } }
+				'other.example.test': {
+					links: {
+						'/a/b': { url: 'https://example.test/other', tags: [tag] },
+						'/other': { url: 'https://example.test/untagged' }
+					}
+				}
 			}
 		},
 		{ env: {} }
@@ -34,8 +43,12 @@ function request(retentionMonths: 0 | 3, query = '') {
 }
 
 test('redirects to Health without reading a report when analytics is disabled', async () => {
-	await expect(load(request(0))).rejects.toMatchObject({ status: 307, location: '/admin/health' });
+	await expect(load(request(0, `?${new URLSearchParams({ tag })}`))).rejects.toMatchObject({
+		status: 307,
+		location: '/admin/health'
+	});
 	expect(readVisitDetails).not.toHaveBeenCalled();
+	expect(readLinkDetails).not.toHaveBeenCalled();
 });
 
 test('does not redirect when the global report is unavailable', async () => {
@@ -54,8 +67,32 @@ test('reads one report for the selected configured domain', async () => {
 		kind: 'domain',
 		domain: configuredDomain
 	});
-	expect(data).toMatchObject({ domain: configuredDomain, domainUnavailable: false, path: null });
-	expect(data.redirectPaths).toEqual(['/', '/a%2Fb', '/a/b']);
+	expect(data).toMatchObject({
+		scope: { kind: 'domain', domain: configuredDomain },
+		scopeUnavailable: false
+	});
+	expect(data.groups).toEqual([
+		{ label: 'Overview', scopes: [{ kind: 'overview' }] },
+		{
+			label: 'Domains',
+			scopes: [
+				{ kind: 'domain', domain: configuredDomain },
+				{ kind: 'domain', domain: 'other.example.test' }
+			]
+		},
+		{
+			label: 'Redirects',
+			scopes: [
+				{ kind: 'link', domain: configuredDomain, path: '/' },
+				{ kind: 'link', domain: configuredDomain, path: '/a%2Fb' },
+				{ kind: 'link', domain: configuredDomain, path: '/a/b' },
+				{ kind: 'link', domain: 'other.example.test', path: '/' },
+				{ kind: 'link', domain: 'other.example.test', path: '/a/b' },
+				{ kind: 'link', domain: 'other.example.test', path: '/other' }
+			]
+		},
+		{ label: 'Tags', scopes: [{ kind: 'tag', tag }] }
+	]);
 });
 
 test.each(['/', '/a%2Fb', '/a/b'])('reads one report for the exact redirect %s', async (path) => {
@@ -68,7 +105,10 @@ test.each(['/', '/a%2Fb', '/a/b'])('reads one report for the exact redirect %s',
 		domain: configuredDomain,
 		path
 	});
-	expect(data).toMatchObject({ path, redirectUnavailable: false });
+	expect(data).toMatchObject({
+		scope: { kind: 'link', domain: configuredDomain, path },
+		scopeUnavailable: false
+	});
 });
 
 test.each([
@@ -79,17 +119,18 @@ test.each([
 ])('rejects an invalid redirect query without reading a report: %s', async (query) => {
 	await expect(load(request(3, query))).rejects.toMatchObject({ status: 400 });
 	expect(readVisitDetails).not.toHaveBeenCalled();
+	expect(readLinkDetails).not.toHaveBeenCalled();
 });
 
 test('does not read a broader report for a redirect missing from the selected domain', async () => {
 	const data = await load(request(3, `?domain=${configuredDomain}&path=%2Fother`));
 	expect(data).toMatchObject({
-		domain: configuredDomain,
-		path: '/other',
-		redirectUnavailable: true,
+		scope: { kind: 'link', domain: configuredDomain, path: '/other' },
+		scopeUnavailable: true,
 		report: null
 	});
 	expect(readVisitDetails).not.toHaveBeenCalled();
+	expect(readLinkDetails).not.toHaveBeenCalled();
 });
 
 test.each([`?domain=${configuredDomain}&domain=tiny.example.test`, '?domain=GO.EXAMPLE.TEST'])(
@@ -97,18 +138,56 @@ test.each([`?domain=${configuredDomain}&domain=tiny.example.test`, '?domain=GO.E
 	async (query) => {
 		await expect(load(request(3, query))).rejects.toMatchObject({ status: 400 });
 		expect(readVisitDetails).not.toHaveBeenCalled();
+		expect(readLinkDetails).not.toHaveBeenCalled();
 	}
 );
 
 test('keeps a removed domain selection without falling back to the global report', async () => {
 	const data = await load(request(3, '?domain=removed.example.test'));
 	expect(data).toMatchObject({
-		domain: 'removed.example.test',
-		domains: [configuredDomain, 'other.example.test'],
-		domainUnavailable: true,
+		scope: { kind: 'domain', domain: 'removed.example.test' },
+		scopeUnavailable: true,
 		report: null
 	});
 	expect(readVisitDetails).not.toHaveBeenCalled();
+	expect(readLinkDetails).not.toHaveBeenCalled();
+});
+
+test('reads one batch for the exact tag across domains, excluding other paths', async () => {
+	vi.mocked(readLinkDetails).mockResolvedValueOnce(null);
+	const data = await load(request(3, `?${new URLSearchParams({ tag })}`));
+	expect(readLinkDetails).toHaveBeenCalledExactlyOnceWith(expect.any(Object), [
+		{ domain: configuredDomain, path: '/a/b' },
+		{ domain: 'other.example.test', path: '/a/b' }
+	]);
+	expect(readVisitDetails).not.toHaveBeenCalled();
+	expect(data).toMatchObject({
+		scope: { kind: 'tag', tag },
+		scopeUnavailable: false,
+		report: null
+	});
+});
+
+test.each([
+	'?tag=',
+	'?tag=Work&tag=Docs',
+	`?tag=Work&domain=${configuredDomain}`,
+	'?tag=Work&path=%2F'
+])('rejects malformed or mixed tag selections: %s', async (query) => {
+	await expect(load(request(3, query))).rejects.toMatchObject({ status: 400 });
+	expect(readVisitDetails).not.toHaveBeenCalled();
+	expect(readLinkDetails).not.toHaveBeenCalled();
+});
+
+test('does not fall back to all traffic for a stale tag', async () => {
+	const data = await load(request(3, '?tag=Removed'));
+	expect(data).toMatchObject({
+		scope: { kind: 'tag', tag: 'Removed' },
+		scopeUnavailable: true,
+		report: null
+	});
+	expect(readVisitDetails).not.toHaveBeenCalled();
+	expect(readLinkDetails).not.toHaveBeenCalled();
 });
 
 test('projects global totals and keeps each breakdown tied to the selected window', async () => {
