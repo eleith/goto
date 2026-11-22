@@ -503,7 +503,11 @@ test('shared credentials protect admin pages and sign-out removes access', async
 
 	const html = await page.content();
 	await expect(html).not.toContain('e2e-only-password');
-	await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page
+		.getByRole('navigation', { name: 'Administration', exact: true })
+		.getByRole('button', { name: 'Sign out', exact: true })
+		.click();
 	await expect(page).toHaveURL(/\/signin\?/);
 	await page.goto(`${appServer.origin}${docsPath}`);
 	await expect(page).toHaveURL(/\/signin\?/);

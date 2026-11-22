@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
+	import IconChartLineUp from 'virtual:icons/ph/chart-line-up';
 	import IconHeartbeat from 'virtual:icons/ph/heartbeat';
+	import IconSignOut from 'virtual:icons/ph/sign-out';
 	import { authClient } from '#lib/auth-client.js';
 	import ThemeToggle from '../ThemeToggle.svelte';
 
@@ -11,6 +13,7 @@
 	let currentPath = $derived(page.url.pathname + page.url.search);
 	let onOverview = $derived(page.url.pathname === '/admin');
 	let pending = $state(false);
+	let signoutLabel = $derived(pending ? 'Signing out…' : 'Sign out');
 	let signoutError = $state<'rate' | 'network' | 'auth' | null>(null);
 
 	async function signOut(event: SubmitEvent) {
@@ -56,23 +59,25 @@
 
 <header class="admin-nav">
 	<nav class="nav-container" aria-label="Administration">
-		<div class="nav-links">
-			{#if onOverview}
-				<span class="nav-title" aria-current="page">{@render titleWithIcon()}</span>
-			{:else}
-				<a class="nav-title" href={overviewHref}>{@render titleWithIcon()}</a>
-			{/if}
+		{#if onOverview}
+			<span class="nav-title" aria-current="page">{@render titleWithIcon()}</span>
+		{:else}
+			<a class="nav-title" href={overviewHref}>{@render titleWithIcon()}</a>
+		{/if}
+		<div class="nav-actions">
 			{#if analyticsEnabled}
 				<a
-					class="ui-button"
+					class="ui-button nav-icon"
 					href="/admin/analytics"
-					aria-current={page.url.pathname === '/admin/analytics' ? 'page' : undefined}>Analytics</a
+					aria-label="Analytics"
+					title="Analytics"
+					aria-current={page.url.pathname === '/admin/analytics' ? 'page' : undefined}
 				>
+					<IconChartLineUp aria-hidden="true" focusable="false" />
+				</a>
 			{/if}
-		</div>
-		<div class="nav-actions">
 			<a
-				class="ui-button health-link"
+				class="ui-button nav-icon"
 				href="/admin/health"
 				aria-label="Health"
 				title="Health"
@@ -84,11 +89,14 @@
 			<form method="POST" aria-label="Sign out" aria-busy={pending} onsubmit={signOut}>
 				<button
 					type="submit"
-					class="ui-button"
+					class="ui-button signout-button"
+					aria-label={signoutLabel}
+					title={signoutLabel}
 					aria-describedby={signoutError ? 'signout-error' : undefined}
 					disabled={pending}
 				>
-					{pending ? 'Signing out…' : 'Sign out'}
+					<span class="signout-text">{signoutLabel}</span>
+					<span class="signout-icon"><IconSignOut aria-hidden="true" focusable="false" /></span>
 				</button>
 			</form>
 		</div>
@@ -131,18 +139,45 @@
 		text-decoration: none;
 	}
 
-	.health-link {
+	.nav-icon {
 		width: var(--control-min-height);
 		padding: 0;
 		font-size: 1.25rem;
 	}
 
-	.nav-links,
 	.nav-actions {
 		display: flex;
-		flex-wrap: wrap;
 		align-items: center;
 		gap: var(--space-4);
+	}
+
+	.signout-icon {
+		display: none;
+	}
+
+	@media (max-width: 640px) {
+		.admin-nav {
+			padding-inline: var(--space-4);
+		}
+
+		.nav-container,
+		.nav-actions {
+			gap: var(--space-1);
+		}
+
+		.signout-button {
+			width: var(--control-min-height);
+			padding: 0;
+			font-size: 1.25rem;
+		}
+
+		.signout-text {
+			display: none;
+		}
+
+		.signout-icon {
+			display: flex;
+		}
 	}
 
 	.signout-error {
