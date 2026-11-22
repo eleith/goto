@@ -217,15 +217,28 @@ test('shared credentials protect admin pages and sign-out removes access', async
 	await expect(tagHeading).toBeVisible();
 	await expect(tagHeading).toHaveAttribute('title', `Tag: ${sharedTag}`);
 	await expect(page).toHaveTitle(`Tag: ${sharedTag} — GoTo`);
-	await expect(page.getByRole('region', { name: 'Tag details', exact: true })).toHaveCount(0);
+	await expect(page.getByRole('main').getByRole('heading', { level: 2 })).toHaveText([
+		'Summary',
+		'Links'
+	]);
+	const tagSummary = page.getByRole('region', { name: 'Summary', exact: true });
+	await expect(tagSummary.locator('.admin-stat-label')).toHaveText([
+		'Domains',
+		'Links',
+		'Total Visits'
+	]);
+	await expect(tagSummary.locator('.admin-stat-value')).toHaveText(['2', '2', '2']);
+	await expect(timeframe).toHaveCount(0);
+	await expect(trend).toHaveCount(0);
 	const taggedLinks = page.getByRole('region', { name: `Links tagged ${sharedTag}`, exact: true });
 	await expect(taggedLinks.getByRole('link')).toHaveCount(2);
 	await expect(taggedLinks.locator('.admin-inventory-heading > span')).toHaveText([
 		'Domain',
 		'Path',
 		'State',
-		'Visits'
+		'Total Visits'
 	]);
+	await expect(taggedLinks.locator('.admin-inventory-number')).toHaveText(['1', '1']);
 	const taggedDocs = taggedLinks.getByRole('link', { name: 'go.example.org/docs', exact: true });
 	await expect(taggedDocs.locator('.admin-inventory-primary')).toHaveText('go.example.org');
 	await expect(taggedDocs.locator('.admin-inventory-secondary')).toHaveText('/docs');
@@ -233,14 +246,6 @@ test('shared credentials protect admin pages and sign-out removes access', async
 	await expect(
 		taggedLinks.getByRole('link', { name: 'tiny.example.org/docs', exact: true })
 	).toBeVisible();
-	const retainedTagVisits = page
-		.getByRole('region', { name: 'Visits', exact: true })
-		.locator('.admin-stat-value');
-	await expect(retainedTagVisits).toHaveText('2');
-	await expect(acceptedLanguages).toBeVisible();
-	await timeframe.getByRole('button', { name: '7 days', exact: true }).click();
-	await expect(page).toHaveURL(`${appServer.origin}${tagPath}?period=7d`);
-	await expect(retainedTagVisits).toHaveText('1');
 	await taggedDocs.click();
 	await expect(page).toHaveURL(`${appServer.origin}${docsPath}`);
 	await expect(summaryVisitCount).toHaveText('1');
@@ -440,6 +445,7 @@ test('shared credentials protect admin pages and sign-out removes access', async
 	await timeframe.getByRole('button', { name: '30 days', exact: true }).click();
 	await expect(page).toHaveURL(`${analyticsUrl}?${new URLSearchParams({ tag: sharedTag })}`);
 	await expect(analyticsChart.getByRole('row', { name: 'Total 2', exact: true })).toBeVisible();
+	await expect(acceptedLanguages.getByRole('row', { name: 'fr 1 50%', exact: true })).toBeVisible();
 	await page.goBack();
 	await expect(page).toHaveURL(tagReportUrl);
 	await page.reload();
@@ -628,7 +634,8 @@ test.describe('analytics disabled', () => {
 		await expect(
 			page.getByRole('heading', { name: `Tag: ${sharedTag}`, exact: true })
 		).toBeVisible();
-		await expect(page.locator('.admin-cards .admin-stat-label')).toHaveText(['Links']);
+		const tagSummary = page.getByRole('region', { name: 'Summary', exact: true });
+		await expect(tagSummary.locator('.admin-stat-value')).toHaveText(['2', '2', '0']);
 		await expect(page.getByRole('group', { name: 'Timeframe', exact: true })).toHaveCount(0);
 		await expect(page.getByRole('region', { name: 'Accepted languages', exact: true })).toHaveCount(
 			0
@@ -644,7 +651,8 @@ test.describe('analytics disabled', () => {
 		await expect(taggedLinks.locator('.admin-inventory-heading > span')).toHaveText([
 			'Domain',
 			'Path',
-			'State'
+			'State',
+			'Total Visits'
 		]);
 	});
 });

@@ -60,6 +60,8 @@ test('reads daily output and derives zero scopes in a window from current time a
 	const domainDetails: VisitDetails = { ...details, scope: domainScope };
 	const linkScope = { kind: 'link', domain, path: '/docs' } as const;
 	const linkDetails: VisitDetails = { ...details, scope: linkScope };
+	const otherLink = { kind: 'link', domain: 'other.example.test', path: '/docs' } as const;
+	const otherLinkActivityAt = '2026-06-15T11:00:00.000Z';
 	const emptyDetails: VisitDetails = {
 		...details,
 		lastActivityAt: null,
@@ -86,7 +88,8 @@ test('reads daily output and derives zero scopes in a window from current time a
 					addDailyVisitStatistics(transaction, [
 						daily,
 						{ ...daily, scope: domainScope },
-						{ ...daily, scope: linkScope }
+						{ ...daily, scope: linkScope },
+						{ ...daily, scope: otherLink, lastVisitAt: Date.parse(otherLinkActivityAt) }
 					])
 				);
 		} finally {
@@ -116,6 +119,11 @@ test('reads daily output and derives zero scopes in a window from current time a
 			expect(close).toHaveBeenCalledTimes(4);
 			expect(await readLastActivity(configuration)).toEqual({ available: true, lastActivityAt });
 			expect(close).toHaveBeenCalledTimes(5);
+			expect(await readLastActivity(configuration, [linkScope, otherLink])).toEqual({
+				available: true,
+				lastActivityAt: otherLinkActivityAt
+			});
+			expect(close).toHaveBeenCalledTimes(6);
 			configuration.analytics.retention_months = 9;
 			const longerPeriod = createVisitPeriod(9, Date.now());
 			expect((await readVisitDetails(configuration, details.scope))?.period).toEqual(longerPeriod);

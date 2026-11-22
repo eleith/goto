@@ -1,77 +1,38 @@
 import { error } from '@sveltejs/kit';
-import { countBreakdownVisitsByTimeframe, type VisitDetails } from '@goto/analytics';
-import { availableVisitTimeframes, countVisitWindows, visitWindow } from '@goto/analytics/daily';
 import { linkHref } from '#lib/components/admin/urls.js';
 import { currentLinkState } from '#lib/server/link-state.js';
 import { tagMembers } from '#lib/server/tags/inventory.js';
-import { combineTagVisits } from '#lib/server/tags/visits.js';
-import { readLinkDetails } from '#lib/server/visits/reports.js';
+import { readLastActivity } from '#lib/server/visits/reports.js';
 import type { PageServerLoad } from './$types';
 
 export const load = (async ({ locals, params }) => {
 	const snapshot = locals.snapshot;
 	const tag = params.tag;
 	const members = tagMembers(snapshot.domains, tag);
-	if (members.length === 0) throw error(404, 'Tag not configured');
-	const now = Date.now();
+	if (members.length === 0) error(404, 'Tag not configured');
+
 	const configuration = snapshot.configuration;
-	const retentionMonths = configuration.analytics.retention_months;
-	const collectionEnabled = retentionMonths !== 0;
-	const identities = members.map(({ domain, path }) => ({ domain, path }));
-	const report = collectionEnabled ? await readLinkDetails(configuration, identities) : null;
-	const tagDetails = report ? combineTagVisits(report) : null;
-	const timeframes = retentionMonths === 0 ? [] : availableVisitTimeframes(retentionMonths);
-	const windows = tagDetails
-		? timeframes.map((timeframe) => ({
-				timeframe,
-				window: visitWindow(tagDetails.period, timeframe)
-			}))
-		: [];
-	const countsByTimeframe = countVisitWindows(tagDetails?.daily, windows);
-	const browserVisitsByTimeframe = countBreakdownVisitsByTimeframe(tagDetails?.browsers, windows);
-	const operatingSystemVisitsByTimeframe = countBreakdownVisitsByTimeframe(
-		tagDetails?.operatingSystems,
-		windows
-	);
-	const acceptedLanguageVisitsByTimeframe = countBreakdownVisitsByTimeframe(
-		tagDetails?.acceptedLanguages,
-		windows
-	);
-	const detailsByDomain = new Map<string, Map<string, VisitDetails>>();
-	for (const { domain, path, details } of report?.links ?? []) {
-		let domainDetails = detailsByDomain.get(domain);
-		if (!domainDetails) {
-			domainDetails = new Map();
-			detailsByDomain.set(domain, domainDetails);
-		}
-		domainDetails.set(path, details);
-	}
+	const analyticsEnabled = configuration.analytics.retention_months !== 0;
+	const activity = analyticsEnabled
+		? await readLastActivity(
+				configuration,
+				members.map(({ domain, path }) => ({ kind: 'link' as const, domain, path }))
+			)
+		: null;
+	const now = Date.now();
 	const links = members.map(({ domain, path, link }) => {
-		const daily = detailsByDomain.get(domain)?.get(path)?.daily;
-		const countsByTimeframe = countVisitWindows(daily, windows);
+		const visits = locals.application.linkVisitCount(domain, path);
 		return {
 			domain,
 			path,
-			state: currentLinkState(link, now, locals.application.linkVisitCount(domain, path)),
-			countsByTimeframe,
+			state: currentLinkState(link, now, visits),
+			visits,
 			href: linkHref(domain, path)
 		};
 	});
-	const lastActivityAt = tagDetails?.lastActivityAt ? Date.parse(tagDetails.lastActivityAt) : null;
-	const chart = tagDetails ? { daily: tagDetails.daily, period: tagDetails.period } : null;
-	return {
-		tag,
-		retentionMonths,
-		collectionEnabled,
-		available: tagDetails !== null,
-		lastActivityAt,
-		linkCount: members.length,
-		timeframes,
-		countsByTimeframe,
-		browserVisitsByTimeframe,
-		operatingSystemVisitsByTimeframe,
-		acceptedLanguageVisitsByTimeframe,
-		chart,
-		links
-	};
+	const domainCount = new Set(links.map(({ domain }) => domain)).size;
+	const totalVisits = links.reduce((total, { visits }) => total + visits, 0);
+	const lastActivityAt = activity?.lastActivityAt ? Date.parse(activity.lastActivityAt) : null;
+
+	return { tag, analyticsEnabled, lastActivityAt, domainCount, totalVisits, links };
 }) satisfies PageServerLoad;

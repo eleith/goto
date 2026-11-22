@@ -51,7 +51,7 @@ export async function readVisitDetails(
 
 export async function readLastActivity(
 	configuration: ReportConfiguration,
-	scope: ReportScope = { kind: 'overview' }
+	scopeOrScopes: ReportScope | ReportScope[] = { kind: 'overview' }
 ): Promise<{ available: boolean; lastActivityAt: string | null }> {
 	const months = configuration.analytics.retention_months;
 	if (months === 0) return { available: true, lastActivityAt: null };
@@ -59,7 +59,7 @@ export async function readLastActivity(
 	try {
 		db = await openDb(configuration.database.path, { readOnly: true });
 		const period = createVisitPeriod(months, Date.now());
-		const lastActivityAt = await readLastVisitActivity(db, period, scope);
+		const lastActivityAt = await readLastVisitActivity(db, period, scopeOrScopes);
 		return { available: true, lastActivityAt };
 	} catch {
 		warnUnavailable();

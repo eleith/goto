@@ -247,10 +247,10 @@ test('selected-link readers bind exact path/domain pairs and ignore distractors'
 	await add(
 		daily(domainScope, 6, 2),
 		daily(rootScope, 1),
-		daily(link, 5),
-		daily(other, 7),
-		daily({ kind: 'link', domain, path: '/faq' }, 99),
-		daily({ kind: 'link', domain: 'other.example.test', path }, 99)
+		daily(link, 5, 0, 11),
+		daily(other, 7, 0, 12),
+		daily({ kind: 'link', domain, path: '/faq' }, 99, 0, 13),
+		daily({ kind: 'link', domain: 'other.example.test', path }, 99, 0, 14)
 	);
 	await db
 		.updateTable('visit_daily_statistics')
@@ -271,6 +271,8 @@ test('selected-link readers bind exact path/domain pairs and ignore distractors'
 		{ domain: other.domain, path: other.path, visits: 7 }
 	]);
 	expect(await readLinkVisitDetails(db, [], period)).toEqual({ period, links: [] });
+	expect(await readLastVisitActivity(db, period, [link, other])).toBe('2026-04-01T12:00:00.000Z');
+	expect(await readLastVisitActivity(db, period, [])).toBeNull();
 });
 
 test('successful empty reads give zeros/activity null; view time advances without writes and zero clears derived rows', async () => {

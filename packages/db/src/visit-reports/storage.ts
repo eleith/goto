@@ -118,11 +118,13 @@ export async function readVisitDetails(
 export async function readLastVisitActivity(
 	db: Kysely<Database>,
 	period: ReportPeriod,
-	scope: ReportScope = { kind: 'overview' }
+	scopeOrScopes: ReportScope | ReportScope[] = { kind: 'overview' }
 ): Promise<string | null> {
-	checkReportScope(scope);
+	const scopes = Array.isArray(scopeOrScopes) ? scopeOrScopes : [scopeOrScopes];
+	for (const selected of scopes) checkReportScope(selected);
 	const days = reportDays(period);
-	const row = await selectedDays(db, [scope])
+	if (scopes.length === 0) return null;
+	const row = await selectedDays(db, scopes)
 		.select(({ fn }) => fn.max<number>('last_visit_at').as('lastVisitAt'))
 		.where('day', '>=', days.first)
 		.where('day', '<=', days.last)
