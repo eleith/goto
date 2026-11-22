@@ -34,7 +34,7 @@ const configuration = {
 				'/schema.json': { url: 'https://example.org/public-schema' },
 				'/_app/version.json': { url: 'https://example.org/public-asset' },
 				'/a/b': { url: 'https://example.org/decoded' },
-				'/a%2Fb': { url: 'https://example.org/literal-percent' },
+				'/a%2Fb': { url: 'https://example.org/literal-percent', max_visits: 1 },
 				'/docs': {
 					title: 'New hire handbook',
 					url: 'https://example.org/first-domain',

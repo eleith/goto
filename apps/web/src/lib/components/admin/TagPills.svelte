@@ -1,14 +1,13 @@
 <script lang="ts">
-	import type { VisitTimeframe } from '@goto/analytics/daily';
 	import { tagHref } from './urls.js';
 
-	let { tags, timeframe }: { tags: readonly string[]; timeframe?: VisitTimeframe } = $props();
+	let { tags }: { tags: readonly string[] } = $props();
 	let uniqueTags = $derived([...new Set(tags)]);
 </script>
 
 <ul class="tags" aria-label="Tags">
 	{#each uniqueTags as tag (tag)}
-		<li><a href={tagHref(tag, timeframe)}>{tag}</a></li>
+		<li><a href={tagHref(tag)}>{tag}</a></li>
 	{/each}
 </ul>
 

@@ -1,8 +1,6 @@
 import { error } from '@sveltejs/kit';
-import { countBreakdownVisitsByTimeframe } from '@goto/analytics';
-import { availableVisitTimeframes, countVisitWindows, visitWindow } from '@goto/analytics/daily';
 import { currentLinkState } from '#lib/server/link-state.js';
-import { readVisitDetails } from '#lib/server/visits/reports.js';
+import { readLastActivity } from '#lib/server/visits/reports.js';
 import type { PageServerLoad } from './$types';
 
 export const load = (async ({ locals, params }) => {
@@ -29,29 +27,10 @@ export const load = (async ({ locals, params }) => {
 	const validFrom = link.valid_from ?? null;
 	const validUntil = link.valid_until ?? null;
 	const configuration = snapshot.configuration;
-	const retentionMonths = configuration.analytics.retention_months;
-	const collectionEnabled = retentionMonths !== 0;
-	const scope = { kind: 'link' as const, domain, path };
-	let details: Awaited<ReturnType<typeof readVisitDetails>> = null;
-	if (collectionEnabled) {
-		details = await readVisitDetails(configuration, scope);
-	}
-	const timeframes = retentionMonths === 0 ? [] : availableVisitTimeframes(retentionMonths);
-	const windows = details
-		? timeframes.map((timeframe) => ({ timeframe, window: visitWindow(details.period, timeframe) }))
-		: [];
-	const countsByTimeframe = countVisitWindows(details?.daily, windows);
-	const browserVisitsByTimeframe = countBreakdownVisitsByTimeframe(details?.browsers, windows);
-	const operatingSystemVisitsByTimeframe = countBreakdownVisitsByTimeframe(
-		details?.operatingSystems,
-		windows
-	);
-	const acceptedLanguageVisitsByTimeframe = countBreakdownVisitsByTimeframe(
-		details?.acceptedLanguages,
-		windows
-	);
-	const lastActivityAt = details?.lastActivityAt ? Date.parse(details.lastActivityAt) : null;
-	const chart = details ? { daily: details.daily, period: details.period } : null;
+	const analyticsEnabled = configuration.analytics.retention_months !== 0;
+	const activity = analyticsEnabled
+		? await readLastActivity(configuration, { kind: 'link', domain, path })
+		: null;
 
 	return {
 		domain,
@@ -68,15 +47,7 @@ export const load = (async ({ locals, params }) => {
 		validFrom,
 		validUntil,
 		tags: link.tags,
-		retentionMonths,
-		collectionEnabled,
-		available: details !== null,
-		lastActivityAt,
-		timeframes,
-		countsByTimeframe,
-		browserVisitsByTimeframe,
-		operatingSystemVisitsByTimeframe,
-		acceptedLanguageVisitsByTimeframe,
-		chart
+		analyticsEnabled,
+		lastActivityAt: activity?.lastActivityAt ? Date.parse(activity.lastActivityAt) : null
 	};
 }) satisfies PageServerLoad;

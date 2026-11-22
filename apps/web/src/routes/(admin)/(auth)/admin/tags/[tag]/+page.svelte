@@ -23,7 +23,6 @@
 	let inventoryLinks = $derived(
 		data.links.map(({ countsByTimeframe, ...link }) => ({
 			...link,
-			href: `${link.href}?period=${timeframe}`,
 			visits: countsByTimeframe[timeframe]?.validVisits ?? null
 		}))
 	);
