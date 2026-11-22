@@ -15,7 +15,15 @@ function request(retentionMonths: 0 | 3, query = '') {
 		{
 			auth: { credentials: { username: 'test', password: 'analytics-test-password' } },
 			analytics: { retention_months: retentionMonths },
-			domains: { [configuredDomain]: { links: {} } }
+			domains: {
+				[configuredDomain]: {
+					links: {
+						'/a%2Fb': { url: 'https://example.test/literal' },
+						'/a/b': { title: 'Nested docs', url: 'https://example.test/nested' }
+					}
+				},
+				'other.example.test': { links: { '/other': { url: 'https://example.test/other' } } }
+			}
 		},
 		{ env: {} }
 	);
@@ -46,7 +54,42 @@ test('reads one report for the selected configured domain', async () => {
 		kind: 'domain',
 		domain: configuredDomain
 	});
-	expect(data).toMatchObject({ domain: configuredDomain, domainUnavailable: false });
+	expect(data).toMatchObject({ domain: configuredDomain, domainUnavailable: false, path: null });
+	expect(data.redirectPaths).toEqual(['/', '/a%2Fb', '/a/b']);
+});
+
+test.each(['/', '/a%2Fb', '/a/b'])('reads one report for the exact redirect %s', async (path) => {
+	vi.mocked(readVisitDetails).mockResolvedValueOnce(null);
+	const query = new URLSearchParams({ domain: configuredDomain, path });
+	const data = await load(request(3, `?${query}`));
+
+	expect(readVisitDetails).toHaveBeenCalledExactlyOnceWith(expect.any(Object), {
+		kind: 'link',
+		domain: configuredDomain,
+		path
+	});
+	expect(data).toMatchObject({ path, redirectUnavailable: false });
+});
+
+test.each([
+	'?path=%2F',
+	`?domain=${configuredDomain}&path=`,
+	`?domain=${configuredDomain}&path=%2Fa%2F..%2Fb`,
+	`?domain=${configuredDomain}&path=%2F&path=%2Fa%2Fb`
+])('rejects an invalid redirect query without reading a report: %s', async (query) => {
+	await expect(load(request(3, query))).rejects.toMatchObject({ status: 400 });
+	expect(readVisitDetails).not.toHaveBeenCalled();
+});
+
+test('does not read a broader report for a redirect missing from the selected domain', async () => {
+	const data = await load(request(3, `?domain=${configuredDomain}&path=%2Fother`));
+	expect(data).toMatchObject({
+		domain: configuredDomain,
+		path: '/other',
+		redirectUnavailable: true,
+		report: null
+	});
+	expect(readVisitDetails).not.toHaveBeenCalled();
 });
 
 test.each([`?domain=${configuredDomain}&domain=tiny.example.test`, '?domain=GO.EXAMPLE.TEST'])(
@@ -61,7 +104,7 @@ test('keeps a removed domain selection without falling back to the global report
 	const data = await load(request(3, '?domain=removed.example.test'));
 	expect(data).toMatchObject({
 		domain: 'removed.example.test',
-		domains: [configuredDomain],
+		domains: [configuredDomain, 'other.example.test'],
 		domainUnavailable: true,
 		report: null
 	});

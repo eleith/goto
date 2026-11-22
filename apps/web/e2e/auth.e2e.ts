@@ -349,52 +349,126 @@ test('shared credentials protect admin pages and sign-out removes access', async
 	const analyticsChart = page.getByRole('region', { name: 'Visits over time', exact: true });
 	await expect(analyticsVisits).toContainText('3');
 	await expect(analyticsChart.getByRole('row', { name: 'Total 3', exact: true })).toBeVisible();
-	const domainSelect = page.getByRole('combobox', { name: 'Domain', exact: true });
+	const reportFilters = page.getByRole('group', { name: 'Report filters', exact: true });
+	const domainSelect = reportFilters.getByRole('button', { name: /^Domain: / });
+	const redirectSelect = reportFilters.getByRole('button', { name: /^Redirect: / });
+	const redirectOptions = page.getByRole('listbox', { name: 'Redirect', exact: true });
+	async function chooseReportOption(label: 'Domain' | 'Redirect', option: string) {
+		const trigger = label === 'Domain' ? domainSelect : redirectSelect;
+		await trigger.click();
+		await page
+			.getByRole('listbox', { name: label, exact: true })
+			.getByRole('option', { name: option, exact: true })
+			.click();
+	}
+	await expect(redirectSelect).toHaveAccessibleName('Redirect: All redirects');
+	await redirectSelect.click();
+	await expect(redirectOptions.getByRole('option')).toHaveText(['All redirects']);
+	await redirectSelect.press('Escape');
 	const analyticsUrl = `${appServer.origin}/admin/analytics`;
-	const isDomainReportRequest = (url: URL) =>
+	const goReportUrl = `${analyticsUrl}?period=7d&domain=go.example.org`;
+	await timeframe.getByRole('button', { name: '7 days', exact: true }).click();
+	await expect(page).toHaveURL(`${analyticsUrl}?period=7d`);
+	await chooseReportOption('Domain', 'go.example.org');
+	await expect(page).toHaveURL(goReportUrl);
+	await expect(analyticsChart.getByRole('row', { name: 'Total 1', exact: true })).toBeVisible();
+
+	const isHeldRedirectRequest = (url: URL) =>
 		url.pathname === '/admin/analytics/__data.json' &&
-		url.searchParams.get('domain') === 'go.example.org';
-	const releaseDomainReport = Promise.withResolvers<void>();
+		url.searchParams.get('domain') === 'go.example.org' &&
+		url.searchParams.get('path') === '/a/b';
+	const releaseRedirectReport = Promise.withResolvers<void>();
 	await page.route(
-		isDomainReportRequest,
+		isHeldRedirectRequest,
 		async (route) => {
-			await releaseDomainReport.promise;
+			await releaseRedirectReport.promise;
 			await route.continue();
 		},
 		{ times: 1 }
 	);
 	try {
-		await Promise.all([
-			page.waitForRequest((request) => isDomainReportRequest(new URL(request.url()))),
-			domainSelect.selectOption('go.example.org')
+		const [heldRequest] = await Promise.all([
+			page.waitForRequest((request) => isHeldRedirectRequest(new URL(request.url()))),
+			chooseReportOption('Redirect', '/a/b')
 		]);
-		await timeframe.getByRole('button', { name: '7 days', exact: true }).click();
-		await expect(page).toHaveURL(`${analyticsUrl}?period=7d`);
-		await expect(domainSelect).toHaveValue('');
+		await expect(reportFilters).toHaveAttribute('aria-busy', 'true');
+		await expect(redirectSelect).toHaveAccessibleName('Redirect: All redirects');
+		await timeframe.getByRole('button', { name: '30 days', exact: true }).click();
+		await expect(page).toHaveURL(`${analyticsUrl}?domain=go.example.org`);
+
+		releaseRedirectReport.resolve();
+		const lateResponse = await heldRequest.response();
+		expect(lateResponse?.ok()).toBe(true);
+		await expect(reportFilters).toHaveAttribute('aria-busy', 'false');
+		await expect(page).toHaveURL(`${analyticsUrl}?domain=go.example.org`);
+		await expect(redirectSelect).toHaveAccessibleName('Redirect: All redirects');
 		await expect(analyticsVisits).toContainText('2');
 		await expect(analyticsChart.getByRole('row', { name: 'Total 2', exact: true })).toBeVisible();
 	} finally {
-		releaseDomainReport.resolve();
+		releaseRedirectReport.resolve();
 	}
-
-	await domainSelect.selectOption('go.example.org');
-	await expect(page).toHaveURL(`${analyticsUrl}?period=7d&domain=go.example.org`);
-	await expect(analyticsChart.getByRole('row', { name: 'Total 1', exact: true })).toBeVisible();
-	await timeframe.getByRole('button', { name: '30 days', exact: true }).click();
-	await expect(page).toHaveURL(`${analyticsUrl}?domain=go.example.org`);
-	await expect(analyticsVisits).toContainText('2');
-	await expect(analyticsChart.getByRole('row', { name: 'Total 2', exact: true })).toBeVisible();
 	await page.goBack();
 	await page.goBack();
 	await expect(page).toHaveURL(`${analyticsUrl}?period=7d`);
-	await expect(domainSelect).toHaveValue('');
+	await expect(domainSelect).toHaveAccessibleName('Domain: All domains');
 	await expect(analyticsChart.getByRole('row', { name: 'Total 2', exact: true })).toBeVisible();
 
 	await page.goto(`${analyticsUrl}?domain=removed.example.org&period=7d`);
 	await expect(page.getByRole('status')).toContainText('This domain is not configured.');
-	await domainSelect.selectOption('');
+	await chooseReportOption('Domain', 'All domains');
 	await expect(page).toHaveURL(`${analyticsUrl}?period=7d`);
 	await expect(analyticsChart.getByRole('row', { name: 'Total 2', exact: true })).toBeVisible();
+
+	await chooseReportOption('Domain', 'go.example.org');
+	await expect(redirectSelect).toHaveAccessibleName('Redirect: All redirects');
+	await chooseReportOption('Redirect', '/docs');
+	await expect(page).toHaveURL(`${goReportUrl}&path=%2Fdocs`);
+	await expect(analyticsChart.getByRole('row', { name: 'Total 0', exact: true })).toBeVisible();
+	await chooseReportOption('Redirect', 'Root (/)');
+	await expect(page).toHaveURL(`${goReportUrl}&path=%2F`);
+	await expect(analyticsChart.getByRole('row', { name: 'Total 1', exact: true })).toBeVisible();
+	await page.goBack();
+	await expect(redirectSelect).toHaveAccessibleName('Redirect: /docs');
+	await expect(analyticsChart.getByRole('row', { name: 'Total 0', exact: true })).toBeVisible();
+
+	await chooseReportOption('Domain', 'tiny.example.org');
+	const tinyReportUrl = `${analyticsUrl}?period=7d&domain=tiny.example.org`;
+	await expect(page).toHaveURL(tinyReportUrl);
+	await expect(redirectSelect).toHaveAccessibleName('Redirect: All redirects');
+	await redirectSelect.press('Enter');
+	await expect(redirectOptions.getByRole('option')).toHaveText([
+		'All redirects',
+		'Root (/)',
+		'/docs'
+	]);
+	await redirectOptions.getByRole('option', { name: '/docs', exact: true }).click();
+	await expect(page).toHaveURL(`${tinyReportUrl}&path=%2Fdocs`);
+	await expect(analyticsChart.getByRole('row', { name: 'Total 1', exact: true })).toBeVisible();
+	await chooseReportOption('Domain', 'All domains');
+	await expect(page).toHaveURL(`${analyticsUrl}?period=7d`);
+	await expect(redirectSelect).toHaveAccessibleName('Redirect: All redirects');
+
+	await page.goto(`${goReportUrl}&path=%2Fremoved`);
+	await expect(page.getByRole('status')).toContainText('This redirect is not configured.');
+	await expect(analyticsChart).toHaveCount(0);
+	await chooseReportOption('Redirect', 'All redirects');
+	await expect(page).toHaveURL(goReportUrl);
+	await expect(analyticsChart.getByRole('row', { name: 'Total 1', exact: true })).toBeVisible();
+
+	await timeframe.getByRole('button', { name: '90 days', exact: true }).click();
+	const fullDomainUrl = `${analyticsUrl}?period=all&domain=go.example.org`;
+	await expect(page).toHaveURL(fullDomainUrl);
+	await chooseReportOption('Redirect', '/a%2Fb');
+	const literalPathUrl = `${fullDomainUrl}&path=%2Fa%252Fb`;
+	await expect(page).toHaveURL(literalPathUrl);
+	await expect(analyticsChart.getByRole('row', { name: 'Total 1', exact: true })).toBeVisible();
+	await chooseReportOption('Redirect', '/a/b');
+	await expect(page).toHaveURL(`${fullDomainUrl}&path=%2Fa%2Fb`);
+	await expect(analyticsChart.getByRole('row', { name: 'Total 0', exact: true })).toBeVisible();
+	await page.goBack();
+	await expect(page).toHaveURL(literalPathUrl);
+	await expect(redirectSelect).toHaveAccessibleName('Redirect: /a%2Fb');
+	await expect(analyticsChart.getByRole('row', { name: 'Total 1', exact: true })).toBeVisible();
 
 	const html = await page.content();
 	await expect(html).not.toContain('e2e-only-password');
