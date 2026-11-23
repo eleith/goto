@@ -6,37 +6,42 @@ One YAML file can run links for several domains. The admin shows what’s config
 
 ## Get started
 
-Let’s assume you have Docker Compose. From a checkout:
+You’ll need Docker Compose and an HTTPS reverse proxy that can reach the Docker host’s loopback address, such as a proxy running directly on that host. Download the [Compose file](compose.yaml). No checkout or build needed.
 
 ```sh
-mkdir -p apps/web/config apps/web/data
+mkdir -p goto/config goto/data
+cd goto
+curl -fsSLo compose.yaml https://git.eleith.com/eleith/goto/raw/branch/main/compose.yaml
 ```
 
-Save this as `apps/web/config/goto.yaml`. Pick a password before starting.
+Save this as `config/goto.yaml`. Replace `go.example.org` with your host in both places.
 
 ```yaml
 url:
-  app: http://localhost:5173
+  app: https://go.example.org
 
 auth:
+  secret: '${GOTO_AUTH_SECRET}'
   credentials:
     username: admin
-    password: 'pick-a-local-password'
+    password: '${GOTO_ADMIN_PASSWORD}'
 
 domains:
-  localhost:5173:
+  go.example.org:
     links:
       /hello:
         url: https://example.org
 ```
 
-If your user and group IDs aren’t `1000:1000`, set `LOCAL_UID` and `LOCAL_GID` before running Compose.
+Put `GOTO_ADMIN_PASSWORD` and `GOTO_AUTH_SECRET` in `.env` beside `compose.yaml`. Pick a password and generate a secret with `openssl rand -hex 32`. Keep the same secret across restarts. Make `data/` writable by the containers (UID `1000` on Linux) and back it up.
+
+Point your HTTPS proxy at `http://127.0.0.1:3000`. Preserve `Host` and have the proxy set `X-Real-IP`. The worker isn’t exposed.
 
 ```sh
-docker compose -f apps/web/docker-compose.dev.yml up --build --wait
+docker compose up --wait
 ```
 
-When the command finishes, open <http://localhost:5173/hello>. It should send you on your way. Sign in at <http://localhost:5173/admin> to see the link. The worker prepares Analytics in the background, so don’t stare at the chart waiting for that first click.
+Open `/hello` on your host. It should send you on your way. Sign in at `/admin` to see the link. The worker prepares Analytics in the background, so don’t stare at the chart waiting for that first click.
 
 ## Why this way?
 
@@ -46,13 +51,9 @@ When the command finishes, open <http://localhost:5173/hello>. It should send yo
 
 **What gets kept?** Analytics keeps 90 days of detail by default. Set `analytics.retention_months: 0` to turn off detailed Analytics without losing lifetime totals. Stop both services before reducing retention or switching between zero and a positive value, then start them again.
 
-## Configuration and deployment
+## Configuration
 
-The [example YAML](examples/goto.yaml) shows multiple domains, SSO, tags and conditional redirects. The [schema](packages/config/src/config.schema.json) has the full list of options. Most link edits take effect without a restart.
-
-Use the [production Compose file](apps/web/docker-compose.yml) behind an HTTPS reverse proxy. Set `url.app` to the public admin origin and put your short-link hosts under `domains`. They can share a host or use separate ones. Keep the backend private; have the proxy preserve `Host` and set `X-Forwarded-Proto` and `X-Real-IP`. Put `PROTOCOL_HEADER=X-Forwarded-Proto` in `apps/web/.env`.
-
-Keep `apps/web/data` writable by both containers and backed up. Use a stable, random `auth.secret` of at least 32 characters, passed in through the environment as in the example.
+Admin and short links can share a host or use separate ones. The [example YAML](examples/goto.yaml) shows multiple domains, SSO, tags and conditional redirects. The [schema](packages/config/src/config.schema.json) has the full list. Most link edits take effect without a restart.
 
 ## Development
 
