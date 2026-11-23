@@ -49,6 +49,7 @@ test('shared credentials protect admin pages and sign-out removes access', async
 	]);
 	const totalVisits = summary.getByRole('region', { name: 'Total Visits', exact: true });
 	await expect(totalVisits.getByText('5', { exact: true })).toBeVisible();
+	await expect(summary.getByRole('link')).toHaveCount(0);
 	await expect(page.getByRole('region', { name: 'Visits over time', exact: true })).toHaveCount(0);
 	await expect(page.getByRole('region', { name: 'Accepted languages', exact: true })).toHaveCount(
 		0
@@ -111,15 +112,22 @@ test('shared credentials protect admin pages and sign-out removes access', async
 		.filter({ has: page.getByRole('link', { name: '/a/b', exact: true }) });
 	await expect(historicalInvalid.locator('.admin-inventory-number')).toHaveText('0');
 	await expect(domainDetails.getByRole('heading', { name: 'Details', exact: true })).toBeVisible();
-	await expect(domainDetails.locator('dt')).toHaveText(['Domain', 'Root', 'Fallback']);
+	const domainReportPath = '/admin/analytics?domain=go.example.org';
+	await expect(domainDetails.locator('dt')).toHaveText(['Domain', 'Root', 'Fallback', 'Analytics']);
 	await expect(domainDetails.locator('dd')).toHaveText([
 		'go.example.org',
 		'Uses fallback',
-		'404 Not found'
+		'404 Not found',
+		domainReportPath
 	]);
 	await expect(rootRow.locator('.admin-inventory-number')).toHaveText('1');
 	await expect(domainDetails.getByRole('link', { name: 'Root', exact: true })).toHaveCount(0);
 	await expect(domainDetails.getByRole('link', { name: 'Fallback', exact: true })).toHaveCount(0);
+	const domainAnalyticsLink = domainDetails.getByRole('link', {
+		name: domainReportPath,
+		exact: true
+	});
+	await expect(domainAnalyticsLink).toHaveAttribute('href', domainReportPath);
 	await expect(
 		linksInventory.getByText('https://example.org/first-domain', { exact: true })
 	).toBeVisible();
@@ -150,7 +158,8 @@ test('shared credentials protect admin pages and sign-out removes access', async
 		'Path',
 		'Title',
 		'Destination',
-		'Rules'
+		'Rules',
+		'Analytics'
 	]);
 	await expect(redirectCard.getByText(docsTitle, { exact: true })).toBeVisible();
 	await expect(settingsCard.locator('dt')).toHaveText([
@@ -213,14 +222,24 @@ test('shared credentials protect admin pages and sign-out removes access', async
 
 	await settingsCard.getByRole('link', { name: sharedTag, exact: true }).click();
 	await expect(page).toHaveURL(`${appServer.origin}${tagPath}`);
-	const tagHeading = page.getByRole('heading', { name: `Tag: ${sharedTag}`, exact: true });
-	await expect(tagHeading).toBeVisible();
-	await expect(tagHeading).toHaveAttribute('title', `Tag: ${sharedTag}`);
+	await expect(page.getByRole('heading', { level: 1, name: 'Tag', exact: true })).toBeVisible();
 	await expect(page).toHaveTitle(`Tag: ${sharedTag} — GoTo`);
 	await expect(page.getByRole('main').getByRole('heading', { level: 2 })).toHaveText([
 		'Summary',
+		'Details',
 		'Links'
 	]);
+	const tagDetails = page.getByRole('region', { name: 'Details', exact: true });
+	const tagQuery = new URLSearchParams({ tag: sharedTag });
+	const tagReportPath = `/admin/analytics?${tagQuery}`;
+	await expect(tagDetails.locator('dt')).toHaveText(['Tag Name', 'Analytics']);
+	await expect(tagDetails.locator('dd')).toHaveText([sharedTag, tagReportPath]);
+	const tagAnalyticsLink = tagDetails.getByRole('link', { name: tagReportPath, exact: true });
+	await tagAnalyticsLink.click();
+	await expect(page).toHaveURL(`${appServer.origin}${tagReportPath}`);
+	const tagScopePicker = page.getByRole('combobox', { name: 'Report scope', exact: true });
+	await expect(tagScopePicker).toHaveAttribute('placeholder', `Tag: ${sharedTag}`);
+	await page.goBack();
 	const tagSummary = page.getByRole('region', { name: 'Summary', exact: true });
 	await expect(tagSummary.locator('.admin-stat-label')).toHaveText([
 		'Domains',
@@ -258,6 +277,12 @@ test('shared credentials protect admin pages and sign-out removes access', async
 	await expect(redirectCard.getByText('Title', { exact: true })).toHaveCount(0);
 	await expect(page).toHaveURL(`${appServer.origin}/admin/domains/go.example.org/links/a%252Fb`);
 	await expect(summaryVisitCount).toHaveText('1');
+	const literalPercentReportPath = `${domainReportPath}&path=%2Fa%252Fb`;
+	const literalPercentReport = redirectCard.getByRole('link', {
+		name: literalPercentReportPath,
+		exact: true
+	});
+	await expect(literalPercentReport).toHaveAttribute('href', literalPercentReportPath);
 	const linkSummary = page.getByRole('region', { name: 'Summary', exact: true });
 	await expect(linkSummary.getByRole('region', { name: 'Status', exact: true })).toContainText(
 		'Limit Exceeded'
@@ -273,6 +298,9 @@ test('shared credentials protect admin pages and sign-out removes access', async
 	await expect(page.getByRole('heading', { name: 'Link', exact: true })).toBeVisible();
 	await expect(page).toHaveTitle('Link — go.example.org/a/b — GoTo');
 	await expect(summaryVisitCount).toHaveText('0');
+	const nestedReportPath = `${domainReportPath}&path=%2Fa%2Fb`;
+	const nestedReport = redirectCard.getByRole('link', { name: nestedReportPath, exact: true });
+	await expect(nestedReport).toHaveAttribute('href', nestedReportPath);
 
 	await page.goBack();
 	await rootLink.click();
@@ -289,14 +317,23 @@ test('shared credentials protect admin pages and sign-out removes access', async
 	await expect(summaryVisitCount).toHaveText('1');
 	await expect(page.getByRole('region', { name: 'Status', exact: true })).toHaveCount(0);
 	const rootDetails = page.getByRole('region', { name: 'Root details', exact: true });
+	await expect(rootDetails.locator('dt')).toHaveText([
+		'Domain',
+		'Address',
+		'Destination',
+		'Analytics'
+	]);
 	await expect(rootDetails.locator('dd')).toHaveText([
 		'go.example.org',
 		'go.example.org/',
-		'Uses fallback'
+		'Uses fallback',
+		domainReportPath
 	]);
 	await expect(page.getByRole('region', { name: 'Fallback', exact: true })).toContainText(
 		'404 Not found'
 	);
+	const rootAnalyticsLink = rootDetails.getByRole('link', { name: domainReportPath, exact: true });
+	await expect(rootAnalyticsLink).toHaveAttribute('href', domainReportPath);
 	await rootDetails.getByRole('link', { name: 'go.example.org', exact: true }).click();
 	await expect(totalVisits.getByText('3', { exact: true })).toBeVisible();
 
@@ -584,16 +621,22 @@ test.describe('analytics disabled', () => {
 				.getByRole('region', { name: 'Links on go.example.org', exact: true })
 				.locator('.admin-inventory-heading > span')
 		).toHaveText(['Path', 'Destination', 'State', 'Total Visits']);
-		await expect(
-			page.getByRole('region', { name: 'Details', exact: true }).locator('dt')
-		).toHaveText(['Domain', 'Root', 'Fallback']);
-		await expect(
-			page
-				.getByRole('region', { name: 'Links on go.example.org', exact: true })
-				.getByRole('link', { name: '(root)', exact: true })
-		).toBeVisible();
+		const details = page.getByRole('region', { name: 'Details', exact: true });
+		const reportLinks = 'a[href^="/admin/analytics"]';
+		await expect(details.locator('dt')).toHaveText(['Domain', 'Root', 'Fallback']);
+		await expect(details.locator(reportLinks)).toHaveCount(0);
+		const rootLink = page
+			.getByRole('region', { name: 'Links on go.example.org', exact: true })
+			.getByRole('link', { name: '(root)', exact: true });
+		await rootLink.click();
+		const rootDetails = page.getByRole('region', { name: 'Root details', exact: true });
+		await expect(rootDetails).toBeVisible();
+		await expect(rootDetails.locator(reportLinks)).toHaveCount(0);
+		await page.goBack();
 		await page.getByRole('link', { name: '/docs', exact: true }).click();
-		await expect(page.getByRole('region', { name: 'Redirect', exact: true })).toBeVisible();
+		const redirectCard = page.getByRole('region', { name: 'Redirect', exact: true });
+		await expect(redirectCard).toBeVisible();
+		await expect(redirectCard.locator(reportLinks)).toHaveCount(0);
 		await expect(page.getByRole('region', { name: 'Browsers', exact: true })).toHaveCount(0);
 		await expect(page.getByRole('region', { name: 'Operating systems', exact: true })).toHaveCount(
 			0
@@ -631,9 +674,10 @@ test.describe('analytics disabled', () => {
 			.getByRole('link', { name: sharedTag, exact: true })
 			.click();
 		await expect(page).toHaveURL(`${appServer.origin}${tagPath}`);
-		await expect(
-			page.getByRole('heading', { name: `Tag: ${sharedTag}`, exact: true })
-		).toBeVisible();
+		await expect(page.getByRole('heading', { level: 1, name: 'Tag', exact: true })).toBeVisible();
+		await expect(details.locator('dt')).toHaveText('Tag Name');
+		await expect(details.locator('dd')).toHaveText(sharedTag);
+		await expect(details.locator(reportLinks)).toHaveCount(0);
 		const tagSummary = page.getByRole('region', { name: 'Summary', exact: true });
 		await expect(tagSummary.locator('.admin-stat-value')).toHaveText(['2', '2', '0']);
 		await expect(page.getByRole('group', { name: 'Timeframe', exact: true })).toHaveCount(0);

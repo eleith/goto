@@ -1,5 +1,6 @@
 <script lang="ts">
 	import AdminPage from '#lib/components/admin/AdminPage.svelte';
+	import AnalyticsField from '#lib/components/admin/AnalyticsField.svelte';
 	import StatCard from '#lib/components/admin/StatCard.svelte';
 	import { formatUtc } from '#lib/components/admin/format.js';
 	import TagPills from '#lib/components/admin/TagPills.svelte';
@@ -92,6 +93,9 @@
 							</li>
 						</ol>
 					</dd>
+				{/if}
+				{#if data.analyticsEnabled}
+					<AnalyticsField scope={{ kind: 'link', domain: data.domain, path: data.path }} />
 				{/if}
 			</dl>
 		</div>

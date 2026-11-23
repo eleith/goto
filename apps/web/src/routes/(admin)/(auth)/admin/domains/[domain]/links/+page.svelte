@@ -1,5 +1,6 @@
 <script lang="ts">
 	import AdminPage from '#lib/components/admin/AdminPage.svelte';
+	import AnalyticsField from '#lib/components/admin/AnalyticsField.svelte';
 	import StatCard from '#lib/components/admin/StatCard.svelte';
 	import type { PageData } from './$types';
 	let { data }: { data: PageData } = $props();
@@ -45,6 +46,9 @@
 					<dd>{data.response.status_code}</dd>
 					<dt>Forward query</dt>
 					<dd>{data.response.forward_query ? 'Yes' : 'No'}</dd>
+				{/if}
+				{#if data.analyticsEnabled}
+					<AnalyticsField scope={{ kind: 'domain', domain: data.domain }} />
 				{/if}
 			</dl>
 		</div>

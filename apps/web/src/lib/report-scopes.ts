@@ -20,6 +20,14 @@ export function scopeLabel(scope: AnalyticsScope): string {
 	}
 }
 
+export function analyticsHref(scope: AnalyticsScope): string {
+	const pathname = '/admin/analytics';
+	const query = new URLSearchParams();
+	setScope(query, scope);
+	if (query.size === 0) return pathname;
+	return `${pathname}?${query}`;
+}
+
 export function scopeValue(scope: AnalyticsScope): string {
 	const query = new URLSearchParams();
 	setScope(query, scope);

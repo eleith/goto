@@ -1,5 +1,6 @@
 <script lang="ts">
 	import AdminPage from '#lib/components/admin/AdminPage.svelte';
+	import AnalyticsField from '#lib/components/admin/AnalyticsField.svelte';
 	import LinkInventory from '#lib/components/admin/LinkInventory.svelte';
 	import StatCard from '#lib/components/admin/StatCard.svelte';
 	import type { PageData } from './$types';
@@ -8,7 +9,8 @@
 
 <AdminPage
 	analyticsEnabled={data.analyticsEnabled}
-	title={`Tag: ${data.tag}`}
+	title="Tag"
+	documentTitle={`Tag: ${data.tag}`}
 	lastActivityAt={data.lastActivityAt}
 >
 	<section aria-labelledby="summary-heading">
@@ -17,6 +19,18 @@
 			<StatCard label="Domains" value={data.domainCount} />
 			<StatCard label="Links" value={data.links.length} />
 			<StatCard label="Total Visits" value={data.totalVisits} />
+		</div>
+	</section>
+	<section aria-labelledby="tag-details-heading">
+		<h2 id="tag-details-heading">Details</h2>
+		<div class="admin-info">
+			<dl>
+				<dt>Tag Name</dt>
+				<dd class="tag-name">{data.tag}</dd>
+				{#if data.analyticsEnabled}
+					<AnalyticsField scope={{ kind: 'tag', tag: data.tag }} />
+				{/if}
+			</dl>
 		</div>
 	</section>
 	<section>
@@ -29,3 +43,9 @@
 		/>
 	</section>
 </AdminPage>
+
+<style>
+	.tag-name {
+		white-space: break-spaces;
+	}
+</style>

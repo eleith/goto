@@ -1,5 +1,6 @@
 <script lang="ts">
 	import AdminPage from '#lib/components/admin/AdminPage.svelte';
+	import AnalyticsField from '#lib/components/admin/AnalyticsField.svelte';
 	import StatCard from '#lib/components/admin/StatCard.svelte';
 	import LinkInventory from '#lib/components/admin/LinkInventory.svelte';
 	import type { PageData } from './$types';
@@ -43,6 +44,9 @@
 						<a class="admin-destination" href={data.fallback.url}>{data.fallback.url}</a>
 					{:else}404 Not found{/if}
 				</dd>
+				{#if data.analyticsEnabled}
+					<AnalyticsField scope={{ kind: 'domain', domain: data.domain }} />
+				{/if}
 			</dl>
 		</div>
 	</section>

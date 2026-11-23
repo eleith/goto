@@ -2,11 +2,11 @@ import { countBreakdownVisitsByTimeframe } from '@goto/analytics';
 import { availableVisitTimeframes, countVisitWindows, visitWindow } from '@goto/analytics/daily';
 import { isCanonicalPath, normalizeHost } from '@goto/config';
 import { error, redirect } from '@sveltejs/kit';
+import { scopeValue, type AnalyticsScope, type ScopeGroup } from '#lib/report-scopes.js';
 import type { ConfigurationSnapshot } from '#lib/server/snapshot.js';
 import { currentTags, tagMembers } from '#lib/server/tags/inventory.js';
 import { combineTagVisits } from '#lib/server/tags/visits.js';
 import { readLinkDetails, readVisitDetails } from '#lib/server/visits/reports.js';
-import { scopeValue, type AnalyticsScope, type ScopeGroup } from './report-scopes.js';
 import type { PageServerLoad } from './$types';
 
 export const load = (async ({ locals, url }) => {

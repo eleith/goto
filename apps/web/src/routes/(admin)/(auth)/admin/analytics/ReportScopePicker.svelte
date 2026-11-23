@@ -3,7 +3,12 @@
 	import { flushSync } from 'svelte';
 	import IconCaretDown from 'virtual:icons/ph/caret-down';
 	import IconCheck from 'virtual:icons/ph/check';
-	import { scopeLabel, scopeValue, type AnalyticsScope, type ScopeGroup } from './report-scopes.js';
+	import {
+		scopeLabel,
+		scopeValue,
+		type AnalyticsScope,
+		type ScopeGroup
+	} from '#lib/report-scopes.js';
 
 	let {
 		groups,

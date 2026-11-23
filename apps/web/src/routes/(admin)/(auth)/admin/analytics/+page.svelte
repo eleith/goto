@@ -8,8 +8,8 @@
 	import VisitBreakdowns from '#lib/components/admin/VisitBreakdowns.svelte';
 	import VisitsChart from '#lib/components/admin/VisitsChart.svelte';
 	import VisitTimeframes from '#lib/components/admin/VisitTimeframes.svelte';
+	import { setScope, type AnalyticsScope } from '#lib/report-scopes.js';
 	import ReportScopePicker from './ReportScopePicker.svelte';
-	import { setScope, type AnalyticsScope } from './report-scopes.js';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
