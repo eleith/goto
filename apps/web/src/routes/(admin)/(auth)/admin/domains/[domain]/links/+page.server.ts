@@ -18,7 +18,7 @@ export const load = (async ({ locals, params }) => {
 
 	return {
 		domain,
-		totalVisits: totals?.validVisits ?? null,
+		rootVisits: totals?.validVisits ?? null,
 		domainHref: `/admin/domains/${encodeURIComponent(domain)}`,
 		response,
 		fallback,

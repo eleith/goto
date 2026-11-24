@@ -56,7 +56,7 @@ function request({
 
 test('shows stored domain and link totals at zero retention but uses live counts for link limits', async () => {
 	vi.mocked(readDomainLifetimeVisitTotals).mockResolvedValueOnce({
-		domain: { validVisits: 15, invalidVisits: 4 },
+		domain: { validVisits: 15, invalidVisits: 4, rootVisits: 3 },
 		byPath: new Map([
 			['/', { validVisits: 3, invalidVisits: 0 }],
 			['/docs', { validVisits: 1, invalidVisits: 0 }],
@@ -78,6 +78,7 @@ test('shows stored domain and link totals at zero retention but uses live counts
 		linkCount: 2,
 		totalVisits: 15,
 		invalidClicks: 4,
+		rootVisits: 3,
 		root,
 		fallback
 	});
@@ -129,7 +130,8 @@ test('keeps fallback, inventory and scoped activity available when totals cannot
 		root: null,
 		fallback,
 		totalVisits: null,
-		invalidClicks: null
+		invalidClicks: null,
+		rootVisits: null
 	});
 	expect(data.links[0]).toMatchObject({ path: '/', url: fallback.url, visits: null });
 });

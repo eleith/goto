@@ -44,21 +44,26 @@ test('adds numeric totals per scope inside a caller transaction and reads missin
 	});
 });
 
-test('reads the lifetime overview and only requested domain rows, filling absent domains with zero', async () => {
+test('separates lifetime Root visits, including former domains in the overview', async () => {
 	const formerDomain = { kind: 'domain' as const, domain: 'old.example.test' };
 	await db.transaction().execute((transaction) =>
 		addVisitTotals(transaction, [
 			{ scope: overview, totals: { validVisits: 6, invalidVisits: 2 } },
 			{ scope: domain, totals: { validVisits: 4, invalidVisits: 1 } },
 			{ scope: formerDomain, totals: { validVisits: 2, invalidVisits: 1 } },
+			{ scope: { ...link, path: '/' }, totals: { validVisits: 1, invalidVisits: 0 } },
+			{
+				scope: { ...link, domain: formerDomain.domain, path: '/' },
+				totals: { validVisits: 2, invalidVisits: 0 }
+			},
 			{ scope: link, totals: { validVisits: 1, invalidVisits: 0 } }
 		])
 	);
 
 	expect(await readOverviewVisitTotals(db, [domain.domain, 'empty.example.test'])).toEqual({
-		overview: { validVisits: 6, invalidVisits: 2 },
+		overview: { validVisits: 3, invalidVisits: 2, rootVisits: 3 },
 		byDomain: new Map([
-			[domain.domain, { validVisits: 4, invalidVisits: 1 }],
+			[domain.domain, { validVisits: 3, invalidVisits: 1 }],
 			['empty.example.test', { validVisits: 0, invalidVisits: 0 }]
 		])
 	});
@@ -79,7 +84,7 @@ test('reads stored domain, Root, and current path totals without including other
 	);
 
 	expect(await readDomainVisitTotals(db, domain.domain, ['/docs', '/new'])).toEqual({
-		domain: { validVisits: 9, invalidVisits: 2 },
+		domain: { validVisits: 7, invalidVisits: 2, rootVisits: 2 },
 		byPath: new Map([
 			['/', { validVisits: 2, invalidVisits: 0 }],
 			['/docs', { validVisits: 3, invalidVisits: 0 }],

@@ -15,11 +15,11 @@
 	<section aria-labelledby="summary-heading">
 		<h2 id="summary-heading">Summary</h2>
 		<div class="summary-content">
-			{#if data.totalVisits === null}
+			{#if data.rootVisits === null}
 				<p class="admin-notice" role="status">Visit totals unavailable.</p>
 			{/if}
 			<div class="admin-cards">
-				<StatCard label="Total Visits" value={data.totalVisits} />
+				<StatCard label="Root visits" value={data.rootVisits} />
 			</div>
 		</div>
 	</section>
@@ -48,7 +48,7 @@
 					<dd>{data.response.forward_query ? 'Yes' : 'No'}</dd>
 				{/if}
 				{#if data.analyticsEnabled}
-					<AnalyticsField scope={{ kind: 'domain', domain: data.domain }} />
+					<AnalyticsField scope={{ kind: 'link', domain: data.domain, path: '/' }} />
 				{/if}
 			</dl>
 		</div>

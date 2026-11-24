@@ -23,6 +23,7 @@
 				<StatCard label="Links" value={data.linkCount} />
 				<StatCard label="Total Visits" value={data.totalVisits} />
 				<StatCard label="Invalid clicks" value={data.invalidClicks} />
+				<StatCard label="Root visits" value={data.rootVisits} />
 			</div>
 		</div>
 	</section>
@@ -52,7 +53,7 @@
 	</section>
 	<section>
 		<h2>Links</h2>
-		<LinkInventory label={`Links on ${data.domain}`} links={data.links} visitLabel="Total Visits" />
+		<LinkInventory label={`Links on ${data.domain}`} links={data.links} visitLabel="Visits" />
 	</section>
 </AdminPage>
 

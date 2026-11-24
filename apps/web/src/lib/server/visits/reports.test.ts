@@ -9,7 +9,7 @@ import {
 	type VisitDetails
 } from '@goto/analytics';
 import type { GotoConfiguration } from '@goto/config';
-import { openDb, runMigrations } from '@goto/db';
+import { addVisitTotals, openDb, runMigrations } from '@goto/db';
 import { addDailyVisitStatistics } from '@goto/db/visit-reports';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { readLinkDetails, readVisitDetails, readLastActivity } from './reports.js';
@@ -61,6 +61,9 @@ test('reads daily output and derives zero scopes in a window from current time a
 	const linkScope = { kind: 'link', domain, path: '/docs' } as const;
 	const linkDetails: VisitDetails = { ...details, scope: linkScope };
 	const otherLink = { kind: 'link', domain: 'other.example.test', path: '/docs' } as const;
+	const formerDomain = { kind: 'domain', domain: 'old.example.test' } as const;
+	const formerRoot = { kind: 'link', domain: formerDomain.domain, path: '/' } as const;
+	const rootCounts = { validVisits: 1, invalidVisits: 0 };
 	const otherLinkActivityAt = '2026-06-15T11:00:00.000Z';
 	const emptyDetails: VisitDetails = {
 		...details,
@@ -82,22 +85,35 @@ test('reads daily output and derives zero scopes in a window from current time a
 				available: true,
 				lastActivityAt: null
 			});
-			await db
-				.transaction()
-				.execute((transaction) =>
-					addDailyVisitStatistics(transaction, [
-						daily,
-						{ ...daily, scope: domainScope },
-						{ ...daily, scope: linkScope },
-						{ ...daily, scope: otherLink, lastVisitAt: Date.parse(otherLinkActivityAt) }
-					])
-				);
+			await db.transaction().execute(async (transaction) => {
+				await addVisitTotals(transaction, [{ scope: formerDomain, totals: rootCounts }]);
+				await addDailyVisitStatistics(transaction, [
+					daily,
+					{ ...daily, scope: domainScope },
+					{ ...daily, scope: linkScope },
+					{ ...daily, scope: otherLink, lastVisitAt: Date.parse(otherLinkActivityAt) },
+					{
+						...daily,
+						scope: formerRoot,
+						...rootCounts,
+						browsers: [{ name: 'Other', ...rootCounts }],
+						operatingSystems: [{ name: 'Other', ...rootCounts }],
+						acceptedLanguages: [{ name: 'Other', ...rootCounts }]
+					}
+				]);
+			});
 		} finally {
 			await db.destroy();
 		}
 		const close = vi.spyOn(DatabaseSync.prototype, 'close');
 		try {
-			expect(await readVisitDetails(configuration, details.scope)).toEqual(details);
+			const overview = await readVisitDetails(configuration, details.scope);
+			expect(overview?.daily.at(-1)).toMatchObject({
+				validVisits: 1,
+				invalidVisits: 1,
+				rootVisits: 1
+			});
+			expect(overview?.lastActivityAt).toBe(lastActivityAt);
 			expect(close).toHaveBeenCalledTimes(1);
 			expect(await readVisitDetails(configuration, domainScope)).toEqual(domainDetails);
 			expect(close).toHaveBeenCalledTimes(2);

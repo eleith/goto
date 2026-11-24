@@ -23,6 +23,8 @@ export const load = (async ({ locals }) => {
 		domainCount: domains.length,
 		linkCount: domains.reduce((sum, row) => sum + row.linkCount, 0),
 		totalVisits: totals?.overview.validVisits ?? null,
+		invalidClicks: totals?.overview.invalidVisits ?? null,
+		rootVisits: totals?.overview.rootVisits ?? null,
 		domains
 	};
 }) satisfies PageServerLoad;

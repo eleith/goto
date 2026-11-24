@@ -8,11 +8,13 @@
 	let {
 		daily,
 		window: viewWindow,
-		granularity
+		granularity,
+		visitLabel = 'Visits'
 	}: {
 		daily: VisitDetails['daily'];
 		window: VisitWindow;
 		granularity: VisitGranularity;
+		visitLabel?: string;
 	} = $props();
 	let ready = $state(false);
 	let unavailable = $state(false);
@@ -39,7 +41,7 @@
 	let buckets = $derived(groupVisitDays(daily, viewWindow, granularity));
 	let total = $derived(buckets.reduce((sum, bucket) => sum + bucket.validVisits, 0));
 	let summary = $derived(
-		`Visits by ${granularity}. Total: ${formatCount(total)}. ${windowLabel(viewWindow)}.`
+		`${visitLabel} by ${granularity}. Total: ${formatCount(total)}. ${windowLabel(viewWindow)}.`
 	);
 
 	function windowLabel(window: VisitWindow): string {
@@ -100,7 +102,7 @@
 							const bucket = points[items[0]?.dataIndex ?? -1];
 							return bucket ? `${bucketPeriod(bucket)} UTC` : '';
 						},
-						label: (item) => `Visits: ${formatCount(item.parsed.y)}`,
+						label: (item) => `${visitLabel}: ${formatCount(item.parsed.y)}`,
 						footer: (items) => (points[items[0]?.dataIndex ?? -1]?.partial ? 'Partial period' : '')
 					}
 				}
@@ -114,7 +116,7 @@
 		chart.data.labels = points.map((point) => bucketLabel(point.start, grouping));
 		chart.data.datasets = [
 			{
-				label: 'Visits',
+				label: visitLabel,
 				data: points.map((point) => point.validVisits),
 				borderColor: color,
 				borderWidth: 2,
@@ -192,9 +194,9 @@
 	});
 </script>
 
-<section class="visits-chart" aria-label="Visits over time">
+<section class="visits-chart" aria-label={`${visitLabel} over time`}>
 	<header>
-		<h2>Visits</h2>
+		<h2>{visitLabel}</h2>
 		<span class="grouping">{groupingLabels[granularity]}</span>
 	</header>
 	<span class="chart-palette" bind:this={palette} hidden aria-hidden="true"></span>
@@ -207,9 +209,9 @@
 	{/if}
 	<!-- svelte-ignore a11y_no_noninteractive_tabindex (Keyboard scrolling needs a focusable region.) -->
 	<div class="table-scroll" role="region" aria-label="Visit data" tabindex="0">
-		<table aria-label="Visits">
+		<table aria-label={visitLabel}>
 			<thead>
-				<tr><th scope="col">Period (UTC)</th><th scope="col">Visits</th></tr>
+				<tr><th scope="col">Period (UTC)</th><th scope="col">{visitLabel}</th></tr>
 			</thead>
 			<tbody>
 				{#each buckets as bucket (bucket.start)}

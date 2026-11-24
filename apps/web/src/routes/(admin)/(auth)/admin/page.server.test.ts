@@ -36,7 +36,7 @@ function request(retentionMonths: 0 | 3) {
 
 test('shows all-time totals and current inventory even when detailed analytics is disabled', async () => {
 	vi.mocked(readOverviewLifetimeVisitTotals).mockResolvedValueOnce({
-		overview: { validVisits: 40, invalidVisits: 7 },
+		overview: { validVisits: 40, invalidVisits: 7, rootVisits: 9 },
 		byDomain: new Map([
 			[domain, { validVisits: 12, invalidVisits: 2 }],
 			[emptyDomain, { validVisits: 0, invalidVisits: 0 }]
@@ -56,6 +56,8 @@ test('shows all-time totals and current inventory even when detailed analytics i
 		domainCount: 2,
 		linkCount: 2,
 		totalVisits: 40,
+		invalidClicks: 7,
+		rootVisits: 9,
 		domains: [
 			{ domain, linkCount: 2, totalVisits: 12, href: '/admin/domains/go.example.test' },
 			{
@@ -78,6 +80,8 @@ test('keeps the inventory and last activity when stored totals are unavailable',
 	expect(data).toMatchObject({
 		analyticsEnabled: true,
 		totalVisits: null,
+		invalidClicks: null,
+		rootVisits: null,
 		lastActivityAt: Date.parse(lastActivityAt)
 	});
 	expect(data.domains).toMatchObject([

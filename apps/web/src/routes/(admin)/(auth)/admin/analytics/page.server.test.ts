@@ -190,13 +190,11 @@ test('does not fall back to all traffic for a stale tag', async () => {
 	expect(readLinkDetails).not.toHaveBeenCalled();
 });
 
-test('projects global totals and keeps each breakdown tied to the selected window', async () => {
+test('keeps link counts, Root counts and breakdowns tied to the selected window', async () => {
 	const period = createVisitPeriod(3, Date.parse('2026-06-15T12:00:00.000Z'));
 	const recent = { day: '2026-06-01', validVisits: 3, invalidVisits: 1 };
 	const older = { day: '2026-05-01', validVisits: 2, invalidVisits: 4 };
 	vi.mocked(readVisitDetails).mockResolvedValueOnce({
-		version: 5,
-		scope: { kind: 'overview' },
 		period,
 		lastActivityAt: '2026-06-01T12:00:00.000Z',
 		daily: [
@@ -205,14 +203,16 @@ test('projects global totals and keeps each breakdown tied to the selected windo
 				end: '2026-05-02T00:00:00.000Z',
 				partial: false,
 				validVisits: older.validVisits,
-				invalidVisits: older.invalidVisits
+				invalidVisits: older.invalidVisits,
+				rootVisits: 2
 			},
 			{
 				start: '2026-06-01T00:00:00.000Z',
 				end: '2026-06-02T00:00:00.000Z',
 				partial: false,
 				validVisits: recent.validVisits,
-				invalidVisits: recent.invalidVisits
+				invalidVisits: recent.invalidVisits,
+				rootVisits: 1
 			}
 		],
 		browsers: [
@@ -231,6 +231,11 @@ test('projects global totals and keeps each breakdown tied to the selected windo
 
 	const { report } = await load(request(3));
 
+	expect(report?.rootVisitsByTimeframe).toEqual({ '7d': 0, '30d': 1, all: 3 });
+	expect(report?.daily.map(({ start }) => start)).toEqual([
+		'2026-05-01T00:00:00.000Z',
+		'2026-06-01T00:00:00.000Z'
+	]);
 	expect(report?.countsByTimeframe).toEqual({
 		'7d': { validVisits: 0, invalidVisits: 0 },
 		'30d': { validVisits: 3, invalidVisits: 1 },

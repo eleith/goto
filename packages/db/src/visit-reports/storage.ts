@@ -8,6 +8,7 @@ import {
 	projectVisitDetails,
 	visitDays,
 	type DailyVisitStatistics,
+	type DailyVisitCountByName,
 	type ReportPeriod,
 	type ReportScope,
 	type VisitDetails,
@@ -113,6 +114,24 @@ export async function readVisitDetails(
 ): Promise<VisitDetails> {
 	const [details] = await readCurrentDetails(db, [scope], period);
 	return details!;
+}
+
+type AnalyticsDay = VisitDetails['daily'][number] & { rootVisits?: number };
+
+export type AnalyticsVisitDetails = Omit<VisitDetails, 'scope' | 'version' | 'daily'> & {
+	daily: AnalyticsDay[];
+};
+
+type AggregateScope = Exclude<ReportScope, { kind: 'link' }>;
+
+export async function readAnalyticsVisitDetails(
+	db: Kysely<Database>,
+	scope: ReportScope,
+	period: ReportPeriod
+): Promise<AnalyticsVisitDetails> {
+	return scope.kind === 'link'
+		? readVisitDetails(db, scope, period)
+		: readAggregateAnalytics(db, scope, period);
 }
 
 export async function readLastVisitActivity(
@@ -227,15 +246,7 @@ async function readCurrentDetails(
 	scopes: ReportScope[],
 	period: ReportPeriod
 ): Promise<VisitDetails[]> {
-	const days = reportDays(period);
-	for (const scope of scopes) checkReportScope(scope);
-	if (scopes.length === 0) return [];
-	const rows = await selectedDays(db, scopes)
-		.where('day', '>=', days.first)
-		.where('day', '<=', days.last)
-		.selectAll()
-		.orderBy('day')
-		.execute();
+	const rows = await readReportRows(db, scopes, period);
 	const grouped = new Map<string, DailyVisitStatistics[]>();
 	for (const row of rows) {
 		const statistics = decodeDailyStatistics(row);
@@ -247,6 +258,84 @@ async function readCurrentDetails(
 	return scopes.map((scope) =>
 		projectVisitDetails(scope, period, grouped.get(scopeKey(scope)) ?? [])
 	);
+}
+
+async function readAggregateAnalytics(
+	db: Kysely<Database>,
+	scope: AggregateScope,
+	period: ReportPeriod
+): Promise<AnalyticsVisitDetails> {
+	const rows = await readReportRows(db, [scope], period, scope);
+	const totals: DailyVisitStatistics[] = [];
+	const rootRows: DailyStatisticsRow[] = [];
+	const rootVisitsByDate = new Map<string, number>();
+	for (const row of rows) {
+		if (row.scope_kind === 'link') {
+			rootRows.push(row);
+			const visits = (rootVisitsByDate.get(row.day) ?? 0) + row.valid_visits;
+			rootVisitsByDate.set(row.day, visits);
+		} else {
+			totals.push(decodeDailyStatistics(row));
+		}
+	}
+
+	const details = projectVisitDetails(scope, period, totals);
+	return {
+		...details,
+		daily: details.daily.map((day) => {
+			const rootVisits = rootVisitsByDate.get(day.start.slice(0, 10));
+			return rootVisits === undefined
+				? day
+				: { ...day, validVisits: day.validVisits - rootVisits, rootVisits };
+		}),
+		browsers: subtractRootBreakdown(details.browsers, rootRows, 'browsers_json'),
+		operatingSystems: subtractRootBreakdown(
+			details.operatingSystems,
+			rootRows,
+			'operating_systems_json'
+		),
+		acceptedLanguages: subtractRootBreakdown(
+			details.acceptedLanguages,
+			rootRows,
+			'accepted_languages_json'
+		)
+	};
+}
+
+async function readReportRows(
+	db: Kysely<Database>,
+	scopes: ReportScope[],
+	period: ReportPeriod,
+	rootTrafficFor?: AggregateScope
+): Promise<DailyStatisticsRow[]> {
+	const days = reportDays(period);
+	for (const scope of scopes) checkReportScope(scope);
+	if (scopes.length === 0) return [];
+	return selectedDays(db, scopes, rootTrafficFor)
+		.where('day', '>=', days.first)
+		.where('day', '<=', days.last)
+		.selectAll()
+		.orderBy('day')
+		.execute();
+}
+
+function subtractRootBreakdown(
+	totals: DailyVisitCountByName[],
+	roots: DailyStatisticsRow[],
+	column: 'browsers_json' | 'operating_systems_json' | 'accepted_languages_json'
+): DailyVisitCountByName[] {
+	const rootCounts = new Map<string, number>();
+	for (const root of roots) {
+		const breakdown: DailyVisitStatistics['browsers'] = JSON.parse(root[column]);
+		for (const { name, validVisits } of breakdown) {
+			const key = `${root.day}/${name}`;
+			rootCounts.set(key, (rootCounts.get(key) ?? 0) + validVisits);
+		}
+	}
+	return totals.flatMap((total) => {
+		const validVisits = total.validVisits - (rootCounts.get(`${total.day}/${total.name}`) ?? 0);
+		return validVisits === 0 && total.invalidVisits === 0 ? [] : [{ ...total, validVisits }];
+	});
 }
 
 function reportDays(period: ReportPeriod): { first: string; last: string } {
@@ -290,12 +379,24 @@ function decodeStoredBreakdowns(row: DailyStatisticsRow) {
 	}
 }
 
-function selectedDays(db: Kysely<Database>, scopes: ReportScope[]) {
+function selectedDays(
+	db: Kysely<Database>,
+	scopes: ReportScope[],
+	rootTrafficFor?: AggregateScope
+) {
 	const overview = scopes.some((scope) => scope.kind === 'overview');
 	const domains = scopes.flatMap((scope) => (scope.kind === 'domain' ? [scope.domain] : []));
 	const links = scopes.flatMap((scope) => (scope.kind === 'link' ? [scope] : []));
 	const predicates: RawBuilder<boolean>[] = [];
 	if (overview) predicates.push(sql<boolean>`scope_kind = 'overview'`);
+	if (rootTrafficFor?.kind === 'overview') {
+		predicates.push(sql<boolean>`scope_kind = 'link' AND path = '/'
+			AND domain IN (SELECT domain FROM visit_totals WHERE scope_kind = 'domain')`);
+	} else if (rootTrafficFor?.kind === 'domain') {
+		predicates.push(
+			sql<boolean>`scope_kind = 'link' AND domain = ${rootTrafficFor.domain} AND path = '/'`
+		);
+	}
 	if (domains.length > 0) {
 		predicates.push(sql<boolean>`scope_kind = 'domain' AND domain IN (${sql.join(domains)})`);
 	}

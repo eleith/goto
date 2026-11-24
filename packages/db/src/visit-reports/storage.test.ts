@@ -8,7 +8,7 @@ import {
 import { DatabaseSync } from 'node:sqlite';
 import { sql, type Kysely } from 'kysely';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { openDb, runMigrations } from '../index.js';
+import { addVisitTotals, openDb, runMigrations } from '../index.js';
 import type { Database } from '../types.js';
 import {
 	addDailyVisitStatistics,
@@ -16,6 +16,7 @@ import {
 	clearDailyVisitStatistics,
 	deleteExpiredDailyStatistics,
 	readVisitDetails,
+	readAnalyticsVisitDetails,
 	readLinkVisitDetails,
 	readLastVisitActivity
 } from './storage.js';
@@ -275,6 +276,87 @@ test('selected-link readers bind exact path/domain pairs and ignore distractors'
 	expect(await readLastVisitActivity(db, period, [])).toBeNull();
 });
 
+test('Analytics separates Root visits without changing invalid clicks or counting roots in link breakdowns', async () => {
+	const otherDomain = { kind: 'domain', domain: 'old.example.test' } as const;
+	const otherRoot = { ...rootScope, domain: otherDomain.domain };
+	const docs = { ...rootScope, path: '/docs' };
+	const root = daily(rootScope, 2, 0, 12);
+	const day = '2026-04-01';
+	const nextDay = '2026-04-02';
+	const rootOnlyDay = '2026-04-03';
+	const rootOnlyVisitAt = Date.parse(`${rootOnlyDay}T10:00:00Z`);
+	const nextDayTotals = { validVisits: 3, invalidVisits: 1 };
+	await writer(async (transaction) => {
+		await addVisitTotals(transaction, [
+			{ scope: domainScope, totals: { validVisits: 7, invalidVisits: 2 } },
+			{ scope: otherDomain, totals: { validVisits: 3, invalidVisits: 1 } }
+		]);
+		await addDailyVisitStatistics(transaction, [
+			daily(overviewScope, 6, 2, 12),
+			daily(domainScope, 4, 1, 12),
+			root,
+			daily(otherRoot, 2),
+			daily(docs, 2),
+			{
+				...daily(overviewScope, nextDayTotals.validVisits, nextDayTotals.invalidVisits),
+				day: nextDay,
+				lastVisitAt: Date.parse(`${nextDay}T10:00:00Z`)
+			},
+			{ ...daily(overviewScope), day: rootOnlyDay, lastVisitAt: rootOnlyVisitAt },
+			{ ...daily(otherRoot), day: rootOnlyDay, lastVisitAt: rootOnlyVisitAt }
+		]);
+	});
+
+	const overview = await readAnalyticsVisitDetails(db, overviewScope, period);
+	expect(overview.daily.find(({ start }) => start.startsWith(day))).toMatchObject({
+		validVisits: 2,
+		invalidVisits: 2,
+		rootVisits: 4
+	});
+	expect(overview.daily.find(({ start }) => start.startsWith(nextDay))).toMatchObject(
+		nextDayTotals
+	);
+	expect(overview.daily.find(({ start }) => start.startsWith(rootOnlyDay))).toMatchObject({
+		validVisits: 0,
+		invalidVisits: 0,
+		rootVisits: 1
+	});
+	expect(overview.lastActivityAt).toBe(new Date(rootOnlyVisitAt).toISOString());
+	expect(overview.browsers).toEqual([
+		{ day, name: 'Firefox', validVisits: 2, invalidVisits: 2 },
+		{ day: nextDay, name: 'Firefox', ...nextDayTotals }
+	]);
+	expect(overview.operatingSystems).toContainEqual({
+		day,
+		name: 'Linux',
+		validVisits: 2,
+		invalidVisits: 2
+	});
+	expect(overview.acceptedLanguages.filter((row) => row.day === day)).toEqual([
+		{ day, name: 'en', validVisits: 2, invalidVisits: 2 },
+		{ day, name: 'fr', validVisits: 2, invalidVisits: 2 }
+	]);
+	const scoped = await readAnalyticsVisitDetails(db, domainScope, period);
+	expect(scoped.daily[0]).toMatchObject({ validVisits: 2, invalidVisits: 1, rootVisits: 2 });
+	expect(scoped.lastActivityAt).toBe('2026-04-01T12:00:00.000Z');
+	expect((await readAnalyticsVisitDetails(db, rootScope, period)).daily[0]).toMatchObject({
+		validVisits: 2,
+		invalidVisits: 0
+	});
+	expect((await readAnalyticsVisitDetails(db, docs, period)).daily[0]).toMatchObject({
+		validVisits: 2,
+		invalidVisits: 0
+	});
+});
+
+test('reports stored Root and aggregate counts without reconciling them', async () => {
+	await add(daily(domainScope, 1, 1), daily(rootScope, 2));
+
+	const report = await readAnalyticsVisitDetails(db, domainScope, period);
+	expect(report.daily[0]).toMatchObject({ validVisits: -1, invalidVisits: 1, rootVisits: 2 });
+	expect(report.lastActivityAt).toBe('2026-04-01T10:00:00.000Z');
+});
+
 test('successful empty reads give zeros/activity null; view time advances without writes and zero clears derived rows', async () => {
 	expect(await readVisitDetails(db, overviewScope, period)).toEqual(
 		projectVisitDetails(overviewScope, period, [])
@@ -301,7 +383,7 @@ test('selected corrupt day JSON fails with a static error, while a failed table 
 		.updateTable('visit_daily_statistics')
 		.set({ browsers_json: '[{"name":"private IP","validVisits":99,"invalidVisits":0}]' })
 		.execute();
-	await expect(readVisitDetails(db, overviewScope, period)).rejects.toThrow(
+	await expect(readAnalyticsVisitDetails(db, overviewScope, period)).rejects.toThrow(
 		/^Invalid analytics report$/
 	);
 	await expect(

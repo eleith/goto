@@ -62,7 +62,7 @@ test('reads lifetime Root totals and scoped activity even when Root uses fallbac
 
 	expect(await load(request())).toEqual({
 		domain,
-		totalVisits: 40,
+		rootVisits: 40,
 		domainHref: '/admin/domains/go.example.test',
 		response: null,
 		fallback,
@@ -84,7 +84,7 @@ test('keeps configured Root settings and activity when lifetime totals are unava
 	vi.mocked(readLastActivity).mockResolvedValue({ available: true, lastActivityAt });
 
 	expect(await load(request({ root }))).toMatchObject({
-		totalVisits: null,
+		rootVisits: null,
 		lastActivityAt: Date.parse(lastActivityAt),
 		response: root,
 		fallback,
@@ -97,7 +97,7 @@ test.each(['global', 'builtin'] as const)(
 	async (fallbackSource) => {
 		vi.mocked(readLifetimeVisitTotals).mockResolvedValue({ validVisits: 40, invalidVisits: 0 });
 		expect(await load(request({ retentionMonths: 0, fallbackSource }))).toMatchObject({
-			totalVisits: 40,
+			rootVisits: 40,
 			analyticsEnabled: false,
 			lastActivityAt: null,
 			response: null,

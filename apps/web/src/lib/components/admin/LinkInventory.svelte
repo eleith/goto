@@ -40,7 +40,8 @@
 	</div>
 	<ul class="admin-inventory-list">
 		{#each links as link (link.href)}
-			{@const pathLabel = link.path === '/' ? '(root)' : link.path}
+			{@const isRoot = link.path === '/'}
+			{@const pathLabel = isRoot ? '(root)' : link.path}
 			{@const linkLabel = showDomain ? `${link.domain}${link.path}` : pathLabel}
 			<li>
 				<a class="admin-inventory-row admin-inventory-link" href={link.href} aria-label={linkLabel}>
@@ -60,7 +61,11 @@
 					</span>
 					{#if visitLabel}
 						<span class="admin-inventory-count">
-							<span class="admin-inventory-label">{visitLabel}</span>
+							{#if isRoot}
+								<span class="root-visit-label">Root visits</span>
+							{:else}
+								<span class="admin-inventory-label">{visitLabel}</span>
+							{/if}
 							<span class="admin-inventory-number">{formatCount(link.visits)}</span>
 						</span>
 					{/if}
@@ -69,3 +74,9 @@
 		{/each}
 	</ul>
 </div>
+
+<style>
+	.root-visit-label {
+		color: var(--color-text-muted);
+	}
+</style>

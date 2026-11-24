@@ -17,10 +17,12 @@
 			{#if data.totalVisits === null}
 				<p class="admin-notice" role="status">Visit totals unavailable.</p>
 			{/if}
-			<div class="admin-cards">
+			<div class="admin-cards overview-cards">
 				<StatCard label="Domains" value={data.domainCount} />
 				<StatCard label="Links" value={data.linkCount} />
 				<StatCard label="Total Visits" value={data.totalVisits} />
+				<StatCard label="Invalid clicks" value={data.invalidClicks} />
+				<StatCard label="Root visits" value={data.rootVisits} />
 			</div>
 		</div>
 	</section>
@@ -64,6 +66,12 @@
 </AdminPage>
 
 <style>
+	@media (width > 960px) {
+		.overview-cards {
+			grid-template-columns: repeat(5, minmax(0, 1fr));
+		}
+	}
+
 	.summary-content {
 		display: flex;
 		flex-direction: column;

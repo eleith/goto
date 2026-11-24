@@ -1,6 +1,12 @@
 import { countBreakdownVisitsByTimeframe } from '@goto/analytics';
-import { availableVisitTimeframes, countVisitWindows, visitWindow } from '@goto/analytics/daily';
+import {
+	availableVisitTimeframes,
+	countVisitWindows,
+	visitWindow,
+	type VisitWindow
+} from '@goto/analytics/daily';
 import { isCanonicalPath, normalizeHost } from '@goto/config';
+import type { AnalyticsVisitDetails } from '@goto/db/visit-reports';
 import { error, redirect } from '@sveltejs/kit';
 import { scopeValue, type AnalyticsScope, type ScopeGroup } from '#lib/report-scopes.js';
 import type { ConfigurationSnapshot } from '#lib/server/snapshot.js';
@@ -28,6 +34,18 @@ export const load = (async ({ locals, url }) => {
 		timeframe,
 		window: visitWindow(details.period, timeframe)
 	}));
+	const rootVisitsByTimeframe =
+		scope.kind === 'overview' || scope.kind === 'domain'
+			? Object.fromEntries(
+					windows.map(({ timeframe, window }) => [
+						timeframe,
+						details.daily.reduce(
+							(total, day) => total + (dayOverlapsWindow(day, window) ? (day.rootVisits ?? 0) : 0),
+							0
+						)
+					])
+				)
+			: null;
 	return {
 		...selection,
 		report: {
@@ -35,6 +53,7 @@ export const load = (async ({ locals, url }) => {
 			daily: details.daily,
 			lastActivityAt: details.lastActivityAt ? Date.parse(details.lastActivityAt) : null,
 			countsByTimeframe: countVisitWindows(details.daily, windows),
+			rootVisitsByTimeframe,
 			browserVisitsByTimeframe: countBreakdownVisitsByTimeframe(details.browsers, windows),
 			operatingSystemVisitsByTimeframe: countBreakdownVisitsByTimeframe(
 				details.operatingSystems,
@@ -47,6 +66,10 @@ export const load = (async ({ locals, url }) => {
 		}
 	};
 }) satisfies PageServerLoad;
+
+function dayOverlapsWindow(day: { start: string; end: string }, window: VisitWindow): boolean {
+	return day.start < window.asOf && day.end > window.from;
+}
 
 function selectedScope(query: URLSearchParams): AnalyticsScope {
 	const domains = query.getAll('domain');
@@ -99,7 +122,10 @@ function isConfiguredScope(scope: AnalyticsScope, groups: ScopeGroup[]): boolean
 	return groups.some(({ scopes }) => scopes.some((option) => scopeValue(option) === selectedValue));
 }
 
-async function readScopeDetails(snapshot: ConfigurationSnapshot, scope: AnalyticsScope) {
+async function readScopeDetails(
+	snapshot: ConfigurationSnapshot,
+	scope: AnalyticsScope
+): Promise<AnalyticsVisitDetails | null> {
 	if (scope.kind !== 'tag') return readVisitDetails(snapshot.configuration, scope);
 
 	const members = tagMembers(snapshot.domains, scope.tag);

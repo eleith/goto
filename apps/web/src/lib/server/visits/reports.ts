@@ -1,10 +1,11 @@
-import { createVisitPeriod, type ReportScope, type VisitDetails } from '@goto/analytics';
+import { createVisitPeriod, type ReportScope } from '@goto/analytics';
 import type { GotoConfiguration } from '@goto/config';
 import { openDb } from '@goto/db';
 import {
 	readLinkVisitDetails,
-	readVisitDetails as readStoredDetails,
+	readAnalyticsVisitDetails,
 	readLastVisitActivity,
+	type AnalyticsVisitDetails,
 	type LinkVisitDetails
 } from '@goto/db/visit-reports';
 import type { Immutable } from '../snapshot.js';
@@ -33,14 +34,14 @@ export async function readLinkDetails(
 export async function readVisitDetails(
 	configuration: ReportConfiguration,
 	scope: ReportScope
-): Promise<VisitDetails | null> {
+): Promise<AnalyticsVisitDetails | null> {
 	const months = configuration.analytics.retention_months;
 	if (months === 0) return null;
 	let db: Awaited<ReturnType<typeof openDb>> | undefined;
 	try {
 		db = await openDb(configuration.database.path, { readOnly: true });
 		const period = createVisitPeriod(months, Date.now());
-		return await readStoredDetails(db, scope, period);
+		return await readAnalyticsVisitDetails(db, scope, period);
 	} catch {
 		warnUnavailable();
 		return null;

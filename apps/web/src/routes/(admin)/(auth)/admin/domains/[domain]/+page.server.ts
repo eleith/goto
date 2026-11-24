@@ -46,6 +46,7 @@ export const load = (async ({ locals, params }) => {
 		linkCount: namedLinks.length,
 		totalVisits: totals?.domain.validVisits ?? null,
 		invalidClicks: totals?.domain.invalidVisits ?? null,
+		rootVisits: totals?.domain.rootVisits ?? null,
 		root: prepared.root,
 		fallback: prepared.fallback,
 		links

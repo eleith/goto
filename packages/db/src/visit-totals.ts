@@ -47,39 +47,59 @@ export async function readVisitTotals(
 	return checkTotals({ validVisits: row.valid_visits, invalidVisits: row.invalid_visits });
 }
 
+type AdminVisitTotals = VisitTotals & { rootVisits: number };
+
 export async function readOverviewVisitTotals(
 	db: Kysely<Database>,
 	domains: readonly string[]
-): Promise<{ overview: VisitTotals; byDomain: Map<string, VisitTotals> }> {
+): Promise<{ overview: AdminVisitTotals; byDomain: Map<string, VisitTotals> }> {
 	for (const domain of domains) checkReportScope({ kind: 'domain', domain });
 	const rows = await db
 		.selectFrom('visit_totals')
 		.select(['scope_kind', 'domain', 'valid_visits', 'invalid_visits'])
 		.where(
-			sql<boolean>`scope_kind = 'overview' OR (
-			scope_kind = 'domain' AND domain IN (SELECT value FROM json_each(${JSON.stringify(domains)}))
-		)`
+			sql<boolean>`scope_kind = 'overview'
+				OR (scope_kind = 'link' AND path = '/' AND domain IN (
+					SELECT domain FROM visit_totals WHERE scope_kind = 'domain'
+				))
+				OR (scope_kind = 'domain' AND domain IN (
+					SELECT value FROM json_each(${JSON.stringify(domains)})
+				))`
 		)
 		.execute();
 
 	let overview = zeroVisitTotals();
-	const byDomain = new Map(domains.map((domain) => [domain, zeroVisitTotals()]));
+	let rootVisits = 0;
+	const domainTotals = new Map(domains.map((domain) => [domain, zeroVisitTotals()]));
+	const rootVisitsByDomain = new Map<string, number>();
 	for (const row of rows) {
 		const totals = checkTotals({
 			validVisits: row.valid_visits,
 			invalidVisits: row.invalid_visits
 		});
 		if (row.scope_kind === 'overview') overview = totals;
-		else if (row.domain !== null) byDomain.set(row.domain, totals);
+		else if (row.scope_kind === 'domain' && row.domain !== null) {
+			domainTotals.set(row.domain, totals);
+		} else if (row.scope_kind === 'link' && row.domain !== null) {
+			rootVisitsByDomain.set(row.domain, totals.validVisits);
+			rootVisits += totals.validVisits;
+		}
 	}
-	return { overview, byDomain };
+	const byDomain = new Map<string, VisitTotals>();
+	for (const [domain, totals] of domainTotals) {
+		byDomain.set(domain, {
+			...totals,
+			validVisits: totals.validVisits - (rootVisitsByDomain.get(domain) ?? 0)
+		});
+	}
+	return { overview: separateRootVisits(overview, rootVisits), byDomain };
 }
 
 export async function readDomainVisitTotals(
 	db: Kysely<Database>,
 	domain: string,
 	currentPaths: readonly string[]
-): Promise<{ domain: VisitTotals; byPath: Map<string, VisitTotals> }> {
+): Promise<{ domain: AdminVisitTotals; byPath: Map<string, VisitTotals> }> {
 	checkReportScope({ kind: 'domain', domain });
 	const paths = ['/', ...currentPaths];
 	for (const path of paths) checkReportScope({ kind: 'link', domain, path });
@@ -106,7 +126,10 @@ export async function readDomainVisitTotals(
 		if (row.scope_kind === 'domain') domainTotals = totals;
 		else if (row.path !== null) byPath.set(row.path, totals);
 	}
-	return { domain: domainTotals, byPath };
+	return {
+		domain: separateRootVisits(domainTotals, byPath.get('/')!.validVisits),
+		byPath
+	};
 }
 
 export async function readLinkVisitCounts(
@@ -134,6 +157,10 @@ export async function readLinkVisitCounts(
 	`.execute(db);
 	for (const row of rows) checkTotals({ validVisits: row.visits, invalidVisits: 0 });
 	return rows;
+}
+
+function separateRootVisits(totals: VisitTotals, rootVisits: number): AdminVisitTotals {
+	return { ...totals, validVisits: totals.validVisits - rootVisits, rootVisits };
 }
 
 function checkTotals(totals: VisitTotals): VisitTotals {

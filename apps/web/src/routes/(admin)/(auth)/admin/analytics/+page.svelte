@@ -20,6 +20,7 @@
 		resolveVisitTimeframe(data.timeframes, currentUrl.searchParams.get('period'))
 	);
 	let counts = $derived(report?.countsByTimeframe[timeframe]);
+	let isRootReport = $derived(data.scope.kind === 'link' && data.scope.path === '/');
 
 	let selectionNavigationFailed = $state(false);
 	let pendingReportNavigations = $state(0);
@@ -50,7 +51,7 @@
 			/>
 		{/if}
 	{/snippet}
-	<div class="analytics-summary">
+	<div class="analytics-summary" class:has-root-count={report?.rootVisitsByTimeframe != null}>
 		<div
 			class="report-filters"
 			role="group"
@@ -65,8 +66,15 @@
 		</div>
 		{#if counts}
 			<div class="admin-cards report-totals">
-				<StatCard label="Visits" value={counts.validVisits} />
-				<StatCard label="Invalid clicks" value={counts.invalidVisits} />
+				{#if isRootReport}
+					<StatCard label="Root visits" value={counts.validVisits} />
+				{:else}
+					<StatCard label="Visits" value={counts.validVisits} />
+					<StatCard label="Invalid clicks" value={counts.invalidVisits} />
+					{#if report?.rootVisitsByTimeframe}
+						<StatCard label="Root visits" value={report.rootVisitsByTimeframe[timeframe] ?? 0} />
+					{/if}
+				{/if}
 			</div>
 		{/if}
 	</div>
@@ -85,6 +93,7 @@
 			daily={report.daily}
 			window={visitWindow(report.period, timeframe)}
 			granularity={visitGranularity(timeframe, report.period.retentionMonths)}
+			visitLabel={isRootReport ? 'Root visits' : 'Visits'}
 		/>
 		<VisitBreakdowns
 			browserVisits={report.browserVisitsByTimeframe[timeframe] ?? []}
@@ -120,6 +129,20 @@
 
 		.report-totals {
 			grid-template-columns: minmax(0, 1fr);
+		}
+	}
+
+	@media (width > 900px) {
+		.analytics-summary.has-root-count {
+			--summary-trio-width: calc(3 * var(--summary-card-width) + 2 * var(--space-5));
+			grid-template-columns: minmax(0, var(--summary-pair-width)) minmax(
+					0,
+					var(--summary-trio-width)
+				);
+		}
+
+		.has-root-count .report-totals {
+			grid-template-columns: repeat(3, minmax(0, 1fr));
 		}
 	}
 
