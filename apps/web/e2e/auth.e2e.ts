@@ -126,7 +126,7 @@ test('shared credentials protect admin pages and sign-out removes access', async
 		'404 Not found',
 		domainReportPath
 	]);
-	await expect(rootRow.getByText('Root visits', { exact: true })).toBeVisible();
+	await expect(rootRow.getByText('Root visits', { exact: true })).toHaveCount(0);
 	await expect(rootRow.locator('.admin-inventory-number')).toHaveText('1');
 	await expect(domainDetails.getByRole('link', { name: 'Root', exact: true })).toHaveCount(0);
 	await expect(domainDetails.getByRole('link', { name: 'Fallback', exact: true })).toHaveCount(0);
