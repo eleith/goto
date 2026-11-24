@@ -1,5 +1,17 @@
 /.nono.json
-/docs/
+/docs/*
+!/docs/config.md
+!/docs/development.md
+!/docs/philosophy.md
+!/docs/screenshots.md
+!/docs/testing.md
+!/docs/images/
+/docs/images/*
+!/docs/images/overview.png
+!/docs/images/sign-in.png
+!/docs/images/analytics.png
+!/docs/images/health.png
+!/docs/images/link.png
 /AGENTS.md
 
 node_modules/

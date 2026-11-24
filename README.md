@@ -2,6 +2,8 @@
 
 A small, self-hosted URL shortener. Give a long address a short name and get on with it.
 
+![GoTo admin overview showing domain and link counts, visit totals, and the domain list](docs/images/overview.png)
+
 One YAML file can run links for several domains. The admin shows what’s configured and how often links are used. To change a link, edit the file.
 
 ## Get started
@@ -43,18 +45,10 @@ docker compose up --wait
 
 Open `/hello` on your host. It should send you on your way. Sign in at `/admin` to see the link. The worker prepares Analytics in the background, so don’t stare at the chart waiting for that first click.
 
-## Why this way?
+## Documentation
 
-**Why YAML?** You can review a diff and undo a bad edit. Keep the link rules in Git if you like; keep the passwords out of it. The admin is read-only so there’s no second place to change a link.
-
-**Why a worker?** Sending someone to a link shouldn’t wait for a report. The web app redirects; the worker prepares reports from SQLite in the background.
-
-**What gets kept?** Analytics keeps 90 days of detail by default. Set `analytics.retention_months: 0` to turn off detailed Analytics without losing lifetime totals. Stop both services before reducing retention or switching between zero and a positive value, then start them again.
-
-## Configuration
-
-Admin and short links can share a host or use separate ones. The [example YAML](examples/goto.yaml) shows multiple domains, SSO, tags and conditional redirects. The [schema](packages/config/src/config.schema.json) has the full list. Most link edits take effect without a restart.
-
-## Development
-
-The [development Compose file](apps/web/docker-compose.dev.yml) reloads the app as you edit. For local tooling, [mise](mise.toml) pins Node and pnpm. `pnpm verify` runs the checks, including Chromium browser tests.
+- [Configuration](docs/config.md)
+- [Development](docs/development.md)
+- [Philosophy](docs/philosophy.md)
+- [Testing](docs/testing.md)
+- [Screenshots](docs/screenshots.md)
