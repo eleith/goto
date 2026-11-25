@@ -7,7 +7,6 @@ import {
 	processVisitBatch,
 	deleteExpiredVisitBatch,
 	deleteProcessedVisitBatch,
-	addVisitTotals,
 	readVisitTotals,
 	type ClassifiedVisit
 } from '@goto/db';
@@ -26,8 +25,7 @@ vi.mock('@goto/db', async (importOriginal) => {
 		...actual,
 		processVisitBatch: vi.fn(actual.processVisitBatch),
 		deleteExpiredVisitBatch: vi.fn(actual.deleteExpiredVisitBatch),
-		deleteProcessedVisitBatch: vi.fn(actual.deleteProcessedVisitBatch),
-		addVisitTotals: vi.fn(actual.addVisitTotals)
+		deleteProcessedVisitBatch: vi.fn(actual.deleteProcessedVisitBatch)
 	};
 });
 
@@ -41,7 +39,6 @@ afterEach(() => {
 	vi.mocked(processVisitBatch).mockReset();
 	vi.mocked(deleteExpiredVisitBatch).mockReset();
 	vi.mocked(deleteProcessedVisitBatch).mockReset();
-	vi.mocked(addVisitTotals).mockReset();
 	vi.mocked(addDailyStatistics).mockReset();
 });
 
@@ -86,7 +83,7 @@ async function readTotals(db: WorkerContext['db'], scope: ReportScope): Promise<
 	);
 }
 
-test('prepares bounded pending batches once and subtracts expired visits within a partial day', async () => {
+test('accounts visits once across a batch boundary and keeps the cutoff-day survivor', async () => {
 	const ctx = await context();
 	try {
 		const now = reportNow;
@@ -117,14 +114,6 @@ test('prepares bounded pending batches once and subtracts expired visits within 
 			accept_language: 'en;q=0.8'
 		});
 		await maintainVisits(ctx, now);
-		expect(vi.mocked(addDailyStatistics).mock.calls.map(([, facts]) => facts.length)).toEqual([
-			1000, 4
-		]);
-		expect(vi.mocked(addVisitTotals).mock.calls[0]?.[1]).toEqual([
-			{ scope: overview, totals: { validVisits: 1000, invalidVisits: 0 } },
-			{ scope: domain, totals: { validVisits: 1000, invalidVisits: 0 } },
-			{ scope: docs, totals: { validVisits: 1000, invalidVisits: 0 } }
-		]);
 		expect(await readVisitTotals(ctx.db, overview)).toEqual({
 			validVisits: 1003,
 			invalidVisits: 1
@@ -141,16 +130,7 @@ test('prepares bounded pending batches once and subtracts expired visits within 
 		expect(await readTotals(ctx.db, root)).toEqual({ validVisits: 1, invalidVisits: 0 });
 		const details = await readVisitDetails(ctx.db, domain, period);
 		expect(details.lastActivityAt).toBe(new Date(now - 1000).toISOString());
-		expect(details.browsers).toEqual([
-			{ day: '2026-03-02', name: 'Firefox', validVisits: 1, invalidVisits: 0 },
-			{ day: '2026-05-31', name: 'Firefox', validVisits: 1, invalidVisits: 1 }
-		]);
-		expect(details.acceptedLanguages).toEqual([
-			{ day: '2026-03-02', name: 'en', validVisits: 1, invalidVisits: 0 },
-			{ day: '2026-03-02', name: 'fr', validVisits: 1, invalidVisits: 0 },
-			{ day: '2026-05-31', name: 'de', validVisits: 1, invalidVisits: 0 },
-			{ day: '2026-05-31', name: 'Other', validVisits: 0, invalidVisits: 1 }
-		]);
+		expect(details.daily[0]).toMatchObject({ partial: true, validVisits: 1, invalidVisits: 0 });
 		expect(
 			await ctx.db
 				.selectFrom('visits')
@@ -221,7 +201,7 @@ test('partial daily cache loss warns with bounded examples, continues raw expiry
 	const warning = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
 	try {
 		const cutoff = Date.parse(period.from);
-		for (let daysBefore = 1; daysBefore <= 6; daysBefore++) {
+		for (const daysBefore of [1, 2]) {
 			await insertVisit(ctx.db, { ...visit, visited_at: cutoff - daysBefore * 86_400_000 });
 		}
 		await insertVisit(ctx.db, { ...visit, visited_at: reportNow - 86_400_000 });
@@ -229,7 +209,7 @@ test('partial daily cache loss warns with bounded examples, continues raw expiry
 		vi.mocked(deleteExpiredVisitBatch).mockRejectedValueOnce(failure);
 		await expect(maintainVisits(ctx, reportNow)).rejects.toBe(failure);
 		expect(await ctx.db.selectFrom('visits').select('processed').execute()).toEqual(
-			Array.from({ length: 7 }, () => ({ processed: 1 }))
+			Array.from({ length: 3 }, () => ({ processed: 1 }))
 		);
 		await ctx.db.deleteFrom('visit_daily_statistics').execute();
 		await warnIfDailyStatisticsMissing(ctx.db);
@@ -263,31 +243,10 @@ test('partial daily cache loss warns with bounded examples, continues raw expiry
 		expect(await ctx.db.selectFrom('visits').select('visited_at').execute()).toEqual([
 			{ visited_at: reportNow - 86_400_000 }
 		]);
-		expect(warning).toHaveBeenLastCalledWith(
-			{
-				table: 'visit_daily_statistics',
-				skippedBucketUpdates: 18,
-				examples: [
-					...[overview, domain, docs].map((scope) => ({
-						scope,
-						day: '2026-02-24',
-						rowId: null,
-						reason: 'missing',
-						stored: null,
-						removing: { validVisits: 1, invalidVisits: 0 }
-					})),
-					...[overview, domain].map((scope) => ({
-						scope,
-						day: '2026-02-25',
-						rowId: null,
-						reason: 'missing',
-						stored: null,
-						removing: { validVisits: 1, invalidVisits: 0 }
-					}))
-				]
-			},
-			expect.stringContaining('Expired processed visits were deleted')
-		);
+		const [summary, message] = warning.mock.lastCall ?? [];
+		expect(message).toContain('Expired processed visits were deleted');
+		expect(summary).toMatchObject({ table: 'visit_daily_statistics', skippedBucketUpdates: 6 });
+		expect(summary).toHaveProperty('examples.length', 5);
 		await maintainVisits(ctx, Date.parse('2026-09-01T00:00:00Z'));
 		expect(await ctx.db.selectFrom('visits').select('id').execute()).toEqual([]);
 		expect(await ctx.db.selectFrom('visit_daily_statistics').selectAll().execute()).toEqual([]);

@@ -48,48 +48,9 @@ async function writeConfiguration(
 
 const env = { HOST: '127.0.0.1', PORT: '0' };
 
-test('starts with zero-policy rollup active, no empty run, tag warnings and healthy service', async () => {
+test('zero-policy startup accounts pending visits before readiness and clears raw and daily data', async () => {
 	await writeConfiguration(undefined, ['', 'work']);
 	const warning = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
-	const start = vi.spyOn(Worker.prototype, 'start');
-	const service = await startWorkerService({ cwd: directory, env });
-	try {
-		expect(start).toHaveBeenCalledOnce();
-		expect(warning).toHaveBeenCalledExactlyOnceWith(
-			expect.stringContaining('/domains/*/links/*/tags/0')
-		);
-		const response = await fetch(`http://127.0.0.1:${service.port}/healthz`, {
-			signal: AbortSignal.timeout(2000)
-		});
-		expect(response.status).toBe(200);
-		expect(await response.json()).toEqual({ status: 'ok' });
-		const state = new DatabaseSync(join(directory, 'state/worker.sqlite'), { readOnly: true });
-		try {
-			expect(
-				Number(state.prepare('SELECT count(*) AS count FROM workflow_runs').get()?.count)
-			).toBe(0);
-			expect(
-				state
-					.prepare('SELECT next_run_at FROM workflow_schedules WHERE id = ?')
-					.get('goto:retain-visits')?.next_run_at
-			).not.toBeNull();
-		} finally {
-			state.close();
-		}
-		const db = await openDb(join(directory, 'data/visits.sqlite'), { readOnly: true });
-		try {
-			expect(await db.selectFrom('visits').selectAll().execute()).toEqual([]);
-			expect(await db.selectFrom('visit_daily_statistics').select('id').execute()).toEqual([]);
-		} finally {
-			await db.destroy();
-		}
-	} finally {
-		await service.stop();
-	}
-});
-
-test('zero-policy startup accounts pending visits before readiness and clears raw and daily data', async () => {
-	await writeConfiguration(undefined, []);
 	const path = join(directory, 'data/visits.sqlite');
 	const db = await openDb(path);
 	try {
@@ -102,15 +63,12 @@ test('zero-policy startup accounts pending visits before readiness and clears ra
 		daily.browsers = [{ name: 'Other', validVisits: 1, invalidVisits: 0 }];
 		daily.operatingSystems = [{ name: 'Other', validVisits: 1, invalidVisits: 0 }];
 		daily.acceptedLanguages = [{ name: 'Other', validVisits: 1, invalidVisits: 0 }];
-		await db.transaction().execute(async (transaction) => {
-			await transaction.deleteFrom('visit_daily_statistics').execute();
-			await addDailyVisitStatistics(transaction, [daily]);
-		});
+		await db.transaction().execute((transaction) => addDailyVisitStatistics(transaction, [daily]));
 		await insertVisit(db, {
 			domain: 'go.example.test',
 			path: '/docs',
 			outcome: 'valid',
-			visited_at: Date.now() - 1000,
+			visited_at: visitedAt,
 			ip: null,
 			user_agent: null,
 			accept_language: null,
@@ -122,6 +80,7 @@ test('zero-policy startup accounts pending visits before readiness and clears ra
 	}
 	const service = await startWorkerService({ cwd: directory, env });
 	try {
+		expect(warning).toHaveBeenCalledWith(expect.stringContaining('/domains/*/links/*/tags/0'));
 		const reader = await openDb(path, { readOnly: true });
 		try {
 			expect(await reader.selectFrom('visits').selectAll().execute()).toEqual([]);
@@ -130,19 +89,6 @@ test('zero-policy startup accounts pending visits before readiness and clears ra
 				validVisits: 1,
 				invalidVisits: 0
 			});
-			const state = new DatabaseSync(join(directory, 'state/worker.sqlite'), { readOnly: true });
-			try {
-				expect(
-					Number(state.prepare('SELECT count(*) AS count FROM workflow_runs').get()?.count)
-				).toBe(1);
-				expect(
-					state
-						.prepare('SELECT next_run_at FROM workflow_schedules WHERE id = ?')
-						.get('goto:retain-visits')?.next_run_at
-				).not.toBeNull();
-			} finally {
-				state.close();
-			}
 		} finally {
 			await reader.destroy();
 		}

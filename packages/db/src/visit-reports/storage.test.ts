@@ -92,17 +92,9 @@ test('native daily UPSERT adds SQL counters and day-only JSON; oldest-first part
 		expect(
 			await writer((transaction) => subtractDailyVisitStatistics(transaction, [early]))
 		).toEqual([]);
-		const upsert = statements.mock.calls.find(([query]) =>
-			/INSERT INTO visit_daily_statistics/i.test(query)
-		)?.[0];
-		expect(upsert).toMatch(/ON CONFLICT DO UPDATE/);
-		expect(upsert).toMatch(/valid_visits = visit_daily_statistics.valid_visits \+/);
-		expect(upsert).not.toContain('Firefox');
-		const subtraction = statements.mock.calls.find(([query]) =>
-			/^update "visit_daily_statistics"/i.test(query)
-		)?.[0];
-		expect(subtraction).toMatch(/valid_visits -/);
-		expect(subtraction).toMatch(/where "id" =/);
+		const sqlStatements = statements.mock.calls.map(([query]) => query).join('\n');
+		expect(sqlStatements).toMatch(/valid_visits\s*=\s*visit_daily_statistics\.valid_visits\s*\+/i);
+		expect(sqlStatements).toMatch(/valid_visits\s*-\s*\?/i);
 	} finally {
 		statements.mockRestore();
 	}

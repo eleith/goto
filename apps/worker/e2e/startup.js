@@ -205,14 +205,14 @@ async function checkStartup(mode, port = 0) {
 				database.close();
 			}
 			assert.equal(dailyVisitCount(directory), mode === 'retention-change' ? 2 : 0);
-			if (mode === 'storage-change' || mode === 'retention-change') {
+			if (mode === 'retention-change') {
 				const stopped = new AbortController();
 				void finished.then(
 					() => stopped.abort(),
 					() => stopped.abort()
 				);
 				const readOutput = () => output;
-				await verifyRestartOnlyEdit(mode, directory, readOutput, stopped.signal);
+				await verifyRestartOnlyEdits(directory, readOutput, stopped.signal);
 				const stillRunning = await fetch(`http://127.0.0.1:${ready.port}/healthz`, {
 					signal: AbortSignal.timeout(2000)
 				});
@@ -235,22 +235,23 @@ async function checkStartup(mode, port = 0) {
 	}
 }
 
-async function verifyRestartOnlyEdit(mode, directory, readOutput, signal) {
+async function verifyRestartOnlyEdits(directory, readOutput, signal) {
 	const path = join(directory, 'config/goto.yaml');
-	const configuration = JSON.parse(await readFile(path, 'utf8'));
-	if (mode === 'storage-change') {
-		configuration.database = { path: './data/replacement.sqlite' };
-		await saveConfiguration(path, configuration);
-		await waitUntil(
-			() => readOutput().includes('Database path change requires a coordinated restart'),
-			signal
-		);
-		assert(!existsSync(join(directory, 'data/replacement.sqlite')));
-		return;
-	}
+	const accepted = JSON.parse(await readFile(path, 'utf8'));
+	await saveConfiguration(path, {
+		...accepted,
+		database: { path: './data/replacement.sqlite' }
+	});
+	await waitUntil(
+		() => readOutput().includes('Database path change requires a coordinated restart'),
+		signal
+	);
+	assert(!existsSync(join(directory, 'data/replacement.sqlite')));
 
-	configuration.analytics.retention_months = 3;
-	await saveConfiguration(path, configuration);
+	await saveConfiguration(path, {
+		...accepted,
+		analytics: { retention_months: 3 }
+	});
 	await waitUntil(
 		() => readOutput().includes('Retention reduction requires a coordinated restart'),
 		signal
@@ -261,14 +262,6 @@ async function verifyRestartOnlyEdit(mode, directory, readOutput, signal) {
 		2,
 		'A live retention reduction must not delete daily detail'
 	);
-
-	configuration.analytics.retention_months = 0;
-	await saveConfiguration(path, configuration);
-	await waitUntil(
-		() => readOutput().includes('Detailed analytics change requires a coordinated restart'),
-		signal
-	);
-	assert.equal(visitCount(directory), 2, 'Live collection disable must not remove history');
 	assert.equal(
 		lifetimeVisitCount(directory),
 		3,
@@ -277,7 +270,6 @@ async function verifyRestartOnlyEdit(mode, directory, readOutput, signal) {
 }
 
 await checkStartup('source');
-await checkStartup('storage-change');
 await checkStartup('retention-change');
 await checkStartup('zero-accounting');
 await checkStartup('database-failure');

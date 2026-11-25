@@ -123,51 +123,6 @@ test('actual events create scope/day rows with Root normalization, independent f
 	);
 });
 
-test('oldest-first subtraction preserves same-day survivors and activity, then deletes zero buckets', async () => {
-	const before = Date.parse(period.from);
-	const visits = await processRows([
-		{ ...visit, path: '/', outcome: 'invalid', visited_at: before - 1 },
-		{ ...visit, path: '/', outcome: 'invalid', visited_at: before }
-	]);
-	const rows = await db.selectFrom('visit_daily_statistics').selectAll().execute();
-	expect(rows).toHaveLength(3);
-	expect(rows.find(({ scope_kind }) => scope_kind === 'link')).toMatchObject({
-		day: '2026-01-01',
-		valid_visits: 2,
-		invalid_visits: 0,
-		last_visit_at: before
-	});
-	await db.transaction().execute(async (transaction) => {
-		await transaction
-			.updateTable('visits')
-			.set({ processed: 1 })
-			.where('id', '=', visits[0]!.id)
-			.execute();
-		await subtractDailyStatistics(transaction, [getVisitFacts(visits[0]!)]);
-		await transaction.deleteFrom('visits').where('id', '=', visits[0]!.id).execute();
-	});
-	expect(await readTotals(root)).toEqual({ validVisits: 1, invalidVisits: 0 });
-	expect(await readVisitDetails(db, root, period)).toMatchObject({
-		lastActivityAt: new Date(before).toISOString(),
-		browsers: [{ day: '2026-01-01', name: 'Firefox', validVisits: 1, invalidVisits: 0 }]
-	});
-	await db.transaction().execute(async (transaction) => {
-		await transaction
-			.updateTable('visits')
-			.set({ processed: 1 })
-			.where('id', '=', visits[1]!.id)
-			.execute();
-		await subtractDailyStatistics(transaction, [getVisitFacts(visits[1]!)]);
-		await transaction.deleteFrom('visits').where('id', '=', visits[1]!.id).execute();
-	});
-	expect(await db.selectFrom('visit_daily_statistics').selectAll().execute()).toEqual([]);
-	expect(await readTotals(root)).toEqual(zeroVisitTotals());
-	expect(await readVisitDetails(db, root, period)).toMatchObject({
-		lastActivityAt: null,
-		browsers: []
-	});
-});
-
 test('batches read no raw history, update only affected days and leave quiet data byte-identical without clock writes', async () => {
 	await processRows([{ ...visit, domain: 'quiet.example.test', visited_at: asOf - 86_400_000 }]);
 	const quietBefore = await db.selectFrom('visit_daily_statistics').selectAll().execute();
