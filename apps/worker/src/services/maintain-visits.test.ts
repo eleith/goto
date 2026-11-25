@@ -7,7 +7,7 @@ import {
 	processVisitBatch,
 	deleteExpiredVisitBatch,
 	deleteProcessedVisitBatch,
-	readVisitTotals,
+	readLifetimeVisitTotals,
 	type ClassifiedVisit
 } from '@goto/db';
 import { readVisitDetails } from '@goto/db/visit-reports';
@@ -94,7 +94,10 @@ test('expires invalid clicks from their path report without adding to lifetime l
 		await maintainVisits(ctx, reportNow);
 
 		expect(await readTotals(ctx.db, docs)).toEqual({ validVisits: 0, invalidVisits: 1 });
-		expect(await readVisitTotals(ctx.db, docs)).toEqual({ validVisits: 0, invalidVisits: 0 });
+		expect(await readLifetimeVisitTotals(ctx.db, docs)).toEqual({
+			validVisits: 0,
+			invalidVisits: 0
+		});
 	} finally {
 		await ctx.db.destroy();
 	}
@@ -131,14 +134,23 @@ test('accounts visits once across a batch boundary and keeps the cutoff-day surv
 			accept_language: 'en;q=0.8'
 		});
 		await maintainVisits(ctx, now);
-		expect(await readVisitTotals(ctx.db, overview)).toEqual({
+		expect(await readLifetimeVisitTotals(ctx.db, overview)).toEqual({
 			validVisits: 1003,
 			invalidVisits: 1
 		});
-		expect(await readVisitTotals(ctx.db, domain)).toEqual({ validVisits: 1003, invalidVisits: 1 });
-		expect(await readVisitTotals(ctx.db, docs)).toEqual({ validVisits: 1002, invalidVisits: 0 });
-		expect(await readVisitTotals(ctx.db, root)).toEqual({ validVisits: 1, invalidVisits: 0 });
-		expect(await readVisitTotals(ctx.db, { ...docs, path: '/missing' })).toEqual({
+		expect(await readLifetimeVisitTotals(ctx.db, domain)).toEqual({
+			validVisits: 1003,
+			invalidVisits: 1
+		});
+		expect(await readLifetimeVisitTotals(ctx.db, docs)).toEqual({
+			validVisits: 1002,
+			invalidVisits: 0
+		});
+		expect(await readLifetimeVisitTotals(ctx.db, root)).toEqual({
+			validVisits: 1,
+			invalidVisits: 0
+		});
+		expect(await readLifetimeVisitTotals(ctx.db, { ...docs, path: '/missing' })).toEqual({
 			validVisits: 0,
 			invalidVisits: 0
 		});
@@ -192,7 +204,10 @@ test('zero counts minimal pending visits before cleanup, retries marked leftover
 		const failure = new Error('Processed cleanup interrupted');
 		vi.mocked(deleteProcessedVisitBatch).mockRejectedValueOnce(failure);
 		await expect(maintainVisits(ctx, reportNow)).rejects.toBe(failure);
-		expect(await readVisitTotals(ctx.db, docs)).toEqual({ validVisits: 2, invalidVisits: 0 });
+		expect(await readLifetimeVisitTotals(ctx.db, docs)).toEqual({
+			validVisits: 2,
+			invalidVisits: 0
+		});
 		expect(await ctx.db.selectFrom('visits').select('processed').orderBy('id').execute()).toEqual([
 			{ processed: 1 },
 			{ processed: 1 },
@@ -203,10 +218,16 @@ test('zero counts minimal pending visits before cleanup, retries marked leftover
 		expect(await ctx.db.selectFrom('visits').select('processed').execute()).toEqual([
 			{ processed: 0 }
 		]);
-		expect(await readVisitTotals(ctx.db, docs)).toEqual({ validVisits: 2, invalidVisits: 0 });
+		expect(await readLifetimeVisitTotals(ctx.db, docs)).toEqual({
+			validVisits: 2,
+			invalidVisits: 0
+		});
 		await maintainVisits(ctx, reportNow + 2);
 		expect(await ctx.db.selectFrom('visits').selectAll().execute()).toEqual([]);
-		expect(await readVisitTotals(ctx.db, docs)).toEqual({ validVisits: 3, invalidVisits: 0 });
+		expect(await readLifetimeVisitTotals(ctx.db, docs)).toEqual({
+			validVisits: 3,
+			invalidVisits: 0
+		});
 		expect(addDailyStatistics).not.toHaveBeenCalled();
 	} finally {
 		await ctx.db.destroy();
@@ -356,9 +377,15 @@ test('a failed pending batch rolls back counters and daily writes with its proce
 		expect(await ctx.db.selectFrom('visits').select('processed').execute()).toEqual([
 			{ processed: 0 }
 		]);
-		expect(await readVisitTotals(ctx.db, docs)).toEqual({ validVisits: 0, invalidVisits: 0 });
+		expect(await readLifetimeVisitTotals(ctx.db, docs)).toEqual({
+			validVisits: 0,
+			invalidVisits: 0
+		});
 		await maintainVisits(ctx, reportNow);
-		expect(await readVisitTotals(ctx.db, docs)).toEqual({ validVisits: 1, invalidVisits: 0 });
+		expect(await readLifetimeVisitTotals(ctx.db, docs)).toEqual({
+			validVisits: 1,
+			invalidVisits: 0
+		});
 		expect((await readTotals(ctx.db, docs)).validVisits).toBe(1);
 		expect(await ctx.db.selectFrom('visits').select('processed').execute()).toEqual([
 			{ processed: 1 }

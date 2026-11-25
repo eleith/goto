@@ -1,4 +1,4 @@
-import { openDb, readLinkVisitCounts } from '@goto/db';
+import { openDb, readLinkVisitCountsIncludingPending } from '@goto/db';
 
 export async function readStoredLinkVisitCounts(
 	databasePath: string,
@@ -7,7 +7,7 @@ export async function readStoredLinkVisitCounts(
 	try {
 		const db = await openDb(databasePath, { readOnly: true });
 		try {
-			return await readLinkVisitCounts(db, links);
+			return await readLinkVisitCountsIncludingPending(db, links);
 		} finally {
 			await db.destroy();
 		}

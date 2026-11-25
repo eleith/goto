@@ -3,10 +3,10 @@ import { afterEach, beforeEach, expect, test } from 'vitest';
 import {
 	addVisitTotals,
 	openDb,
-	readDomainVisitTotals,
-	readOverviewVisitTotals,
-	readVisitTotals,
-	readLinkVisitCounts,
+	readDomainLifetimeVisitTotals,
+	readOverviewLifetimeVisitTotals,
+	readLifetimeVisitTotals,
+	readLinkVisitCountsIncludingPending,
 	runMigrations,
 	type Database
 } from './index.js';
@@ -24,7 +24,7 @@ beforeEach(async () => {
 afterEach(async () => db.destroy());
 
 test('adds numeric totals per scope inside a caller transaction and reads missing scopes as zero', async () => {
-	expect(await readVisitTotals(db, overview)).toEqual({ validVisits: 0, invalidVisits: 0 });
+	expect(await readLifetimeVisitTotals(db, overview)).toEqual({ validVisits: 0, invalidVisits: 0 });
 	const additions = [
 		{ scope: overview, totals: { validVisits: 2, invalidVisits: 1 } },
 		{ scope: domain, totals: { validVisits: 2, invalidVisits: 1 } },
@@ -35,10 +35,10 @@ test('adds numeric totals per scope inside a caller transaction and reads missin
 		await addVisitTotals(transaction, additions);
 		await addVisitTotals(transaction, additions);
 	});
-	expect(await readVisitTotals(db, overview)).toEqual({ validVisits: 4, invalidVisits: 2 });
-	expect(await readVisitTotals(db, domain)).toEqual({ validVisits: 4, invalidVisits: 2 });
-	expect(await readVisitTotals(db, link)).toEqual({ validVisits: 4, invalidVisits: 0 });
-	expect(await readVisitTotals(db, { ...link, path: '/' })).toEqual({
+	expect(await readLifetimeVisitTotals(db, overview)).toEqual({ validVisits: 4, invalidVisits: 2 });
+	expect(await readLifetimeVisitTotals(db, domain)).toEqual({ validVisits: 4, invalidVisits: 2 });
+	expect(await readLifetimeVisitTotals(db, link)).toEqual({ validVisits: 4, invalidVisits: 0 });
+	expect(await readLifetimeVisitTotals(db, { ...link, path: '/' })).toEqual({
 		validVisits: 0,
 		invalidVisits: 0
 	});
@@ -60,7 +60,7 @@ test('separates lifetime Root visits, including former domains in the overview',
 		])
 	);
 
-	expect(await readOverviewVisitTotals(db, [domain.domain, 'empty.example.test'])).toEqual({
+	expect(await readOverviewLifetimeVisitTotals(db, [domain.domain, 'empty.example.test'])).toEqual({
 		overview: { validVisits: 3, invalidVisits: 2, rootVisits: 3 },
 		byDomain: new Map([
 			[domain.domain, { validVisits: 3, invalidVisits: 1 }],
@@ -83,7 +83,7 @@ test('reads stored domain, Root, and current path totals without including other
 		])
 	);
 
-	expect(await readDomainVisitTotals(db, domain.domain, ['/docs', '/new'])).toEqual({
+	expect(await readDomainLifetimeVisitTotals(db, domain.domain, ['/docs', '/new'])).toEqual({
 		domain: { validVisits: 7, invalidVisits: 2, rootVisits: 2 },
 		byPath: new Map([
 			['/', { validVisits: 2, invalidVisits: 0 }],
@@ -109,8 +109,8 @@ test('unsafe accumulated totals roll back the whole addition transaction', async
 			])
 		)
 	).rejects.toThrow();
-	expect(await readVisitTotals(db, overview)).toEqual({ validVisits: 0, invalidVisits: 0 });
-	expect(await readVisitTotals(db, link)).toEqual({
+	expect(await readLifetimeVisitTotals(db, overview)).toEqual({ validVisits: 0, invalidVisits: 0 });
+	expect(await readLifetimeVisitTotals(db, link)).toEqual({
 		validVisits: Number.MAX_SAFE_INTEGER,
 		invalidVisits: 0
 	});
@@ -118,6 +118,6 @@ test('unsafe accumulated totals roll back the whole addition transaction', async
 
 test('missing storage is a read failure, not a fabricated zero', async () => {
 	await db.schema.dropTable('visit_totals').execute();
-	await expect(readVisitTotals(db, link)).rejects.toThrow();
-	await expect(readLinkVisitCounts(db, [link])).rejects.toThrow();
+	await expect(readLifetimeVisitTotals(db, link)).rejects.toThrow();
+	await expect(readLinkVisitCountsIncludingPending(db, [link])).rejects.toThrow();
 });

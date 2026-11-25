@@ -1,6 +1,11 @@
 import type { ReportScope, VisitTotals } from '@goto/analytics';
 import type { GotoConfiguration } from '@goto/config';
-import { openDb, readDomainVisitTotals, readOverviewVisitTotals, readVisitTotals } from '@goto/db';
+import {
+	openDb,
+	readDomainLifetimeVisitTotals as queryDomainLifetimeVisitTotals,
+	readOverviewLifetimeVisitTotals as queryOverviewLifetimeVisitTotals,
+	readLifetimeVisitTotals as queryLifetimeVisitTotals
+} from '@goto/db';
 import type { Immutable } from '../snapshot.js';
 
 type VisitTotalsConfiguration = Immutable<Pick<GotoConfiguration, 'database'>>;
@@ -9,14 +14,14 @@ export function readLifetimeVisitTotals(
 	configuration: VisitTotalsConfiguration,
 	scope: ReportScope
 ): Promise<VisitTotals | null> {
-	return readPreparedTotals(configuration, (db) => readVisitTotals(db, scope));
+	return readPreparedTotals(configuration, (db) => queryLifetimeVisitTotals(db, scope));
 }
 
 export function readOverviewLifetimeVisitTotals(
 	configuration: VisitTotalsConfiguration,
 	domains: readonly string[]
 ) {
-	return readPreparedTotals(configuration, (db) => readOverviewVisitTotals(db, domains));
+	return readPreparedTotals(configuration, (db) => queryOverviewLifetimeVisitTotals(db, domains));
 }
 
 export function readDomainLifetimeVisitTotals(
@@ -24,7 +29,9 @@ export function readDomainLifetimeVisitTotals(
 	domain: string,
 	paths: readonly string[]
 ) {
-	return readPreparedTotals(configuration, (db) => readDomainVisitTotals(db, domain, paths));
+	return readPreparedTotals(configuration, (db) =>
+		queryDomainLifetimeVisitTotals(db, domain, paths)
+	);
 }
 
 async function readPreparedTotals<T>(

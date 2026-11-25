@@ -31,7 +31,7 @@ export async function addVisitTotals(
 	}
 }
 
-export async function readVisitTotals(
+export async function readLifetimeVisitTotals(
 	db: Kysely<Database>,
 	scope: ReportScope
 ): Promise<VisitTotals> {
@@ -49,7 +49,7 @@ export async function readVisitTotals(
 
 type AdminVisitTotals = VisitTotals & { rootVisits: number };
 
-export async function readOverviewVisitTotals(
+export async function readOverviewLifetimeVisitTotals(
 	db: Kysely<Database>,
 	domains: readonly string[]
 ): Promise<{ overview: AdminVisitTotals; byDomain: Map<string, VisitTotals> }> {
@@ -95,7 +95,7 @@ export async function readOverviewVisitTotals(
 	return { overview: separateRootVisits(overview, rootVisits), byDomain };
 }
 
-export async function readDomainVisitTotals(
+export async function readDomainLifetimeVisitTotals(
 	db: Kysely<Database>,
 	domain: string,
 	currentPaths: readonly string[]
@@ -132,7 +132,7 @@ export async function readDomainVisitTotals(
 	};
 }
 
-export async function readLinkVisitCounts(
+export async function readLinkVisitCountsIncludingPending(
 	db: Kysely<Database>,
 	links: readonly { domain: string; path: string }[]
 ): Promise<Array<{ domain: string; path: string; visits: number }>> {

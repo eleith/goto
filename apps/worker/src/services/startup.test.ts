@@ -6,7 +6,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { emptyDailyStatistics } from '@goto/analytics';
 import { ConfigError } from '@goto/config';
 import * as visitDatabase from '@goto/db';
-import { insertVisit, openDb, readVisitTotals, runMigrations } from '@goto/db';
+import { insertVisit, openDb, readLifetimeVisitTotals, runMigrations } from '@goto/db';
 import { addDailyVisitStatistics } from '@goto/db/visit-reports';
 import { Worker } from 'openworkflow';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
@@ -85,7 +85,7 @@ test('zero-policy startup accounts pending visits before readiness and clears ra
 		try {
 			expect(await reader.selectFrom('visits').selectAll().execute()).toEqual([]);
 			expect(await reader.selectFrom('visit_daily_statistics').select('id').execute()).toEqual([]);
-			expect(await readVisitTotals(reader, { kind: 'overview' })).toEqual({
+			expect(await readLifetimeVisitTotals(reader, { kind: 'overview' })).toEqual({
 				validVisits: 1,
 				invalidVisits: 0
 			});

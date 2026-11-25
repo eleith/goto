@@ -9,7 +9,7 @@ import {
 	addVisitTotals,
 	insertVisit,
 	openDb,
-	readLinkVisitCounts,
+	readLinkVisitCountsIncludingPending,
 	runMigrations,
 	type ClassifiedVisit
 } from './index.js';
@@ -147,7 +147,7 @@ test('link recovery keeps the same visit counts across an uncommitted worker rol
 			{ ...links[0], visits: 1 },
 			{ ...links[1], visits: 0 }
 		];
-		const recovery = () => readLinkVisitCounts(reader!, links);
+		const recovery = () => readLinkVisitCountsIncludingPending(reader!, links);
 		expect(await recovery()).toEqual(expected);
 		await writer.transaction().execute(async (transaction) => {
 			await addVisitTotals(transaction, [

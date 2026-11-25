@@ -9,10 +9,10 @@ export { runMigrations } from './migrate.js';
 export { insertVisit, purgeVisits } from './visits.js';
 export {
 	addVisitTotals,
-	readVisitTotals,
-	readOverviewVisitTotals,
-	readDomainVisitTotals,
-	readLinkVisitCounts
+	readLifetimeVisitTotals,
+	readOverviewLifetimeVisitTotals,
+	readDomainLifetimeVisitTotals,
+	readLinkVisitCountsIncludingPending
 } from './visit-totals.js';
 export {
 	captureVisitBoundary,
