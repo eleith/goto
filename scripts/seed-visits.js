@@ -98,6 +98,7 @@ function printPlan(plan, apply) {
 		`UTC window: ${new Date(plan.since).toISOString()} to ${new Date(plan.asOf).toISOString()} (exclusive)`
 	);
 	console.log(`Sampling seed: ${plan.seed} (timestamps are relative to this run)`);
+	console.log('Links with max_visits are skipped to preserve their click allowance.');
 	for (const domain of Object.keys(plan.domains))
 		console.log(`  ${domain}: ${plan.visitsPerDomain} visits`);
 	console.log(`Total: ${plan.total} visits. Reruns append; existing data is not replaced.`);

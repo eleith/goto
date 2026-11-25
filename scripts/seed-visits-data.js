@@ -91,10 +91,9 @@ function requestPaths(links) {
 		{ path: '/', weight: 10 },
 		{ path: missingPath, weight: 10 }
 	];
-	// Prefer configured links, with a separate share for base and unmatched requests.
-	const configured = Object.keys(links);
-	const popularity = configured.reduce((total, _path, index) => total + 1 / (index + 1), 0);
-	for (const [index, path] of configured.entries()) {
+	const uncappedPaths = Object.keys(links).filter((path) => links[path].max_visits === undefined);
+	const popularity = uncappedPaths.reduce((total, _path, index) => total + 1 / (index + 1), 0);
+	for (const [index, path] of uncappedPaths.entries()) {
 		const weight = 80 / ((index + 1) * popularity);
 		paths.push({ path, weight });
 	}

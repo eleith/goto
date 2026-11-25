@@ -167,15 +167,26 @@ test('reports the field when the worker database path conflicts with the default
 	}
 });
 
-test('preview leaves existing visits untouched; apply appends visits for every domain', async () => {
+test('preview leaves visits untouched; apply seeds every domain without spending click caps', async () => {
 	const directory = await mkdtemp(join(tmpdir(), 'goto-seed-apply-'));
 	try {
 		const { configPath, databasePath } = await deployment(directory);
+		const cappedOnlyDomain = 'one.example.test';
+		const mixedDomain = 'two.example.test';
+		const docsPath = '/docs';
+		const source = structuredClone(fixture);
+		source.domains[cappedOnlyDomain].links[docsPath].max_visits = 1;
+		source.domains[mixedDomain].links['/limited'] = {
+			url: 'https://example.com/limited',
+			max_visits: 1
+		};
+		await writeFile(configPath, JSON.stringify(source));
 		const existing = await createDatabaseWithExistingVisit(databasePath);
 		const args = ['--config', configPath, '--visits-per-domain', '100', '--seed', '17'];
 		const preview = run(...args);
 		assert.equal(preview.status, 0, preview.stderr);
 		assert.match(preview.stdout, /Dry run/);
+		assert.match(preview.stdout, /Links with max_visits are skipped/);
 		assert.deepEqual(await readVisits(databasePath), [existing]);
 
 		const result = run(...args, '--apply');
@@ -188,9 +199,12 @@ test('preview leaves existing visits untouched; apply appends visits for every d
 			existing
 		);
 		const synthetic = rows.filter((row) => row.user_agent?.endsWith(' GotoSeed/17'));
-		for (const domain of Object.keys(fixture.domains)) {
+		for (const domain of Object.keys(source.domains)) {
 			assert.equal(synthetic.filter((row) => row.domain === domain).length, 100);
 		}
+		assert(!synthetic.some((row) => row.domain === cappedOnlyDomain && row.path === docsPath));
+		assert(!synthetic.some((row) => row.domain === mixedDomain && row.path === '/limited'));
+		assert(synthetic.some((row) => row.domain === mixedDomain && row.path === docsPath));
 	} finally {
 		await rm(directory, { recursive: true, force: true });
 	}
