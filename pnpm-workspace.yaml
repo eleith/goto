@@ -14,7 +14,7 @@ catalog:
   '@sveltejs/vite-plugin-svelte': 7.1.2
   '@types/node': 24.12.4
   '@vitest/coverage-v8': 4.1.7
-  better-auth: 1.7.14
+  better-auth: 1.7.27
   bits-ui: 2.18.1
   chart.js: 4.6.1
   esbuild: 0.28.2
