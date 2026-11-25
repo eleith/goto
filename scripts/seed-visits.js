@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { setImmediate } from 'node:timers/promises';
 import { parseArgs } from 'node:util';
 import { createVisitPeriod } from '../packages/analytics/src/period.ts';
-import { loadConfigFile } from '../packages/config/src/index.ts';
+import { ConfigError, formatConfigError, loadConfigFile } from '../packages/config/src/index.ts';
 import { openDb, insertVisit } from '../packages/db/src/index.ts';
 import { generateVisits } from './seed-visits-data.js';
 
@@ -77,15 +77,11 @@ function seedPlan(prepared, options) {
 	const total = Object.keys(domains).length * options.visitsPerDomain;
 	if (!Number.isSafeInteger(total))
 		throw new Error('Total visit count exceeds the safe integer range');
-	const databasePath = configuration.database.path;
-	if (databasePath === configuration.database.worker_path) {
-		throw new Error('Visits and worker database paths must differ');
-	}
 	const asOf = Date.now();
 	const period = createVisitPeriod(months, asOf);
 	const since = Date.parse(period.from);
 	return {
-		databasePath,
+		databasePath: configuration.database.path,
 		domains,
 		since,
 		asOf,
@@ -165,7 +161,7 @@ async function appendBatch(db, visits) {
 
 if (import.meta.main) {
 	main().catch((error) => {
-		console.error(error.message);
+		console.error(error instanceof ConfigError ? formatConfigError(error) : error.message);
 		process.exitCode = 1;
 	});
 }

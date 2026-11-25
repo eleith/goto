@@ -170,10 +170,10 @@ test('rejects a shared worker/visit file before opening either connection', asyn
 	}
 	expect(failure).toBeInstanceOf(ConfigError);
 	expect(failure).toHaveProperty('issues', [
-		{ path: '/database/worker_path', message: 'Expected a different file from database.path' }
+		{ path: '/database/worker_path', message: 'Must not resolve to the same path as database.path' }
 	]);
 	expect(formatWorkerStartupFailure(failure)).toBe(
-		'Unable to start worker service\n  /database/worker_path: Expected a different file from database.path'
+		'Unable to start worker service\n  /database/worker_path: Must not resolve to the same path as database.path'
 	);
 	expect(existsSync(join(directory, 'data'))).toBe(false);
 });

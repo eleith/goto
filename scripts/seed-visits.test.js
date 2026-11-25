@@ -150,6 +150,23 @@ test('preview opens no SQLite file and applying refuses to create a missing data
 	}
 });
 
+test('reports the field when the worker database path conflicts with the default visits path', async () => {
+	const directory = await mkdtemp(join(tmpdir(), 'goto-seed-shared-database-'));
+	try {
+		const { configPath } = await deployment(directory);
+		await writeFile(
+			configPath,
+			JSON.stringify({ ...fixture, database: { worker_path: './data/goto.sqlite' } })
+		);
+		const result = run('--config', configPath);
+		assert.equal(result.status, 1);
+		assert.match(result.stderr, /\/database\/worker_path: Must not resolve to the same path/);
+		assert.equal(result.stdout, '');
+	} finally {
+		await rm(directory, { recursive: true, force: true });
+	}
+});
+
 test('preview leaves existing visits untouched; apply appends visits for every domain', async () => {
 	const directory = await mkdtemp(join(tmpdir(), 'goto-seed-apply-'));
 	try {

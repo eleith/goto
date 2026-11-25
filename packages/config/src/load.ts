@@ -29,6 +29,14 @@ export async function loadConfigFile(
 	const database = prepared.configuration.database;
 	database.path = resolve(deploymentRoot, database.path);
 	database.worker_path = resolve(deploymentRoot, database.worker_path);
+	if (database.path === database.worker_path) {
+		throw new ConfigError([
+			{
+				path: '/database/worker_path',
+				message: 'Must not resolve to the same path as database.path'
+			}
+		]);
+	}
 	return prepared;
 }
 

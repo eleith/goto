@@ -146,6 +146,12 @@ describe('goto-cli config validate', () => {
 			environment: { ...env, DUMMY_SECRET: 'too-short' }
 		},
 		{
+			name: 'database settings that resolve to the same path',
+			source: `${validYaml}database:\n  path: ./data/goto.sqlite\n  worker_path: ./work/../data/goto.sqlite\n`,
+			environment: env,
+			issue: '\n  /database/worker_path: Must not resolve to the same path as database.path\n'
+		},
+		{
 			name: 'invalid appearance alongside dropped tags',
 			source: `${validYaml}        tags: [., ""]\nappearance: false\n`,
 			environment: env,

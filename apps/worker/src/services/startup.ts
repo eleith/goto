@@ -49,11 +49,6 @@ export async function startWorkerService(
 	if (prepared.warnings.length > 0) logger.warn(formatConfigWarnings(prepared.warnings));
 	const workerDatabasePath = prepared.configuration.database.worker_path;
 	const applicationDatabasePath = prepared.configuration.database.path;
-	if (workerDatabasePath === applicationDatabasePath) {
-		throw new ConfigError([
-			{ path: '/database/worker_path', message: 'Expected a different file from database.path' }
-		]);
-	}
 	const resources: ShutdownResources = {};
 	const stop = createShutdown(resources);
 	try {
