@@ -1,6 +1,6 @@
 services:
   goto-app:
-    image: ghcr.io/eleith/goto:latest
+    image: ghcr.io/eleith/goto:${GOTO_VERSION:-0.0.1}
     platform: linux/amd64
     env_file: .env
     ports:
@@ -31,7 +31,7 @@ services:
       retries: 3
 
   goto-worker:
-    image: ghcr.io/eleith/goto-worker:latest
+    image: ghcr.io/eleith/goto-worker:${GOTO_VERSION:-0.0.1}
     platform: linux/amd64
     env_file: .env
     volumes:
