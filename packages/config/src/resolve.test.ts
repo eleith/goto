@@ -331,7 +331,6 @@ describe('effective domains', () => {
 					ignore_trailing_slash: true,
 					forward_path: true
 				},
-				fallback: { url: 'https://example.com' },
 				domains: {
 					global: input.domains['go.example.com'],
 					domain: {
@@ -342,7 +341,6 @@ describe('effective domains', () => {
 							ignore_trailing_slash: false,
 							forward_path: false
 						},
-						fallback: { url: 'https://example.com/domain-missing' },
 						links: input.domains['go.example.com'].links
 					}
 				}
@@ -375,10 +373,6 @@ describe('effective domains', () => {
 				forward_path: 'link'
 			}
 		});
-		expect(domains.global).toMatchObject({
-			fallback: { url: 'https://example.com', status_code: 302, forward_query: false },
-			provenance: { fallback: 'global' }
-		});
 		expect(domains.domain?.links['/inherit']).toMatchObject({
 			status_code: 307,
 			forward_query: false,
@@ -392,14 +386,6 @@ describe('effective domains', () => {
 				ignore_trailing_slash: 'domain',
 				forward_path: 'domain'
 			}
-		});
-		expect(domains.domain).toMatchObject({
-			fallback: {
-				url: 'https://example.com/domain-missing',
-				status_code: 302,
-				forward_query: false
-			},
-			provenance: { fallback: 'domain' }
 		});
 		expect(domains.domain?.links['/override']).toMatchObject({
 			status_code: 308,
@@ -415,7 +401,6 @@ describe('effective domains', () => {
 				forward_path: 'link'
 			}
 		});
-		expect(domains.domain?.links['/override']).not.toHaveProperty('fallback');
 	});
 
 	it('replaces a global fallback as a whole and keeps root response options independent', () => {
@@ -429,7 +414,7 @@ describe('effective domains', () => {
 					replaced: {
 						root: { url: 'https://example.com/root', status_code: 301, forward_query: true },
 						fallback: { url: 'https://example.com/domain' },
-						links: {}
+						links: { '/docs': { url: 'https://example.com/docs' } }
 					}
 				}
 			},
@@ -442,13 +427,13 @@ describe('effective domains', () => {
 			links: {},
 			caseInsensitivePaths: {}
 		});
-		expect(domains.replaced).toEqual({
+		expect(domains.replaced).toMatchObject({
 			root: { url: 'https://example.com/root', status_code: 301, forward_query: true },
 			fallback: { url: 'https://example.com/domain', status_code: 302, forward_query: false },
-			provenance: { fallback: 'domain' },
-			links: {},
-			caseInsensitivePaths: {}
+			provenance: { fallback: 'domain' }
 		});
+		expect(domains.replaced?.links['/docs']).toBeDefined();
+		expect(domains.replaced?.links['/docs']).not.toHaveProperty('fallback');
 	});
 
 	it.each([

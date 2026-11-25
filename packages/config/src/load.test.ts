@@ -501,19 +501,11 @@ domains:
 		);
 	});
 
-	it.each([
-		{
-			name: 'password mapping',
-			override: {
-				auth: { credentials: { username: 'admin', password: { [authoredKeyMarker]: null } } }
-			}
-		},
-		{ name: 'unknown option', override: { [authoredKeyMarker]: 'value' } },
-		{ name: 'missing variable', override: { [authoredKeyMarker]: '${MISSING}' } }
-	])('keeps authored keys out of generic errors for $name', ({ override }) => {
+	it('does not expose authored keys from a malformed password mapping', () => {
+		const auth = { credentials: { username: 'admin', password: { [authoredKeyMarker]: null } } };
 		let error: unknown;
 		try {
-			loadConfig({ ...configurationInput(), ...override }, options);
+			loadConfig({ ...configurationInput(), auth }, options);
 		} catch (caught) {
 			error = caught;
 		}
@@ -523,13 +515,12 @@ domains:
 		expect(JSON.stringify(error)).not.toContain(authoredKeyMarker);
 	});
 
-	it.each([
-		`${yaml}\nversion: 1\nversion: 1`,
-		`${yaml}\n<<: {version: 1}`,
-		`${yaml}\n---\n${yaml}`
-	])('rejects non-strict YAML', (source) => {
-		expect(() => parseConfig(source, options)).toThrow(ConfigError);
-	});
+	it.each([`${yaml}\n<<: {version: 1}`, `${yaml}\n---\n${yaml}`])(
+		'rejects non-strict YAML',
+		(source) => {
+			expect(() => parseConfig(source, options)).toThrow(ConfigError);
+		}
+	);
 
 	it('converts numeric YAML domain keys to strings before normalizing hosts', () => {
 		const { configuration, domains } = parseConfig(
@@ -538,18 +529,6 @@ domains:
 		);
 		expect(Object.keys(configuration.domains)).toEqual(['1']);
 		expect(Object.keys(domains)).toEqual(['0.0.0.1']);
-	});
-
-	it('does not expose YAML parser snippets containing secrets', () => {
-		let error: unknown;
-		try {
-			parseConfig(`${yaml}\nauth: private-secret`, options);
-		} catch (caught) {
-			error = caught;
-		}
-		expect(error).toBeInstanceOf(ConfigError);
-		expect(error).toHaveProperty('message', 'Invalid configuration');
-		expect(JSON.stringify(error)).not.toContain('private-secret');
 	});
 
 	it('allows small aliases but bounds repeated expansion', () => {

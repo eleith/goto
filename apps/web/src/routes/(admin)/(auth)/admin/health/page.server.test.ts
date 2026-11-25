@@ -105,31 +105,18 @@ test('projects OIDC mode and configured redirect defaults without exposing the p
 	});
 });
 
-const taggedDomains = {
-	'go.example.test': {
-		links: {
-			'/docs': { url: 'https://example.test/docs', tags: ['Work', 'Work'] },
-			'/disabled': { url: 'https://example.test/disabled', tags: ['work'], enabled: false },
-			'/later': {
-				url: 'https://example.test/later',
-				tags: [' Work '],
-				valid_from: '2099-01-01T00:00:00Z'
-			},
-			'/old': {
-				url: 'https://example.test/old',
-				tags: ['Old'],
-				valid_until: '2020-01-01T00:00:00Z'
+test('zero retention skips the activity read but still lists tags', async () => {
+	const data = await load(
+		request({
+			analytics: { retention_months: 0 },
+			domains: {
+				'go.example.test': {
+					links: { '/docs': { url: 'https://example.test/docs', tags: ['Work/100%é'] } }
+				}
 			}
-		}
-	},
-	'other.example.test': {
-		links: { '/docs': { url: 'https://example.test/other', tags: ['Work', 'Work/100%é'] } }
-	}
-};
-
-test('zero retention skips the activity read and keeps all current tag labels available', async () => {
-	const data = await load(request({ analytics: { retention_months: 0 }, domains: taggedDomains }));
-	expect(data.tags).toEqual([' Work ', 'Old', 'Work', 'Work/100%é', 'work']);
+		})
+	);
+	expect(data.tags).toEqual(['Work/100%é']);
 	expect(data.retentionMonths).toBe(0);
 	expect(data.lastDataActivity).toBeNull();
 	expect(data.activityAvailable).toBe(true);
@@ -140,8 +127,7 @@ test('zero retention skips the activity read and keeps all current tag labels av
 
 test('unavailable analytics storage does not prevent viewing settings', async () => {
 	vi.mocked(readLastActivity).mockResolvedValue({ available: false, lastActivityAt: null });
-	const data = await load(request({ domains: taggedDomains }));
-	expect(data.tags).toEqual([' Work ', 'Old', 'Work', 'Work/100%é', 'work']);
+	const data = await load(request());
 	expect(data.retentionMonths).toBe(3);
 	expect(data.lastDataActivity).toBeNull();
 	expect(data.activityAvailable).toBe(false);

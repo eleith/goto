@@ -24,6 +24,38 @@ const fixture = {
 	}
 };
 
+const existingVisit = {
+	domain: 'one.example.test',
+	path: '/keep',
+	outcome: 'valid',
+	visited_at: 1,
+	ip: '198.51.100.1',
+	user_agent: 'ExistingClient',
+	accept_language: null,
+	browser: 'Other',
+	os: 'Other'
+};
+
+async function createDatabaseWithExistingVisit(databasePath) {
+	const db = await openDb(databasePath);
+	try {
+		await runMigrations(db);
+		const id = await insertVisit(db, existingVisit);
+		return { id, processed: 0, ...existingVisit };
+	} finally {
+		await db.destroy();
+	}
+}
+
+async function readVisits(databasePath) {
+	const db = await openDb(databasePath, { readOnly: true });
+	try {
+		return (await db.selectFrom('visits').selectAll().execute()).map((row) => ({ ...row }));
+	} finally {
+		await db.destroy();
+	}
+}
+
 function run(...args) {
 	return spawnSync(process.execPath, ['--import', loader, script, ...args], {
 		encoding: 'utf8',
@@ -118,52 +150,29 @@ test('preview opens no SQLite file and applying refuses to create a missing data
 	}
 });
 
-test('explicit apply appends all configured domains in bounded batches without replacing existing visits', async () => {
+test('preview leaves existing visits untouched; apply appends visits for every domain', async () => {
 	const directory = await mkdtemp(join(tmpdir(), 'goto-seed-apply-'));
 	try {
 		const { configPath, databasePath } = await deployment(directory);
-		const existing = {
-			domain: 'one.example.test',
-			path: '/keep',
-			outcome: 'valid',
-			visited_at: 1,
-			ip: '198.51.100.1',
-			user_agent: 'ExistingClient',
-			accept_language: null,
-			browser: 'Other',
-			os: 'Other'
-		};
-		const writer = await openDb(databasePath);
-		let id;
-		try {
-			await runMigrations(writer);
-			id = await insertVisit(writer, existing);
-		} finally {
-			await writer.destroy();
-		}
-		const result = run(
-			'--config',
-			configPath,
-			'--visits-per-domain',
-			'100',
-			'--seed',
-			'17',
-			'--apply'
-		);
+		const existing = await createDatabaseWithExistingVisit(databasePath);
+		const args = ['--config', configPath, '--visits-per-domain', '100', '--seed', '17'];
+		const preview = run(...args);
+		assert.equal(preview.status, 0, preview.stderr);
+		assert.match(preview.stdout, /Dry run/);
+		assert.deepEqual(await readVisits(databasePath), [existing]);
+
+		const result = run(...args, '--apply');
 		assert.equal(result.status, 0, result.stderr);
 		assert.match(result.stdout, /Appended 300 synthetic visits/);
-		const reader = await openDb(databasePath, { readOnly: true });
-		try {
-			const rows = await reader.selectFrom('visits').selectAll().execute();
-			assert.equal(rows.length, 301);
-			const original = rows.find((row) => row.id === id);
-			assert.deepEqual({ ...original }, { id, processed: 0, ...existing });
-			const synthetic = rows.filter((row) => row.user_agent?.endsWith(' GotoSeed/17'));
-			for (const domain of Object.keys(fixture.domains)) {
-				assert.equal(synthetic.filter((row) => row.domain === domain).length, 100);
-			}
-		} finally {
-			await reader.destroy();
+		const rows = await readVisits(databasePath);
+		assert.equal(rows.length, 301);
+		assert.deepEqual(
+			rows.find(({ id }) => id === existing.id),
+			existing
+		);
+		const synthetic = rows.filter((row) => row.user_agent?.endsWith(' GotoSeed/17'));
+		for (const domain of Object.keys(fixture.domains)) {
+			assert.equal(synthetic.filter((row) => row.domain === domain).length, 100);
 		}
 	} finally {
 		await rm(directory, { recursive: true, force: true });
@@ -174,25 +183,7 @@ test('a failed second batch rolls back its partial writes and preserves committe
 	const directory = await mkdtemp(join(tmpdir(), 'goto-seed-failure-'));
 	try {
 		const { configPath, databasePath } = await deployment(directory);
-		const existing = {
-			domain: 'one.example.test',
-			path: '/keep',
-			outcome: 'valid',
-			visited_at: 1,
-			ip: '198.51.100.1',
-			user_agent: 'ExistingClient',
-			accept_language: null,
-			browser: 'Other',
-			os: 'Other'
-		};
-		const writer = await openDb(databasePath);
-		let id;
-		try {
-			await runMigrations(writer);
-			id = await insertVisit(writer, existing);
-		} finally {
-			await writer.destroy();
-		}
+		const existing = await createDatabaseWithExistingVisit(databasePath);
 		const triggerDb = new DatabaseSync(databasePath);
 		try {
 			triggerDb.exec(`
@@ -219,17 +210,13 @@ test('a failed second batch rolls back its partial writes and preserves committe
 		assert.equal(result.status, 1, result.stderr);
 		assert.match(result.stderr, /synthetic fixture failure/);
 		assert.match(result.stderr, /Stopped after 250 committed visits/);
-		const reader = await openDb(databasePath, { readOnly: true });
-		try {
-			const rows = await reader.selectFrom('visits').selectAll().execute();
-			const synthetic = rows.filter((row) => row.user_agent?.endsWith(' GotoSeed/17'));
-			assert.equal(synthetic.length, 250);
-			assert.equal(rows.length, 251);
-			const original = rows.find((row) => row.id === id);
-			assert.deepEqual({ ...original }, { id, processed: 0, ...existing });
-		} finally {
-			await reader.destroy();
-		}
+		const rows = await readVisits(databasePath);
+		assert.equal(rows.filter((row) => row.user_agent?.endsWith(' GotoSeed/17')).length, 250);
+		assert.equal(rows.length, 251);
+		assert.deepEqual(
+			rows.find(({ id }) => id === existing.id),
+			existing
+		);
 	} finally {
 		await rm(directory, { recursive: true, force: true });
 	}

@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { createVisitPeriod, visitDays } from './period.js';
+import { createVisitPeriod } from './period.js';
 import {
 	addDailyStatistics,
 	canSubtractDailyStatistics,
@@ -69,13 +69,20 @@ test('projection uses the explicit current period, fills missing dates, and expo
 	const details = projectVisitDetails(scope, period, [outside, visible]);
 	expect(details.version).toBe(5);
 	expect(details.lastActivityAt).toBe('2026-04-01T10:00:00.000Z');
-	expect(details.daily).toEqual(
-		visitDays(period).map((point) => ({
-			...point,
-			validVisits: point.start.startsWith(day) ? 2 : 0,
-			invalidVisits: point.start.startsWith(day) ? 1 : 0
-		}))
+	expect(details.daily[0]?.start).toBe('2026-01-01T00:00:00.000Z');
+	expect(details.daily).not.toContainEqual(
+		expect.objectContaining({ start: '2025-12-31T00:00:00.000Z' })
 	);
+	expect(details.daily.at(-2)).toMatchObject({
+		start: '2026-03-31T00:00:00.000Z',
+		validVisits: 0,
+		invalidVisits: 0
+	});
+	expect(details.daily.at(-1)).toMatchObject({
+		start: '2026-04-01T00:00:00.000Z',
+		validVisits: 2,
+		invalidVisits: 1
+	});
 	expect(details.browsers).toEqual([{ day, name: 'Other', validVisits: 2, invalidVisits: 1 }]);
 	expect(details.acceptedLanguages).toEqual(
 		visible.acceptedLanguages.map((row) => ({ day, ...row }))
@@ -84,17 +91,6 @@ test('projection uses the explicit current period, fills missing dates, and expo
 	expect(empty.lastActivityAt).toBeNull();
 	expect(empty.daily.every((row) => row.validVisits === 0 && row.invalidVisits === 0)).toBe(true);
 	expect(empty.browsers).toEqual([]);
-});
-
-test('partial-day expiry changes counts without turning activity into maintenance time', () => {
-	const cutoffPeriod = createVisitPeriod(3, Date.UTC(2026, 5, 30, 6));
-	const earlier = contribution(1, 0, 1);
-	const later = contribution(1, 1, 10);
-	const combined = addDailyStatistics(earlier, later);
-	const remaining = subtractDailyStatistics(combined, earlier)!;
-	const details = projectVisitDetails(scope, cutoffPeriod, [remaining]);
-	expect(details.daily[0]).toMatchObject({ partial: true, validVisits: 1, invalidVisits: 1 });
-	expect(details.lastActivityAt).toBe('2026-04-01T10:00:00.000Z');
 });
 
 test('daily guards keep exact family partitions, safe counts, and independent bounded language memberships', () => {

@@ -6,8 +6,7 @@ import {
 	resolveVisitTimeframe,
 	sumVisitTotals,
 	visitGranularity,
-	visitWindow,
-	type VisitTimeframe
+	visitWindow
 } from './daily.js';
 import { visitDays } from './period.js';
 import type { ReportPeriod, VisitDetails } from './reports.js';
@@ -118,28 +117,16 @@ test('selected days are filtered before grouping and share the headline total wi
 			invalidVisits: 2
 		}
 	]);
-	expect(sumVisitTotals(daily, window)).toEqual({ validVisits: 9, invalidVisits: 53 });
-	expect(weeks.reduce((total, week) => total + week.validVisits, 0)).toBe(9);
-	expect(daily).toEqual(original);
-});
-
-test('window counts project both outcomes for each requested timeframe', () => {
-	const { period, daily } = dailyReport('2024-02-20T12:00:00.000Z', '2024-03-05T00:00:00.000Z', {
-		'2024-02-26': [100, 100],
-		'2024-02-27': [2, 50],
-		'2024-02-29': [3, 1],
-		'2024-03-04': [4, 2]
-	});
-	const timeframes: VisitTimeframe[] = ['7d', 'all'];
-	const windows = timeframes.map((timeframe) => ({
-		timeframe,
-		window: visitWindow(period, timeframe)
-	}));
-
-	expect(countVisitWindows(daily, windows)).toEqual({
+	expect(
+		countVisitWindows(daily, [
+			{ timeframe: '7d', window },
+			{ timeframe: 'all', window: visitWindow(period, 'all') }
+		])
+	).toEqual({
 		'7d': { validVisits: 9, invalidVisits: 53 },
 		all: { validVisits: 109, invalidVisits: 153 }
 	});
+	expect(daily).toEqual(original);
 });
 
 test('missing daily reports stay absent while empty and zero-filled reports give window zeros', () => {

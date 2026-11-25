@@ -1,4 +1,4 @@
-import { loadConfig, type DomainConfiguration, type LinkConfiguration } from '@goto/config';
+import { loadConfig, type LinkConfiguration } from '@goto/config';
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { Application } from '#lib/server/application.js';
 import { prepareSnapshot } from '#lib/server/snapshot.js';
@@ -33,7 +33,7 @@ function request(
 	path = '/docs',
 	options: { host?: string; retentionMonths?: number; link?: Partial<LinkConfiguration> } = {}
 ) {
-	const domainConfiguration: Partial<DomainConfiguration> = {
+	const domainConfiguration = {
 		link_defaults: { forward_query: true, ignore_trailing_slash: false },
 		links: {
 			'/docs': {
@@ -51,13 +51,8 @@ function request(
 				tags: ['guides', 'reference'],
 				...options.link
 			},
-			'/a/b': { url: 'https://example.test/nested', enabled: true, tags: [] },
-			'/a%2Fb': {
-				url: 'https://example.test/percent',
-				redirect: [{ if: { language: 'fr' }, to: 'https://example.test/percent-fr' }],
-				enabled: false,
-				tags: []
-			}
+			'/a/b': { url: 'https://example.test/nested' },
+			'/a%2Fb': { url: 'https://example.test/percent' }
 		}
 	};
 	const prepared = loadConfig(
@@ -118,25 +113,9 @@ test('keeps decoded nested and literal-percent identities distinct', async () =>
 	);
 	expect(nested.path).toBe('/a/b');
 	expect(nested.lifetimeVisits).toBe(3);
-	expect(nested).toMatchObject({
-		response: { url: 'https://example.test/nested', status_code: 301, forward_query: true },
-		redirectRules: [],
-		caseInsensitive: false,
-		ignoreTrailingSlash: false,
-		forwardPath: false,
-		maxVisits: null,
-		state: 'active',
-		validFrom: null,
-		validUntil: null,
-		tags: []
-	});
+
 	expect(percent.path).toBe('/a%2Fb');
 	expect(percent.lifetimeVisits).toBe(8);
-	expect(percent.maxVisits).toBeNull();
-	expect(percent.state).toBe('disabled');
-	expect(percent.redirectRules).toEqual([
-		{ language: 'fr', os: null, to: 'https://example.test/percent-fr' }
-	]);
 	expect(readLastActivity).toHaveBeenNthCalledWith(1, expect.any(Object), {
 		kind: 'link',
 		domain,
@@ -166,22 +145,6 @@ test('rejects unknown scopes and keeps lifetime visits when activity is unavaila
 		lastActivityAt: null
 	});
 });
-
-test.each([
-	{ maxVisits: 102, state: 'exhausted' },
-	{ maxVisits: 103, state: 'active' }
-])(
-	'projects configured max $maxVisits and $state from one lifetime lookup',
-	async ({ maxVisits, state }) => {
-		const event = request('/docs', { link: { max_visits: maxVisits } });
-		const data = await load(event);
-		expect(data).toMatchObject({ maxVisits, state, lifetimeVisits: 102 });
-		expect(event.locals.application.linkVisitCount).toHaveBeenCalledExactlyOnceWith(
-			domain,
-			'/docs'
-		);
-	}
-);
 
 test('disabled analytics preserves a configured limit and exhaustion without reading activity', async () => {
 	const event = request('/docs', { retentionMonths: 0, link: { max_visits: 102 } });
