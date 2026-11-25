@@ -1,6 +1,7 @@
 import { loadConfig } from '@goto/config';
 import { afterEach, expect, test, vi } from 'vitest';
 import type { WorkerContext } from '../services/context.js';
+import { logger } from '../services/logger.js';
 import { maintainVisits } from '../services/maintain-visits.js';
 import { runVisitMaintenance, type VisitMaintenanceStep } from './maintain-visits.js';
 
@@ -63,4 +64,17 @@ test('zero retention keeps scheduled hit accounting with the same durable jitter
 	expect(names).toEqual(['choose-jitter', 'retain-visits']);
 	expect(sleep).toHaveBeenCalledOnce();
 	expect(maintainVisits).toHaveBeenCalledExactlyOnceWith(ctx);
+});
+
+test('logs a failed maintenance attempt without exposing error details or swallowing the failure', async () => {
+	const failure = new Error('Private storage details');
+	vi.mocked(maintainVisits).mockRejectedValueOnce(failure);
+	const log = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+	try {
+		const { step } = steps();
+		await expect(runVisitMaintenance(context(), { scheduled: true }, step)).rejects.toBe(failure);
+		expect(log).toHaveBeenCalledExactlyOnceWith('Visit maintenance failed');
+	} finally {
+		log.mockRestore();
+	}
 });

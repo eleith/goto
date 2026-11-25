@@ -1,6 +1,7 @@
 import { randomInt } from 'node:crypto';
 import type { OpenWorkflow } from 'openworkflow';
 import type { WorkerContext } from '../services/context.js';
+import { logger } from '../services/logger.js';
 import { maintainVisits } from '../services/maintain-visits.js';
 import { visitMaintenance, type VisitMaintenanceInput } from './specs.js';
 
@@ -21,8 +22,13 @@ export async function runVisitMaintenance(
 		const duration: `${number}s` = `${seconds}s`;
 		await step.sleep('retention-jitter', duration);
 	}
-	function maintain(): Promise<void> {
-		return maintainVisits(context);
+	async function maintain(): Promise<void> {
+		try {
+			await maintainVisits(context);
+		} catch (error) {
+			logger.error('Visit maintenance failed');
+			throw error;
+		}
 	}
 	// Preserve the durable step identity used by already-queued maintenance runs.
 	await step.run({ name: 'retain-visits' }, maintain);
