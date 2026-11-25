@@ -83,6 +83,23 @@ async function readTotals(db: WorkerContext['db'], scope: ReportScope): Promise<
 	);
 }
 
+test('expires invalid clicks from their path report without adding to lifetime link hits', async () => {
+	const ctx = await context();
+	try {
+		const cutoff = Date.parse(period.from);
+		const invalidVisit = { ...visit, outcome: 'invalid' as const };
+		await insertVisit(ctx.db, { ...invalidVisit, visited_at: cutoff - 1 });
+		await insertVisit(ctx.db, { ...invalidVisit, visited_at: cutoff });
+
+		await maintainVisits(ctx, reportNow);
+
+		expect(await readTotals(ctx.db, docs)).toEqual({ validVisits: 0, invalidVisits: 1 });
+		expect(await readVisitTotals(ctx.db, docs)).toEqual({ validVisits: 0, invalidVisits: 0 });
+	} finally {
+		await ctx.db.destroy();
+	}
+});
+
 test('accounts visits once across a batch boundary and keeps the cutoff-day survivor', async () => {
 	const ctx = await context();
 	try {

@@ -60,10 +60,11 @@ export async function warnIfDailyStatisticsMissing(db: WorkerContext['db']): Pro
 function groupDailyStatistics(visits: VisitFacts[]): DailyVisitStatistics[] {
 	const days = new Map<string, DailyAccumulator>();
 	for (const visit of visits) {
-		const scopes: ReportScope[] = [{ kind: 'overview' }, { kind: 'domain', domain: visit.domain }];
-		if (visit.outcome === 'valid') {
-			scopes.push({ kind: 'link', domain: visit.domain, path: visit.path });
-		}
+		const scopes: ReportScope[] = [
+			{ kind: 'overview' },
+			{ kind: 'domain', domain: visit.domain },
+			{ kind: 'link', domain: visit.domain, path: visit.path }
+		];
 		for (const scope of scopes) {
 			const key = JSON.stringify([scope, visit.day]);
 			let day = days.get(key);

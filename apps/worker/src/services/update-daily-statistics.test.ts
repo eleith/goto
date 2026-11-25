@@ -90,7 +90,7 @@ test('actual events create scope/day rows with Root normalization, independent f
 	]);
 	expect(await readTotals(overview)).toEqual({ validVisits: 2, invalidVisits: 2 });
 	expect(await readTotals(domainScope)).toEqual({ validVisits: 2, invalidVisits: 2 });
-	expect(await readTotals(docs)).toEqual({ validVisits: 1, invalidVisits: 0 });
+	expect(await readTotals(docs)).toEqual({ validVisits: 1, invalidVisits: 1 });
 	expect(await readTotals(root)).toEqual({ validVisits: 1, invalidVisits: 0 });
 	expect(await readVisitDetails(db, domainScope, period)).toMatchObject({
 		version: 5,
@@ -110,7 +110,7 @@ test('actual events create scope/day rows with Root normalization, independent f
 		]
 	});
 	const rows = await db.selectFrom('visit_daily_statistics').selectAll().execute();
-	expect(rows).toHaveLength(4);
+	expect(rows).toHaveLength(5);
 	expect(rows.find(({ scope_kind }) => scope_kind === 'overview')).toMatchObject({
 		day: '2026-04-01',
 		last_visit_at: visit.visited_at,
@@ -118,9 +118,10 @@ test('actual events create scope/day rows with Root normalization, independent f
 		invalid_visits: 2
 	});
 	expect(JSON.parse(rows[0]!.browsers_json)[0]).not.toHaveProperty('day');
-	expect(await readTotals({ kind: 'link', domain, path: '/unconfigured' })).toEqual(
-		zeroVisitTotals()
-	);
+	expect(await readTotals({ kind: 'link', domain, path: '/unconfigured' })).toEqual({
+		validVisits: 0,
+		invalidVisits: 1
+	});
 });
 
 test('batches read no raw history, update only affected days and leave quiet data byte-identical without clock writes', async () => {
