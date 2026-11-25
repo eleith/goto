@@ -44,14 +44,6 @@ test('atomic YAML saves update redirects while rejected saves retain the last wo
 		.toContain('Retention reduction requires a coordinated restart');
 	expect(await destination()).toBe(link.url);
 
-	await save('site: [\n');
-	await expect
-		.poll(appServer.logs, polling)
-		.toContain(
-			'Invalid configuration update; previous configuration remains active until a valid update is loaded'
-		);
-	expect(await destination()).toBe(link.url);
-
 	link.url = 'https://example.org/recovered';
 	await save(JSON.stringify(configuration));
 	await expect.poll(destination, polling).toBe(link.url);

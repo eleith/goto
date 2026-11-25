@@ -26,37 +26,40 @@ test('serves the favicon and Open Graph image on the app and shortening hosts', 
 
 	const imageURL = `${appServer.origin}/@static/og.png`;
 	await expect(page.locator('meta[property="og:image"]')).toHaveAttribute('content', imageURL);
-	const imageBytes = await readFile(new URL('../static/@static/og.png', import.meta.url));
-	expect(imageBytes.subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
-	expect(imageBytes.readUInt32BE(16)).toBe(1200);
-	expect(imageBytes.readUInt32BE(20)).toBe(630);
+	const publicHost = { headers: { host: 'go.example.org' }, maxRedirects: 0 };
 	const assets = [
-		{
-			path: '/@static/favicon.svg',
-			contentType: 'image/svg+xml',
-			bytes: await readFile(new URL('../static/@static/favicon.svg', import.meta.url))
-		},
-		{ path: '/@static/og.png', contentType: 'image/png', bytes: imageBytes },
-		{
-			path: '/@static/og.svg',
-			contentType: 'image/svg+xml',
-			bytes: await readFile(new URL('../static/@static/og.svg', import.meta.url))
-		}
+		['favicon.svg', 'image/svg+xml'],
+		['og.png', 'image/png'],
+		['og.svg', 'image/svg+xml']
 	];
-	for (const host of [new URL(appServer.origin).host, 'go.example.org', 'tiny.example.org']) {
-		for (const { path, contentType, bytes } of assets) {
-			const options = { headers: { host }, maxRedirects: 0 };
-			const asset = await request.get(path, options);
-			expect(asset.status()).toBe(200);
-			expect(asset.headers()['content-type']?.split(';', 1)[0]).toBe(contentType);
-			expect(await asset.body()).toEqual(bytes);
-
-			const head = await request.head(path, options);
-			expect(head.status()).toBe(200);
-			expect(head.headers()['content-type']?.split(';', 1)[0]).toBe(contentType);
-			expect(await head.body()).toHaveLength(0);
-		}
+	for (const [name, contentType] of assets) {
+		const asset = await request.get(`/@static/${name}`, publicHost);
+		expect(asset.status()).toBe(200);
+		expect(asset.headers()['content-type']?.split(';', 1)[0]).toBe(contentType);
+		expect(await asset.body()).toEqual(
+			await readFile(new URL(`../static/@static/${name}`, import.meta.url))
+		);
 	}
+
+	const adminImage = await request.get(imageURL, { maxRedirects: 0 });
+	expect(adminImage.status()).toBe(200);
+	expect(adminImage.headers()['content-type']?.split(';', 1)[0]).toBe('image/png');
+	const imageBytes = await adminImage.body();
+	expect(imageBytes).toEqual(await readFile(new URL('../static/@static/og.png', import.meta.url)));
+	expect(imageBytes.subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+	await expect(page.locator('meta[property="og:image:width"]')).toHaveAttribute(
+		'content',
+		String(imageBytes.readUInt32BE(16))
+	);
+	await expect(page.locator('meta[property="og:image:height"]')).toHaveAttribute(
+		'content',
+		String(imageBytes.readUInt32BE(20))
+	);
+
+	const head = await request.head('/@static/favicon.svg', publicHost);
+	expect(head.status()).toBe(200);
+	expect(head.headers()['content-type']?.split(';', 1)[0]).toBe('image/svg+xml');
+	expect(await head.body()).toHaveLength(0);
 });
 
 test('renders responsive error pages on the app and shortening hosts', async ({

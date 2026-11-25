@@ -190,12 +190,19 @@ describe('readIngress', () => {
 		expect(readIngress(incoming, forwarding)).toBeUndefined();
 	});
 
-	test.each(['', '*', 'https://other.example.test/docs', '/docs\\other', '/docs\n', '/docs#hash'])(
-		'rejects a malformed request target %j',
-		(target) => {
-			expect(readIngress(request({ host: 'go.example.test' }, target), {})).toBeUndefined();
-		}
-	);
+	test.each([
+		'',
+		'*',
+		'https://other.example.test/docs',
+		'/docs\\other',
+		'/doc s',
+		'/docs#hash',
+		'/docs\u0000',
+		'/docs\u007f',
+		'/docs\ud800'
+	])('rejects a malformed request target %j', (target) => {
+		expect(readIngress(request({ host: 'go.example.test' }, target), {})).toBeUndefined();
+	});
 
 	test('returns undefined when the request target is missing', () => {
 		const incoming = request();

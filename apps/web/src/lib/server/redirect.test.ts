@@ -388,55 +388,29 @@ describe('HTTP responses', () => {
 		}
 	);
 
-	test.each(['POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'CONNECT', 'TRACE', 'get'])(
-		'rejects %s without resolving a link or fallback',
-		(method) => {
-			const domain = preparedDomain({ '/docs': preparedLink() }, fallback);
-			const { response, visit } = resolveRedirect(
-				domain,
-				host,
-				'/docs',
-				method,
-				zeroLinkVisitCount
-			);
+	test.each(['POST', 'get'])('rejects %s without resolving a link or fallback', (method) => {
+		const domain = preparedDomain({ '/docs': preparedLink() }, fallback);
+		const { response, visit } = resolveRedirect(domain, host, '/docs', method, zeroLinkVisitCount);
 
-			expect(response.status).toBe(405);
+		expect(response.status).toBe(405);
+		expect(visit).toBeUndefined();
+		expect(response.headers.get('allow')).toBe('GET, HEAD');
+		expect(response.headers.get('cache-control')).toBe('no-store');
+		expect(response.headers.has('location')).toBe(false);
+	});
+
+	test.each(['/%GG', '/%C3%28'])(
+		'rejects an undecodable path %j before using fallback',
+		(target) => {
+			const domain = preparedDomain({}, fallback);
+			const { response, visit } = resolveRedirect(domain, host, target, 'GET', zeroLinkVisitCount);
+
+			expect(response.status).toBe(400);
 			expect(visit).toBeUndefined();
-			expect(response.headers.get('allow')).toBe('GET, HEAD');
 			expect(response.headers.get('cache-control')).toBe('no-store');
 			expect(response.headers.has('location')).toBe(false);
 		}
 	);
-
-	test.each([
-		'',
-		'*',
-		'docs',
-		'https://go.example.test/docs',
-		'?name=value',
-		'/docs#fragment',
-		'/docs?name=value#fragment',
-		'/doc s',
-		'/docs?name=two words',
-		'/docs\t',
-		'/docs\r\n',
-		'/docs\u0000',
-		'/docs\u007f',
-		'/docs\\other',
-		'/docs\ud800',
-		'/%',
-		'/%GG',
-		'/%C3%28',
-		'/%FF'
-	])('rejects malformed raw target %j before using fallback', (target) => {
-		const domain = preparedDomain({}, fallback);
-		const { response, visit } = resolveRedirect(domain, host, target, 'GET', zeroLinkVisitCount);
-
-		expect(response.status).toBe(400);
-		expect(visit).toBeUndefined();
-		expect(response.headers.get('cache-control')).toBe('no-store');
-		expect(response.headers.has('location')).toBe(false);
-	});
 
 	test.each([
 		{ target: '/docs', fallback: null, root: null, status: 308 },

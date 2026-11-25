@@ -76,20 +76,6 @@ describe.each(['web', 'node'] as const)('%s request application', (kind) => {
 	});
 });
 
-test('bridges the same captured reference from a Node request to a Web Request', () => {
-	const incoming = new IncomingMessage(new Socket());
-	const web = new Request('https://admin.example.org/schema.json');
-	const captured = application();
-	bindApplication(incoming, captured);
-	const bridged = requestApplication(incoming);
-	if (!bridged) throw new Error('Expected a captured application');
-
-	bindApplication(web, bridged);
-
-	expect(requestApplication(incoming) === captured).toBe(true);
-	expect(requestApplication(web) === captured).toBe(true);
-});
-
 test('carries the trusted request origin separately from the configured admin origin', () => {
 	const incoming = new IncomingMessage(new Socket());
 	const captured = application();

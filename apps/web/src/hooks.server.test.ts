@@ -6,10 +6,31 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 import type { Application } from '#lib/server/application.js';
 import { bindApplication } from '#lib/server/request-context.js';
 import { prepareSnapshot } from '#lib/server/snapshot.js';
-import { adminOriginGate, applicationContext, securityHeaders } from './hooks.server.js';
+import { adminOriginGate, applicationContext, handle, securityHeaders } from './hooks.server.js';
 
 const framework = vi.hoisted(() => ({ building: false }));
 vi.mock('$app/env', () => framework);
+
+// Kit's real hook sequence expects a request store outside the production adapter.
+vi.mock('@sveltejs/kit/hooks', async (importOriginal) => {
+	const { sequence } = await importOriginal<typeof import('@sveltejs/kit/hooks')>();
+	const { with_request_store } = await vi.importActual<{
+		with_request_store: (store: unknown, run: () => ReturnType<Handle>) => ReturnType<Handle>;
+	}>('@sveltejs/kit/internal/server');
+	return {
+		sequence: (...handlers: Handle[]): Handle => {
+			const handle = sequence(...handlers);
+			return (input) =>
+				with_request_store(
+					{
+						event: input.event,
+						state: { tracing: { record_span: ({ fn }: { fn: () => unknown }) => fn() } }
+					},
+					() => handle(input)
+				);
+		}
+	};
+});
 
 type RequestEvent = Parameters<Handle>[0]['event'];
 
@@ -98,9 +119,12 @@ describe('application context', () => {
 	test('uses the application captured on the development Web Request', async () => {
 		const current = event();
 		const captured = application();
+		const snapshot = captured.currentSnapshot();
 		bindApplication(current.request, captured);
+		vi.spyOn(captured, 'currentSnapshot').mockReturnValue(application().currentSnapshot());
 		const resolve = vi.fn(async (received: RequestEvent) => {
-			expect(received.locals.application === captured).toBe(true);
+			expect(received.locals.application).toBe(captured);
+			expect(received.locals.snapshot).toBe(snapshot);
 			return new Response('ready');
 		});
 
@@ -113,14 +137,17 @@ describe('application context', () => {
 	test('uses the application captured on the production IncomingMessage', async () => {
 		const incoming = new IncomingMessage(new Socket());
 		const captured = application();
+		const snapshot = captured.currentSnapshot();
 		bindApplication(incoming, captured);
+		vi.spyOn(captured, 'currentSnapshot').mockReturnValue(application().currentSnapshot());
 		const current = event(
 			'https://admin.example.org/schema.json',
 			'/(admin)/(public)/schema.json',
 			incoming
 		);
 		const resolve = vi.fn(async (received: RequestEvent) => {
-			expect(received.locals.application === captured).toBe(true);
+			expect(received.locals.application).toBe(captured);
+			expect(received.locals.snapshot).toBe(snapshot);
 			return new Response('schema');
 		});
 
@@ -145,10 +172,7 @@ describe('application context', () => {
 	test('rejects a missing capture before resolving, with security headers', async () => {
 		const current = event();
 		const resolve = vi.fn(async () => new Response('must not resolve'));
-		const response = await securityHeaders({
-			event: current,
-			resolve: async (event) => applicationContext({ event, resolve })
-		});
+		const response = await handle({ event: current, resolve });
 
 		expect(response.status).toBe(503);
 		expect(response.headers.get('cache-control')).toBe('no-store');
@@ -223,14 +247,7 @@ describe('admin group origin', () => {
 		bindApplication(current.request, application());
 		const resolve = vi.fn(async () => new Response('admin response'));
 
-		const response = await securityHeaders({
-			event: current,
-			resolve: async (event) =>
-				applicationContext({
-					event,
-					resolve: async (event) => adminOriginGate({ event, resolve })
-				})
-		});
+		const response = await handle({ event: current, resolve });
 
 		expect(response.status).toBe(404);
 		expect(response.headers.get('cache-control')).toBe('no-store');
