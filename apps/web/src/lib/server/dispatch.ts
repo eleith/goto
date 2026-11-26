@@ -50,28 +50,27 @@ export function handleIngress<AssetResponse extends Response | Promise<Response>
 
 	const assetPath = publishedAssetPath(decodedRawPathname);
 	if (assetPath && assetMethod) {
+		if (assetPath !== rawPathname) {
+			const query = target.slice(rawPathname.length);
+			const response = emptyResponse(308);
+			response.headers.set('location', assetPath + query);
+			return response;
+		}
 		const isRedirectOnlyHost = redirectDomain !== undefined && !isSharedHost;
-		const assetReader = isRedirectOnlyHost ? serveRedirectHostAsset : undefined;
-		const response = publishedAssetResponse(
-			assetPath,
-			assetMethod,
-			target,
-			rawPathname,
-			assetReader
-		);
+		const response = isRedirectOnlyHost
+			? serveRedirectHostAsset?.(assetPath, assetMethod)
+			: undefined;
 		if (response !== undefined) return response;
-		bindApplication(request, application, ingress.url.origin, snapshot);
-		return;
-	}
-
-	if (redirectDomain && !isReservedPath) {
+	} else if (redirectDomain && !isReservedPath) {
 		if (decodedRawPathname?.startsWith(reservedStaticPrefix)) {
 			return renderPublicError(emptyResponse(404), ingress.url.origin, method);
 		}
-		return handleRedirectHostRequest(application, request, snapshot, ingress, redirectDomain);
+		return handleShortLinkRequest(application, request, snapshot, ingress, redirectDomain);
 	}
 
 	bindApplication(request, application, ingress.url.origin, snapshot);
+	// Hand off to the production adapter or Vite middleware.
+	return undefined;
 }
 
 export function adminCacheControl(request: IncomingMessage): string | undefined {
@@ -89,22 +88,7 @@ export function adminCacheControl(request: IncomingMessage): string | undefined 
 	}
 }
 
-function publishedAssetResponse<AssetResponse extends Response | Promise<Response>>(
-	path: PublishedAssetPath,
-	method: AssetMethod,
-	target: string,
-	rawPathname: string,
-	assetReader: RedirectHostAssetReader<AssetResponse> | undefined
-): Response | AssetResponse | undefined {
-	if (path === rawPathname) return assetReader?.(path, method);
-
-	const query = target.slice(rawPathname.length);
-	const response = emptyResponse(308);
-	response.headers.set('location', path + query);
-	return response;
-}
-
-function handleRedirectHostRequest(
+function handleShortLinkRequest(
 	application: Application,
 	request: IncomingMessage,
 	snapshot: ConfigurationSnapshot,
