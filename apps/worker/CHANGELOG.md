@@ -1,5 +1,12 @@
 # @goto/worker
 
+## 0.0.2
+
+### Patch Changes
+
+- 20bdc5e: Count new invalid clicks by their recorded path so they show up in Link and Tag Analytics. Link caps still count only valid visits.
+- 8f5f68b: Log failed visit maintenance attempts without exposing error details or changing retry behavior.
+
 ## 0.0.1
 
 ### Patch Changes

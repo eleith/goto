@@ -1,5 +1,13 @@
 # @goto/web
 
+## 0.0.2
+
+### Patch Changes
+
+- 7892efa: Clarify how the web server routes published assets separately from short links, without changing behavior.
+- 47dc409: Update Better Auth to 1.7.27 so it rejects OIDC sign-in when the provider profile subject does not match the verified ID token subject.
+- 00e5b60: Use the same Visits column for the root row and named links without repeating the Root visits label.
+
 ## 0.0.1
 
 ### Patch Changes

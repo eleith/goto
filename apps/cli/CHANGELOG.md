@@ -1,5 +1,11 @@
 # @goto/cli
 
+## 0.0.2
+
+### Patch Changes
+
+- 558615a: Reject configurations that point the visit and worker databases at the same path. The CLI, services, and visit seeder now enforce the same rule when loading YAML.
+
 ## 0.0.1
 
 ### Patch Changes
